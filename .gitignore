@@ -1,7 +1,7 @@
 # tools and build output
 .tools/
 node_modules/
-web/dist/
+web/dist*/
 packages/
 .theos/
 obj/
