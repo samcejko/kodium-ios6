@@ -12,6 +12,7 @@
 #import "BRMemory.h"
 #import "BRProfiler.h"
 #import "BRCommon.h"
+#import <objc/message.h>
 #include <dlfcn.h>
 
 // Same length and same bytes, compared in constant time
@@ -52,7 +53,8 @@ static void KDWriteResult(NSString *name, NSString *text)
 // is ignored without a trace. Results go to the app's tmp/ and to the log.
 //   eval?js=<code>          the workbench page's answer, to tmp/eval.txt
 //   snapshot / screen       the screen to tmp/screen.png (drawn from the layers / the system's own grab)
-//   mem, mem?relieve=1      WebKit's memory numbers (after freeing what can be freed), to tmp/eval.txt
+//   mem, mem?relieve=1      WebKit's memory numbers (after freeing what can be freed), to tmp/eval.txt; types=1 adds
+//                           the page's objects by kind (walks the whole heap)
 //   profile?secs=<s>&thread=<name>   samples a thread (default WebThread), to tmp/profile.txt
 //   reload                  loads the workbench again
 //   receive?file=<path>     takes a file of the app's home as another app's file ("Open in Kodium")
@@ -110,7 +112,8 @@ static void KDWriteResult(NSString *name, NSString *text)
     }
     if ([command isEqualToString:@"mem"]) {
         if ([q[@"relieve"] isEqualToString:@"1"]) [BRMemory relieve:@"requested"];
-        NSString *report = [BRMemory webKitReport];
+        NSString *report = [q[@"types"] isEqualToString:@"1"] ? [[BRMemory webKitReport] stringByAppendingFormat:@"\n%@", [BRMemory webKitTypesReport]]
+                                                               : [BRMemory webKitReport];
         KDWriteResult(@"eval.txt", report);
         BRLog(@"Memory report: %@", report);
         return YES;
@@ -219,6 +222,10 @@ static void KDWriteResult(NSString *name, NSString *text)
     // (Open VSX's assets, which redirect: see KDRedirectProtocol)
     [KDRedirectProtocol registerProtocol];
     [BRMemory start];
+    // Light relief: every 20 s while the app holds more than 200 MB, the memory WebKit's allocator keeps free (27 MB of
+    // it once the workbench had worked a while) goes back to the system - no garbage collection, which the engine's
+    // relief does (it throws away the compiled code with it), so the iPad keeps room before the engine or iOS act
+    [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(returnFreeMemory) userInfo:nil repeats:YES];
     [BRTLSSocket warmUp];
     [BRCSSRewriter warmUp];
 
@@ -228,6 +235,17 @@ static void KDWriteResult(NSString *name, NSString *text)
     [self.window makeKeyAndVisible];
     [application setStatusBarStyle:UIStatusBarStyleBlackOpaque animated:NO];
     return YES;
+}
+
+- (void)returnFreeMemory
+{
+    if (BRResidentMemoryMB() < 200) return;
+    static void (*run)(void (^)(void));
+    if (!run) run = (void (*)(void (^)(void)))dlsym(RTLD_DEFAULT, "WebThreadRun");
+    Class stats = NSClassFromString(@"WebCoreStatistics");
+    SEL giveBack = NSSelectorFromString(@"returnFreeMemoryToSystem");
+    if (!run || ![stats respondsToSelector:giveBack]) return;
+    run(^{ ((void (*)(id, SEL))objc_msgSend)(stats, giveBack); });
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application
