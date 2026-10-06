@@ -16,6 +16,7 @@ static NSString *KDShimArgument(NSURL *url)
 @interface KDWorkbenchViewController ()
 @property (nonatomic, strong) UIWebView *webView;
 @property (nonatomic, strong) UILabel *messageLabel;
+@property (nonatomic) CGFloat keyboardHeight;   // how much of the view the on-screen keyboard covers
 @end
 
 @implementation KDWorkbenchViewController
@@ -58,20 +59,56 @@ static NSString *KDShimArgument(NSURL *url)
 {
     [super viewDidLoad];
     [self noteSize];
+    NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+    [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillShowNotification object:nil];
+    [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
+    // (WebKit scrolls to the caret once the keyboard is up, before the workbench has laid itself out again)
+    [nc addObserver:self selector:@selector(layoutWebView) name:UIKeyboardDidShowNotification object:nil];
     [self.webView loadRequest:[NSURLRequest requestWithURL:[KDSiteProtocol startURL]]];
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLayoutSubviews
 {
     [super viewDidLayoutSubviews];
+    [self layoutWebView];
     [self noteSize];
 }
 
-// viewport units in the rewritten stylesheets become pixels of the view
+// The on-screen keyboard: the web view ends above it, and the workbench lays itself out in what is left (the editor
+// keeps its cursor in view) - instead of WebKit pushing the whole page up under the status bar to show the caret.
+// (A split or undocked keyboard of the iPad does not reach the bottom: it covers nothing that way.)
+- (void)keyboardWillChange:(NSNotification *)note
+{
+    CGFloat covered = 0;
+    if ([note.name isEqualToString:UIKeyboardWillShowNotification]) {
+        CGRect bounds = self.view.bounds;
+        CGRect kb = [self.view convertRect:[note.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+        if (CGRectGetMaxY(kb) >= CGRectGetMaxY(bounds) - 1) covered = MAX(0, CGRectGetMaxY(bounds) - CGRectGetMinY(kb));
+    }
+    if (covered == self.keyboardHeight) return;
+    self.keyboardHeight = covered;
+    [self layoutWebView];
+}
+
+- (void)layoutWebView
+{
+    CGRect frame = self.view.bounds;
+    frame.size.height = MAX(100, frame.size.height - self.keyboardHeight);
+    if (!CGRectEqualToRect(self.webView.frame, frame)) self.webView.frame = frame;
+    self.webView.scrollView.contentOffset = CGPointZero;
+}
+
+// viewport units in the rewritten stylesheets become pixels of the view (the whole view: not less while the keyboard
+// is up)
 - (void)noteSize
 {
     CGRect b = self.view.bounds;
-    [BRCSSRewriter noteWebViewSize:self.webView.frame.size landscape:b.size.width > b.size.height];
+    [BRCSSRewriter noteWebViewSize:b.size landscape:b.size.width > b.size.height];
 }
 
 - (NSString *)evaluateJavaScript:(NSString *)code

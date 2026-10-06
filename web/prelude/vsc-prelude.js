@@ -32,6 +32,27 @@
         }
     })();
 
+    // The engine's visualViewport (shims.js) is the window's size when the page started, and its addEventListener does
+    // nothing - and on iOS VS Code takes its size from there and lays out again on its resize event alone: after the
+    // iPad turned, or the keyboard came up (the app shrinks the web view above it), the workbench kept its old size. Here
+    // it is the window's size at every read, and its events are the window's.
+    (function () {
+        var vv = G.visualViewport;
+        // (the engine's is a plain object; a real one, in a desktop browser, is left alone)
+        if (!vv || Object.getPrototypeOf(vv) !== Object.prototype) return;
+        var live = function (name, read) {
+            try { Object.defineProperty(vv, name, { get: read, enumerable: true, configurable: true }); } catch (e) {}
+        };
+        live('width', function () { return G.innerWidth; });
+        live('height', function () { return G.innerHeight; });
+        live('offsetLeft', function () { return 0; });
+        live('offsetTop', function () { return 0; });
+        live('pageLeft', function () { return G.pageXOffset || 0; });
+        live('pageTop', function () { return G.pageYOffset || 0; });
+        vv.addEventListener = function (type, fn, opts) { if (type === 'resize' || type === 'scroll') G.addEventListener(type, fn, opts); };
+        vv.removeEventListener = function (type, fn, opts) { if (type === 'resize' || type === 'scroll') G.removeEventListener(type, fn, opts); };
+    })();
+
     // User Timing: the workbench marks its startup phases (performance.mark) and reads them back
     var P = G.performance || (G.performance = {});
     if (typeof P.now !== 'function') { var base = Date.now(); P.now = function () { return Date.now() - base; }; }
