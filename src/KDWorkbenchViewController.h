@@ -8,5 +8,7 @@
 // A file another app gave Kodium ("Open in Kodium"), already in Documents ("/name.ext"): the workbench opens it once it
 // is up (the app may have been started for it).
 - (void)openReceivedFile:(NSString *)path;
+// The on-screen keyboard over the editor without a tap (developer commands: the key bar, typing tests)
+- (void)showKeyboard;
 
 @end

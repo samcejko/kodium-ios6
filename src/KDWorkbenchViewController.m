@@ -126,6 +126,16 @@ static NSString *KDShimArgument(NSURL *url)
     return [self.webView stringByEvaluatingJavaScriptFromString:code ?: @""] ?: @"";
 }
 
+- (void)showKeyboard
+{
+    self.webView.keyboardDisplayRequiresUserAction = NO;
+    [self evaluateJavaScript:@"window.__kd_commands && window.__kd_commands('workbench.action.focusActiveEditorGroup').then(function () {"
+                              " var t = document.querySelector('.editor-instance .monaco-editor textarea'); if (t) t.focus(); })"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        self.webView.keyboardDisplayRequiresUserAction = YES;
+    });
+}
+
 - (void)sendKey:(NSString *)key
 {
     NSData *json = [NSJSONSerialization dataWithJSONObject:@[key ?: @""] options:0 error:NULL];
