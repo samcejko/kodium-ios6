@@ -45,7 +45,12 @@ const options = { pageURL: 'https://kodium.invalid/index.html', viewportWidth: 7
                   viewportPortrait: [768, 1004], viewportLandscape: [1024, 748], orientation: 'landscape' }
 const result = JSON.parse(ctx.CSSFix.run('css', css, JSON.stringify(theme.vars), JSON.stringify(options)))
 if (!result || typeof result.out !== 'string' || !result.out.length) throw new Error('assemble-site: the CSS rewriter gave nothing')
-fs.writeFileSync(cssPath, '/*kodium:rewritten*/\n' + result.out)
+// The rewriter writes flex-direction: *-reverse as -webkit-box-direction: reverse too, which the iOS 6 engine inherits
+// (flex-direction is not inherited): .monaco-workbench.mac .part.titlebar{flex-direction:row-reverse}, for the one
+// child of the title bar, turned the whole title bar around. Every element gets the initial value as its own; the
+// rule of a reversed box still wins (any selector is more specific than *).
+const boxDirectionReset = '*{-webkit-box-direction:normal}\n'
+fs.writeFileSync(cssPath, '/*kodium:rewritten*/\n' + boxDirectionReset + result.out)
 // VS Code's texts in Czech (monaco-vscode-api's language pack, built for this version: the messages by the numbers the
 // bundle asks for). A classic script the page loads before the workbench on a Czech device: the texts must be there
 // before the first one is used.

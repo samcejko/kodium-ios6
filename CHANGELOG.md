@@ -20,3 +20,6 @@ The first build.
   secret storage are left out until the extension host comes.
 - Developer commands over SSH with the device's debug key: eval, snapshot, screen, mem, profile, reload.
 - Transpiler fixes over Surfari's: `super.x` reads, writes and calls with getters and setters of the parent class.
+- Fixes for the iOS 6 engine: Number's constants (`Number.POSITIVE_INFINITY` and the like, which the engine's `Number`
+  lacked: every part of the workbench was laid out at 0 x 0), and reversed flex boxes, whose direction the engine passes
+  down to everything inside them (the title bar was the wrong way round).

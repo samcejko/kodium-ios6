@@ -18,6 +18,20 @@
 
     if (typeof G.globalThis === 'undefined') G.globalThis = G;
 
+    // The engine's Number wrapper (Surfari's shims.js, the __brLean one) copies only the statics the iOS 6 engine lists
+    // as own names, and that list lacks the ES1 constants: Number.POSITIVE_INFINITY was undefined, so the editor's
+    // maximum size (new Dimension(Number.POSITIVE_INFINITY, ...)) was NaN and every split view laid out at 0 x 0
+    (function () {
+        var N = G.Number;
+        var k = { MAX_VALUE: 1.7976931348623157e308, MIN_VALUE: 5e-324, NaN: NaN, NEGATIVE_INFINITY: -Infinity, POSITIVE_INFINITY: Infinity,
+            MAX_SAFE_INTEGER: 9007199254740991, MIN_SAFE_INTEGER: -9007199254740991, EPSILON: 2.220446049250313e-16 };
+        for (var n in k) {
+            if (typeof N[n] !== 'number') {
+                try { Object.defineProperty(N, n, { value: k[n], writable: false, enumerable: false, configurable: false }); } catch (e) { try { N[n] = k[n]; } catch (e2) {} }
+            }
+        }
+    })();
+
     // User Timing: the workbench marks its startup phases (performance.mark) and reads them back
     var P = G.performance || (G.performance = {});
     if (typeof P.now !== 'function') { var base = Date.now(); P.now = function () { return Date.now() - base; }; }
