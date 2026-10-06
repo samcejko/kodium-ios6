@@ -105,8 +105,16 @@ try {
   console.log('ES5 check: OK', since())
   const first = es5.body.find((st) => !(st.type === 'FunctionDeclaration' && st.id.name.startsWith('__br_')))
   if (first) out = out.slice(0, first.start) + 'typeof __vsc_afterHelpers=="function"&&__vsc_afterHelpers();\n' + out.slice(first.start)
+  // Short names and no white space (esbuild, Vite's own minifier; nothing else is changed): the lowering's temporaries
+  // (_this$46s626321...) were 2.6 MB, and the iOS 6 engine keeps a script's whole text for as long as the page lives
+  // (a function is compiled from it when first called). The globals - the helpers, __vsc_*, __kd_* - keep their names.
+  const { transformSync } = await import('esbuild')
+  const before = out.length
+  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, target: 'es5', charset: 'utf8', legalComments: 'none' }).code
+  acorn.parse(out, { ecmaVersion: 5 })
+  console.log('minified:', (before / 1048576).toFixed(1), 'MB ->', (out.length / 1048576).toFixed(1), 'MB, still ES5', since())
 } catch (e) {
-  console.log('ES5 check FAILED:', e.message, JSON.stringify(out.substr(Math.max(0, e.pos - 160), 320)))
+  console.log('ES5 check FAILED:', e.message, e.pos !== undefined ? JSON.stringify(out.substr(Math.max(0, e.pos - 160), 320)) : '')
   process.exitCode = 1
 }
 fs.writeFileSync(output, out)

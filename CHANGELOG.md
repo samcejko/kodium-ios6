@@ -15,4 +15,8 @@ The first build.
 - Colours on an engine without CSS custom properties: the stylesheet is rewritten at build time with the default
   theme's values, and the code's own var(--...) strings get them at run time.
 - A splash with the loading steps (English and Czech), and the error if the workbench cannot start.
+- The app's Documents folder (iTunes File Sharing) is the workspace.
+- For the iPad 2's memory: the lowered workbench is minified (16.8 -> 13.1 MB), and extensions, Git, accounts and
+  secret storage are left out until the extension host comes.
+- Developer commands over SSH with the device's debug key: eval, snapshot, screen, mem, profile, reload.
 - Transpiler fixes over Surfari's: `super.x` reads, writes and calls with getters and setters of the parent class.

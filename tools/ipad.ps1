@@ -91,6 +91,28 @@ function Get-KodiumLog {
     Invoke-IPad -IPadHost $IPadHost -Command "grep -e Kodium -e '\[Surfari\]' /var/log/syslog | sed -e :a -e '`$q;N;$($Lines + 1),`$D;ba'"
 }
 
+# A developer command of the running app (see KDAppDelegate), with the debug key of tools/local.json ("debugKey", the
+# content of Library/surfari-debug-key in the app's home):
+#   Invoke-Kodium snapshot; Invoke-Kodium eval @{ js = 'document.title' }; Invoke-Kodium mem @{ relieve = 1 }
+function Invoke-Kodium {
+    param([Parameter(Mandatory = $true)][string]$Command, [hashtable]$Params = @{}, [string]$IPadHost = $script:IPadDefaultHost)
+    $cfg = Get-Content $script:IPadLocalCfg -Raw | ConvertFrom-Json
+    if (-not $cfg.debugKey) { throw 'no debugKey in tools/local.json' }
+    $q = 'key=' + [Uri]::EscapeDataString($cfg.debugKey)
+    foreach ($k in $Params.Keys) { $q += '&' + $k + '=' + [Uri]::EscapeDataString([string]$Params[$k]) }
+    Invoke-IPad -IPadHost $IPadHost -Command "uiopen 'kodium:$($Command)?$q'"
+}
+
+# A result file of a developer command from the app's tmp/ (eval.txt, screen.png, profile.txt), to packages\
+function Get-KodiumResult {
+    param([string]$Name = 'eval.txt', [string]$IPadHost = $script:IPadDefaultHost)
+    $dir = Join-Path (Split-Path -Parent $PSScriptRoot) 'packages'
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $local = Join-Path $dir $Name
+    Copy-FromIPad -IPadHost $IPadHost -RemotePath "$(Get-IPadAppContainer -IPadHost $IPadHost)/tmp/$Name" -LocalPath $local
+    if ($Name -like '*.txt') { Get-Content -Raw -Encoding UTF8 $local } else { $local }
+}
+
 # The app's sandbox folder on the iPad (it changes with a reinstall)
 function Get-IPadAppContainer {
     param([string]$IPadHost = $script:IPadDefaultHost)

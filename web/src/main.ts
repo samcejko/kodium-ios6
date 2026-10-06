@@ -1,6 +1,8 @@
-// Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - only what coding needs (editor,
-// files, search, Git, problems, output, settings, keybindings, themes, the extension host and the Open VSX gallery).
-// Left out: AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
+// Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - only what coding needs on the
+// iPad 2 now (editor, files, search, problems, output, settings, keybindings, themes). Left out for memory (the iPad 2
+// has 512 MB and the whole workbench ran at 313-330 MB): extensions and the Open VSX gallery (they come back with the
+// extension host, step 3), Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs,
+// telemetry, sync.
 import { initialize, LogLevel } from '@codingame/monaco-vscode-api'
 import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api'
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override'
@@ -17,19 +19,14 @@ import getStorageServiceOverride from '@codingame/monaco-vscode-storage-service-
 import getLifecycleServiceOverride from '@codingame/monaco-vscode-lifecycle-service-override'
 import getLogServiceOverride from '@codingame/monaco-vscode-log-service-override'
 import getEnvironmentServiceOverride from '@codingame/monaco-vscode-environment-service-override'
-import getExtensionServiceOverride from '@codingame/monaco-vscode-extensions-service-override'
-import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override'
 import getExplorerServiceOverride from '@codingame/monaco-vscode-explorer-service-override'
 import getSearchServiceOverride from '@codingame/monaco-vscode-search-service-override'
-import getScmServiceOverride from '@codingame/monaco-vscode-scm-service-override'
 import getMarkersServiceOverride from '@codingame/monaco-vscode-markers-service-override'
 import getOutputServiceOverride from '@codingame/monaco-vscode-output-service-override'
 import getPreferencesServiceOverride from '@codingame/monaco-vscode-preferences-service-override'
 import getSnippetServiceOverride from '@codingame/monaco-vscode-snippets-service-override'
 import getWorkingCopyServiceOverride from '@codingame/monaco-vscode-working-copy-service-override'
 import getStatusBarServiceOverride from '@codingame/monaco-vscode-view-status-bar-service-override'
-import getSecretStorageServiceOverride from '@codingame/monaco-vscode-secret-storage-service-override'
-import getAuthenticationServiceOverride from '@codingame/monaco-vscode-authentication-service-override'
 import getMonarchServiceOverride from '@codingame/monaco-vscode-monarch-service-override'
 import '@codingame/monaco-vscode-theme-defaults-default-extension'
 import { registerLanguages } from './languages'
@@ -96,13 +93,8 @@ async function start() {
       ...getModelServiceOverride(),
       ...getNotificationServiceOverride(),
       ...getDialogsServiceOverride(),
-      ...getAuthenticationServiceOverride(),
-      ...getSecretStorageServiceOverride(),
-      ...getExtensionServiceOverride({ enableWorkerExtensionHost: false }),
-      ...getExtensionGalleryServiceOverride({ webOnly: true }),
       ...getExplorerServiceOverride(),
       ...getSearchServiceOverride(),
-      ...getScmServiceOverride(),
       ...getMarkersServiceOverride(),
       ...getOutputServiceOverride(),
       ...getPreferencesServiceOverride(),
