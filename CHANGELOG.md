@@ -26,7 +26,9 @@ The first build.
   after every change of the page; the editor's costliest helpers are off by default (word suggestions, link, colour and
   Unicode detection, the sticky scroll, bracket pair colours, the blinking cursor); the workbench's script is kept as
   text by the engine (it decoded all 12 MB again for each function it compiled); the engine's memory relief waits
-  until 290 MB. The theme is Dark Modern again (the default named it as older VS Code did, and a light theme came).
+  until 290 MB. The same for the styles VS Code inserts at run time (theme, icons). The theme is Dark Modern again (the
+  default named it as older VS Code did, and a light theme came). Measured on the iPad 2: the time until a typed key
+  shows went from about 0.9 s to 0.16 s, and the engine's shims from 330 ms a key to 13.
 - For the iPad 2's memory: the lowered workbench is minified (16.8 -> 12.0 MB); extensions, Git, accounts and secret
   storage are left out until the extension host comes, and so are the merge editor, call and type hierarchies, the
   refactoring preview and the search editor; VS Code's services are created at once instead of behind proxies, which

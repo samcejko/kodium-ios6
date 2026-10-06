@@ -37,6 +37,18 @@
     // right here
     G.__brNoFlexItems = true;
     G.__brNoAlignSelf = true;
+    // and what the engine's rewriter finds in the styles VS Code inserts at run time (its theme, icons, token colours)
+    // reaches the shims without the marker rules, variable users and deferred values, as for the stylesheet (see
+    // web/tools/assemble-site.mjs): the variables pass went through them at every variable VS Code set. The variables
+    // these styles define stay (later styles are rewritten with them).
+    var manifestAdd = G.__brManifestAdd;
+    if (typeof manifestAdd === 'function' && !manifestAdd.__kd) {
+        G.__brManifestAdd = function (add) {
+            if (add && typeof add === 'object') { add.mk = []; add.cv = []; add.dv = []; }
+            return manifestAdd.call(this, add);
+        };
+        G.__brManifestAdd.__kd = true;
+    }
 
     // The engine's visualViewport (shims.js) is the window's size when the page started, and its addEventListener does
     // nothing - and on iOS VS Code takes its size from there and lays out again on its resize event alone: after the

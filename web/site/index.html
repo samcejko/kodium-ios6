@@ -63,6 +63,8 @@ if (/^cs\b/i.test(window.__kd_lang)) document.write('<script src="nls.cs.js"><\/
 (function () {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', 'assets/workbench.es5.js', false);
+    // (as UTF-8, the engine's default: read as Latin-1 the text came 8-bit, which JSC then copied to 16-bit for its
+    // parser - both kept, 14 MB more)
     xhr.send(null);
     if (xhr.status !== 200 && xhr.status !== 0) throw new Error('assets/workbench.es5.js: ' + xhr.status);
     var s = document.createElement('script');
