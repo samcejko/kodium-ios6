@@ -129,9 +129,10 @@ static NSString *KDShimArgument(NSURL *url)
 - (void)showKeyboard
 {
     self.webView.keyboardDisplayRequiresUserAction = NO;
-    [self evaluateJavaScript:@"window.__kd_commands && window.__kd_commands('workbench.action.focusActiveEditorGroup').then(function () {"
-                              " var t = document.querySelector('.editor-instance .monaco-editor textarea'); if (t) t.focus(); })"];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // (the editor keeps its text area focused without a keyboard: focusing it again does nothing, it is left first)
+    [self evaluateJavaScript:@"(function () { var t = document.querySelector('.editor-instance .monaco-editor textarea');"
+                              " if (!t) return; t.blur(); setTimeout(function () { t.focus(); }, 100); })()"];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         self.webView.keyboardDisplayRequiresUserAction = YES;
     });
 }
