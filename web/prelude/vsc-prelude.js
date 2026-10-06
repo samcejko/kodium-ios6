@@ -38,8 +38,10 @@
     // it is the window's size at every read, and its events are the window's.
     (function () {
         var vv = G.visualViewport;
-        // (the engine's is a plain object; a real one, in a desktop browser, is left alone)
-        if (!vv || Object.getPrototypeOf(vv) !== Object.prototype) return;
+        // (the engine's has the sizes as values of its own; a real one, in a desktop browser, has getters of its
+        // prototype, and is left alone)
+        var own = vv && Object.getOwnPropertyDescriptor(vv, 'width');
+        if (!own || !('value' in own)) return;
         var live = function (name, read) {
             try { Object.defineProperty(vv, name, { get: read, enumerable: true, configurable: true }); } catch (e) {}
         };
@@ -51,6 +53,33 @@
         live('pageTop', function () { return G.pageYOffset || 0; });
         vv.addEventListener = function (type, fn, opts) { if (type === 'resize' || type === 'scroll') G.addEventListener(type, fn, opts); };
         vv.removeEventListener = function (type, fn, opts) { if (type === 'resize' || type === 'scroll') G.removeEventListener(type, fn, opts); };
+    })();
+
+    // The clipboard as VS Code uses it on WebKit: at every click and key it gets navigator.clipboard.write() of a
+    // ClipboardItem ready, with a promise of the text that its next copy fulfils. The engine has no ClipboardItem (a
+    // ReferenceError at every click and key) and only writeText (to the app's pasteboard), so a copy from VS Code's
+    // menus went nowhere. Here the item holds its data and write() hands the text to writeText; an item that a later
+    // click or key replaced (its promise cancelled) copies nothing, quietly.
+    (function () {
+        var clip = G.navigator && G.navigator.clipboard;
+        if (typeof G.ClipboardItem !== 'undefined' || !clip || typeof clip.writeText !== 'function') return;
+        var ClipboardItem = function (items) {
+            this.__kdItems = items || {};
+            this.types = Object.keys(this.__kdItems);
+        };
+        ClipboardItem.prototype.getType = function (type) { return Promise.resolve(this.__kdItems[type]); };
+        G.ClipboardItem = ClipboardItem;
+        var writeText = clip.writeText;
+        try {
+            clip.write = function (list) {
+                var data = list && list[0] && list[0].__kdItems && list[0].__kdItems['text/plain'];
+                if (data === undefined) return Promise.reject(new Error('only text can be copied'));
+                return Promise.resolve(data).then(function (v) {
+                    // (a Blob of the text, or the text)
+                    return v && typeof v === 'object' && typeof v.text === 'function' ? v.text() : v;
+                }).then(function (text) { return writeText.call(clip, String(text)); }, function () {});
+            };
+        } catch (e) {}
     })();
 
     // User Timing: the workbench marks its startup phases (performance.mark) and reads them back
