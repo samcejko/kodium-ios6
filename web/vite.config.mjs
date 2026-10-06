@@ -155,6 +155,20 @@ function inlineMarkdown() {
   ])
 }
 
+// Workers go sooner when nothing uses them (a worker is a script engine of its own on the iPad 2: about 8 MB each): the
+// language services' after 45 s instead of 2 minutes, the editor's after a minute instead of five
+function quickerWorkers() {
+  const language = (lang) => [`/monaco-vscode-standalone-${lang}-language-features/languages/features/${lang}/workerManager.js`, [
+    ['const STOP_WHEN_IDLE_FOR = 2 * 60 * 1e3;', 'const STOP_WHEN_IDLE_FOR = 45 * 1e3;'],
+    ['this._idleCheckInterval = window.setInterval(() => this._checkIfIdle(), 30 * 1e3);',
+     'this._idleCheckInterval = window.setInterval(() => this._checkIfIdle(), 15 * 1e3);']]]
+  return patchModules('kodium-quicker-workers', [
+    language('json'), language('css'), language('html'),
+    ['/vs/editor/browser/services/editorWorkerService.js', [
+      ['const STOP_WORKER_DELTA_TIME_MS = 5 * 60 * 1000;', 'const STOP_WORKER_DELTA_TIME_MS = 60 * 1000;']]]
+  ])
+}
+
 // The extension host in the page starts only for an extension with code it can run: VS Code starts it at once
 // for any extension it hosts, the default themes and snippets included - 3.5 s and 14 MB more at every start on the
 // iPad 2, for nothing to run. Lazily, and counting only extensions with code, it starts when one is installed or
@@ -224,7 +238,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

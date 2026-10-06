@@ -121,6 +121,7 @@ jobs:
           npm ci --no-audit --no-fund
           node node_modules/vite/bin/vite.js build --logLevel warn
           node --max-old-space-size=6144 --stack-size=8000 tools/lower.mjs dist/assets/workbench.js dist/assets/workbench.es5.js
+          node tools/build-workers.mjs
           node tools/assemble-site.mjs dist ../Resources/site
           ls -la ../Resources/site ../Resources/site/assets | head -n 80
 

@@ -28,7 +28,9 @@ extern NSString * const BRMemoryGraphicsNotification;
 
 // Starts the sampler thread (every 2 s, every 0.5 s while a page loads or memory is short): logs jumps, tracks the
 // peak of the current page, asks the main thread for relief when the process crosses BRMemoryReliefMB (0 = off) or
-// the system runs short, and as the last resort holds new requests (holdLoad:) until memory is back.
+// the system runs short, and as the last resort holds new requests (holdLoad:) until memory is back. The levels by
+// what the system has available can be set in the app's defaults before: BRMemoryTightMB (100), BRMemoryCriticalMB
+// (70: relief), BRMemoryEmergencyMB (55: requests wait), and how often WebKit's numbers are logged, BRMemoryReportSeconds.
 + (void)start;
 // A page's new request while the iPad is nearly out of memory: `start` runs later (on the sampler thread), when
 // memory is back, or one after another after a while even if it is not. The page loads slower instead of being

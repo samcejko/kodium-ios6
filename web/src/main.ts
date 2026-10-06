@@ -1,6 +1,7 @@
 // Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - what coding needs on the iPad 2
-// (editor, files, search, problems, output, settings, keybindings, themes, extensions from Open VSX, running
-// JavaScript, the preview of HTML and Markdown, files from and to other apps). Left out for memory (the iPad 2 has
+// (editor, files, search, problems, output, settings, keybindings, themes and file icons, extensions from Open VSX,
+// IntelliSense for JSON, CSS and HTML, running JavaScript, the preview of HTML and Markdown, files from and to other
+// apps). Left out for memory (the iPad 2 has
 // 512 MB): Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
@@ -34,6 +35,13 @@ import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extensi
 // else needs it. Declarative extensions (themes, snippets, keymaps) need no host at all.
 import 'vscode/localExtensionHost'
 import '@codingame/monaco-vscode-theme-defaults-default-extension'
+// VS Code's file icons (Seti)
+import '@codingame/monaco-vscode-theme-seti-default-extension'
+// IntelliSense for JSON, CSS (SCSS, Less) and HTML: monaco's language services, each in a worker of its own that starts
+// when a file of its language is opened (they register for when the services run)
+import { jsonDefaults } from '@codingame/monaco-vscode-standalone-json-language-features'
+import '@codingame/monaco-vscode-standalone-css-language-features'
+import '@codingame/monaco-vscode-standalone-html-language-features'
 import './run'
 import './preview'
 import { registerLanguages } from './languages'
@@ -52,6 +60,22 @@ declare global {
   }
 }
 const mark = (name: string) => window.__vsc_mark?.(name)
+
+// The workers by the label the workbench asks for (tools/build-workers.mjs): the editor's - diffs, word suggestions,
+// links off the page's thread, which had them all on the iPad - and the language services'. Any other runs in the
+// page as before.
+const WORKERS: Record<string, string> = { editorWorkerService: 'editor', json: 'json', css: 'css', html: 'html' }
+const SITE = location.href.replace(/[?#].*$/, '').replace(/\/[^/]*$/, '')
+;(window as { MonacoEnvironment?: unknown }).MonacoEnvironment = {
+  getWorker(_moduleId: string, label: string): Worker | undefined {
+    const name = WORKERS[label]
+    // (with the page's language, which a worker of the iOS 6 engine does not know: worker-prelude.js)
+    return name ? new Worker(SITE + '/assets/workers/' + name + '.worker.es5.js?lang=' + encodeURIComponent(navigator.language || 'en')) : undefined
+  }
+}
+// (JSON with comments, as VS Code's own files are; its colours stay those of Kodium's grammar, see languages.ts)
+jsonDefaults.setDiagnosticsOptions({ ...jsonDefaults.diagnosticsOptions, comments: 'ignore', trailingCommas: 'warning' })
+jsonDefaults.setModeConfiguration({ ...jsonDefaults.modeConfiguration, tokens: false })
 
 async function start() {
   mark('main')
@@ -72,16 +96,23 @@ async function start() {
       // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
       'files.autoSave': 'afterDelay',
       'files.autoSaveDelay': 2000,
-      // What the iPad 2 cannot afford at every keystroke. The editor's worker runs on the main thread here (no worker
-      // of its own), so word suggestions, link and colour detection and the Unicode highlighting each went through the
-      // whole file in it; the sticky scroll and bracket pair colours recompute as well; the blinking cursor changed the
-      // page twice a second (and every change has the engine's shims run). Layer hints made composited layers the old
-      // WebKit rebuilt at every layout. Typing went from a third of a second a key to a quarter with these alone.
-      'editor.quickSuggestions': { other: 'off', comments: 'off', strings: 'off' },
-      'editor.wordBasedSuggestions': 'off',
+      // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for 0.3 s: worked out in the workers (the
+      // words of the file in the editor's, the rest in the language services'), the list drawn only then - not at
+      // every key while typing on
+      'editor.quickSuggestions': { other: 'on', comments: 'off', strings: 'off' },
+      'editor.quickSuggestionsDelay': 300,
+      'editor.wordBasedSuggestions': 'currentDocument',
+      // (CSS colours as swatches, from the language service)
+      'editor.colorDecorators': true,
+      // What the iPad 2 cannot afford at every keystroke. The sticky scroll and bracket pair colours recompute; the
+      // blinking cursor changed the page twice a second (and every change has the engine's shims run); the highlight of
+      // a word's other places follows every move of the cursor. Layer hints made composited layers the old WebKit
+      // rebuilt at every layout. The minimap's section headers were looked for in the whole file after every pause in
+      // typing, with the minimap off.
       'editor.occurrencesHighlight': 'off',
       'editor.links': false,
-      'editor.colorDecorators': false,
+      'editor.minimap.showRegionSectionHeaders': false,
+      'editor.minimap.showMarkSectionHeaders': false,
       'editor.unicodeHighlight.ambiguousCharacters': false,
       'editor.unicodeHighlight.invisibleCharacters': false,
       'editor.unicodeHighlight.nonBasicASCII': false,

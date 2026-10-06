@@ -195,11 +195,17 @@ static void KDWriteResult(NSString *name, NSString *text)
     if (BRDebugEnabled()) [defaults setBool:YES forKey:@"WebKitDeveloperExtras"];
     else [defaults removeObjectForKey:@"WebKitDeveloperExtras"];
     // navigator.userAgent: the identity the network layer sends. The browser's ad blocking and cookie banner hiding have
-    // nothing to do in an editor (and no lists in this app). The engine's memory relief (a full garbage collection,
-    // 0.4-1 s that the page stands still) comes when the app passes 290 MB instead of Surfari's 240, which the workbench
-    // passes all the time: while typing it came every 20 s. (When the system itself runs short it still comes.)
+    // nothing to do in an editor (and no lists in this app).
+    // The engine's memory relief is a full garbage collection (0.3-0.5 s that the page stands still) which also throws
+    // away all the compiled code - the workbench then compiles again whatever it runs next (a tenth of the time of
+    // switching tabs went into that) - and the workbench holds what it holds: relief freed next to nothing, and with
+    // the iPad's 50-70 MB left it came every few seconds. It comes only when the system is about to close the app
+    // (iOS warns at 40-60 MB available and closes it at 15-25), not for the app's own size; requests to the network
+    // wait at 30 MB. WebKit's numbers in the log (they count every object of the page) every two minutes at most.
     [defaults registerDefaults:@{ @"UserAgent": [BRSettings userAgentOverride] ?: [BRHTTPRequest defaultUserAgent],
-                                  @"BRAdBlock": @NO, @"BRHideCookieBanners": @NO, @"BRMemoryReliefMB": @290 }];
+                                  @"BRAdBlock": @NO, @"BRHideCookieBanners": @NO, @"BRMemoryReliefMB": @0,
+                                  @"BRMemoryTightMB": @60, @"BRMemoryCriticalMB": @40, @"BRMemoryEmergencyMB": @30,
+                                  @"BRMemoryReportSeconds": @120 }];
 
     // Every http/https load goes through the engine's TLS stack and rewriters; the app's own site
     // (https://kodium.invalid/) through KDSiteProtocol, registered last so that it is asked first.

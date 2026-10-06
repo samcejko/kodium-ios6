@@ -24,7 +24,13 @@ static long g_reliefGainMB = 100, g_reliefEndAvailable;
 // Levels by what the whole system has available (free + inactive + purgeable). Measured on the iPad 2 (512 MB):
 // with nothing open about 220-250 MB are available, iOS warns at 40-60 MB and kills the frontmost app at 15-25 MB
 // (memory can drop 15 MB in a few seconds while a big script is lowered, so the last resort starts well above that).
-static const long BRAvailTightMB = 100, BRAvailCriticalMB = 70, BRAvailEmergencyMB = 55;
+// An app can set them (BRMemoryTightMB, BRMemoryCriticalMB, BRMemoryEmergencyMB in its registered defaults, read at
+// +start): one whose page holds what it holds - an editor, not a page that keeps loading - gains next to nothing from
+// relief, whose full garbage collection also throws away all the compiled code the page then compiles again.
+static long BRAvailTightMB = 100, BRAvailCriticalMB = 70, BRAvailEmergencyMB = 55;
+// how often WebKit's numbers are logged with a jump at most (counting the page's objects walks its whole heap on the
+// WebThread); BRMemoryReportSeconds
+static CFAbsoluteTime BRMemoryReportEvery = 10;
 static volatile BOOL g_pageLoading;
 static CFAbsoluteTime g_loadEnded;
 static CFAbsoluteTime g_lastGraphics;
@@ -201,6 +207,11 @@ static BOOL BRPageBusy(void)
 {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
+        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+        if ([d objectForKey:@"BRMemoryTightMB"]) BRAvailTightMB = (long)[d integerForKey:@"BRMemoryTightMB"];
+        if ([d objectForKey:@"BRMemoryCriticalMB"]) BRAvailCriticalMB = (long)[d integerForKey:@"BRMemoryCriticalMB"];
+        if ([d objectForKey:@"BRMemoryEmergencyMB"]) BRAvailEmergencyMB = (long)[d integerForKey:@"BRMemoryEmergencyMB"];
+        if ([d objectForKey:@"BRMemoryReportSeconds"]) BRMemoryReportEvery = [d doubleForKey:@"BRMemoryReportSeconds"];
         NSThread *t = [[NSThread alloc] initWithTarget:self selector:@selector(run) object:nil];
         t.name = @"com.samcejko.browser.memory";
         [t start];
@@ -302,7 +313,7 @@ static long BRUnexplainedDrop(CFAbsoluteTime now, long available, long mb)
         BRLog(@"Memory %ld MB (%@%ld), %ld MB available%@%@%@", mb, mb >= last ? @"+" : @"-", labs(mb - last), available, graphics,
               what.length ? @", busy: " : @"", what ?: @"");
         BRWebThreadRunFn run = BRWebThreadRun();
-        if (run && (mb >= BRMemoryReportFromMB || drop) && CFAbsoluteTimeGetCurrent() - g_lastReport > 10) {
+        if (run && (mb >= BRMemoryReportFromMB || drop) && CFAbsoluteTimeGetCurrent() - g_lastReport > BRMemoryReportEvery) {
             g_lastReport = CFAbsoluteTimeGetCurrent();
             run(^{ BRLog(@"Memory report: %@", [BRMemory webKitNumbers]); });
         }

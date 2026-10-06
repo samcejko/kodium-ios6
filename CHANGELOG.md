@@ -15,6 +15,19 @@ The first build.
   an extension with code is there, at the start or when one is installed: without one the workbench starts 3 s sooner
   and takes 14 MB less. An extension's README, features and changelog show in the page itself (VS Code's webview, an
   iframe with scripts of its own, does not run on iOS 6: it said "No README available").
+- IntelliSense for JSON, CSS (SCSS, Less) and HTML: completion, hover, problems, formatting, colours and symbols, from
+  monaco's language services - each in a web worker of its own, built for iOS 6 (the engine's polyfills and the
+  Proxy stand-in in front of it), that starts when a file of its language opens and stops 45 s after its last use.
+  Suggestions show as in VS Code once typing pauses for 0.3 s (the words of the file in a JavaScript file); CSS
+  colours as swatches.
+- The editor's own worker (diffs, word suggestions) runs off the page's thread, which had it all. VS Code's file icons
+  (Seti).
+- Smoother on the iPad 2: the engine's memory relief comes only when iOS is about to close the app - its full garbage
+  collection threw away all the compiled code, which the workbench then compiled again (a tenth of the time of
+  switching tabs), and with 50-70 MB left on the iPad it came every few seconds while freeing next to nothing; no copy
+  of the stylesheet rewriter is loaded into the workbench for its small styles (the app's rewriter does them); the
+  minimap's section headers are no longer looked for in the whole file after every pause in typing (with the minimap
+  off).
 - Themes from extensions colour the whole workbench on the iPad too: the theme's colours come from VS Code's theme
   service (the engine takes the custom properties out of the theme's style), and the rules that took the default
   theme's colours are kept as text (the stylesheet rewriter had emptied them). Dialogs, buttons and other parts that

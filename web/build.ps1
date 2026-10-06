@@ -19,6 +19,9 @@ try {
     & $node --max-old-space-size=8192 --stack-size=8000 ([IO.Path]::Combine($web, 'tools', 'lower.mjs')) `
         ([IO.Path]::Combine($assets, 'workbench.js')) ([IO.Path]::Combine($assets, 'workbench.es5.js'))
     if ($LASTEXITCODE) { throw "lowering failed ($LASTEXITCODE)" }
+    # the web workers (the editor's, the language services'), each lowered on its own
+    & $node ([IO.Path]::Combine($web, 'tools', 'build-workers.mjs'))
+    if ($LASTEXITCODE) { throw "building the workers failed ($LASTEXITCODE)" }
     Copy-Item ([IO.Path]::Combine($web, 'prelude', 'vsc-prelude.js')) $dist -Force
     Get-ChildItem ([IO.Path]::Combine($web, 'test')) -File | Where-Object { $_.Extension -in '.html', '.js' } | Copy-Item -Destination $dist -Force
     # the app's site as CI puts it into Resources/site (dist\site here, for a look in a desktop browser)

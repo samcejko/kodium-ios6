@@ -132,7 +132,26 @@ console.log('written', output, fs.statSync(output).size, 'bytes', since())
 // methods ($name) and events (onName) of the RPC and IPC proxies: VS Code's services are no proxies here (eagerServices
 // in vite.config.mjs), and every name is two closures on the iPad (all 36,000 of them were megabytes)
 const skip = new Set(Object.getOwnPropertyNames(Object.prototype).concat(Object.getOwnPropertyNames(Function.prototype), ['prototype', 'length', 'name', 'arguments', 'caller']))
-const names = [...memberNames].filter((n) => !skip.has(n) && !n.startsWith('__br_') && (n[0] === '$' || /^on[A-Z]/.test(n))).sort()
+// And the methods of the language workers (JSON, CSS, HTML: their *Worker classes), which the page calls through
+// monaco's proxy of a worker's module (a get-only Proxy too: doValidation, doComplete...)
+const workerMethods = new Set()
+for (const lang of ['json', 'css', 'html']) {
+  const file = path.join(here, '..', 'node_modules', '@codingame', `monaco-vscode-standalone-${lang}-language-features`, 'languages', 'features', lang, lang + 'Worker.js')
+  if (!fs.existsSync(file)) continue
+  const stack = [acorn.parse(fs.readFileSync(file, 'utf8'), { ecmaVersion: 'latest', sourceType: 'module' })]
+  while (stack.length) {
+    const n = stack.pop()
+    if (!n || typeof n.type !== 'string') continue
+    if (n.type === 'MethodDefinition' && n.kind === 'method' && !n.static && n.key.type === 'Identifier') workerMethods.add(n.key.name)
+    for (const k in n) {
+      const v = n[k]
+      if (Array.isArray(v)) stack.push(...v)
+      else if (v && typeof v.type === 'string') stack.push(v)
+    }
+  }
+}
+const names = [...new Set([...memberNames, ...workerMethods])].filter((n) => !skip.has(n) && !n.startsWith('__br_') &&
+  (n[0] === '$' || /^on[A-Z]/.test(n) || workerMethods.has(n))).sort()
 const namesScript = `/* property names of ${path.basename(input)}, for the Proxy stand-in (see vsc-prelude.js) */
 window.__vsc_proxyNames = ${JSON.stringify(names.join(' '))}.split(' ');
 `

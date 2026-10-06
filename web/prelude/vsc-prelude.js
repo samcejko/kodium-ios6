@@ -54,6 +54,23 @@
         G.__brManifestAdd.__kd = true;
     }
 
+    // The engine rewrites every style a script inserts (shims-extra.js runtimeCSS): a big one in the app, whose rewriter is
+    // warm and keeps what it did; a small one with a copy of the rewriter it loads into the page for it - 344 KB of code
+    // compiled into the workbench's own heap as it starts, for VS Code's small styles (a list's colours, an animation).
+    // The small ones go to the app's rewriter too. (Were it busy, the style stays as it is: the few that need the
+    // rewriter come with the workbench's start, when it is not.)
+    if (!G.CSSFix) G.CSSFix = {
+        run: function (kind, css, pv, opts) {
+            try {
+                var x = new XMLHttpRequest();
+                x.open('POST', 'https://ios6-browser.invalid/cssrun', false);
+                x.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+                x.send(JSON.stringify([String(css), JSON.stringify(pv || {}), JSON.stringify(opts || {})]));
+                return x.status === 200 && x.responseText ? x.responseText : null;
+            } catch (e) { return null; }
+        }
+    };
+
     // The engine's visualViewport (shims.js) is the window's size when the page started, and its addEventListener does
     // nothing - and on iOS VS Code takes its size from there and lays out again on its resize event alone: after the
     // iPad turned, or the keyboard came up (the app shrinks the web view above it), the workbench kept its old size. Here
