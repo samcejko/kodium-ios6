@@ -22,6 +22,8 @@ The first build.
   engine's own styles do not have): the trust dialog of an extension had no background.
 - Files from and to other apps: "Open in Kodium" (Mail, Safari, Dropbox...) puts the file into the Documents and opens
   it; Share... in the explorer's menu and a tab's menu shows the system's menu (Open In..., Mail, Print, Copy).
+- A row of keys above the on-screen keyboard, in the keyboard's own look, in place of WebKit's Previous/Next/Done bar:
+  Tab, the arrows (held, they go on), brackets and the other characters code needs, undo and redo.
 - Smaller for the iPad 2: VS Code's own splash, the "modern UI" (off, 14 stylesheets) and the extension host's parts
   for what an extension cannot do on the iPad (comments, tests, tasks, terminals, debugging, source control, the
   editor tabs API) are left out: the workbench script 14.4 -> 13.9 MB, the stylesheet 703 -> 593 KB; 278 MB at the

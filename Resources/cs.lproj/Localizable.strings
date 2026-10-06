@@ -3,6 +3,10 @@
 "The editor could not be loaded." = "Editor se nepodařilo načíst.";
 "No app can take this file." = "Tento soubor neumí převzít žádná aplikace.";
 "OK" = "OK";
+/* the row of keys above the keyboard */
+"tab" = "tab";
+"undo" = "zpět";
+"redo" = "znovu";
 
 /* --- engine: Surfari's translations of the engine's messages, copied by tools/sync-engine.ps1 --- */
 "Cancelled" = "Zrušeno";

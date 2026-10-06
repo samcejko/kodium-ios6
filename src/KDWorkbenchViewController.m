@@ -1,6 +1,7 @@
 #import "KDWorkbenchViewController.h"
 #import "KDSiteProtocol.h"
 #import "KDFiles.h"
+#import "KDKeyBar.h"
 #import "BRCSSRewriter.h"
 #import "BRURLProtocol.h"
 #import "BRCommon.h"
@@ -70,6 +71,9 @@ static NSString *KDShimArgument(NSURL *url)
     // (WebKit scrolls to the caret once the keyboard is up, before the workbench has laid itself out again)
     [nc addObserver:self selector:@selector(layoutWebView) name:UIKeyboardDidShowNotification object:nil];
     [nc addObserver:self selector:@selector(shareRequested:) name:KDShareFileNotification object:nil];
+    // the row of keys above the keyboard: its keys go to the workbench (web/src/keybar.ts)
+    __weak KDWorkbenchViewController *weakSelf = self;
+    [KDKeyBar installWithHandler:^(NSString *key) { [weakSelf sendKey:key]; }];
     [self.webView loadRequest:[NSURLRequest requestWithURL:[KDSiteProtocol startURL]]];
 }
 
@@ -120,6 +124,13 @@ static NSString *KDShimArgument(NSURL *url)
 - (NSString *)evaluateJavaScript:(NSString *)code
 {
     return [self.webView stringByEvaluatingJavaScriptFromString:code ?: @""] ?: @"";
+}
+
+- (void)sendKey:(NSString *)key
+{
+    NSData *json = [NSJSONSerialization dataWithJSONObject:@[key ?: @""] options:0 error:NULL];
+    NSString *arg = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil;
+    if (arg) [self evaluateJavaScript:[NSString stringWithFormat:@"window.__kd_key && window.__kd_key(%@[0])", arg]];
 }
 
 #pragma mark - Files in and out

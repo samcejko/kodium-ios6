@@ -3,3 +3,7 @@
 "The editor could not be loaded." = "The editor could not be loaded.";
 "No app can take this file." = "No app can take this file.";
 "OK" = "OK";
+/* the row of keys above the keyboard */
+"tab" = "tab";
+"undo" = "undo";
+"redo" = "redo";
