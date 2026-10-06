@@ -49,13 +49,34 @@ const cssPath = path.join(out, 'assets', 'style.css')
 //   variables VS Code's code sets on elements (tab and activity bar sizes, the zoom factor...) stay for the engine.
 // - fit-content, min-content, max-content and fill-available sizes, which the engine lacks and the shims emulated by
 //   measuring: the declarations go (as the engine itself ignores them).
+// - The declarations that took the theme's variables are kept as theme-template.css as well, var() and all: when
+//   another theme is chosen (an extension's), vsc-prelude.js fills them with its values and puts them after the
+//   stylesheet, the engine having no custom properties of its own.
 const codeNames = new Set(fs.readFileSync(path.join(out, 'assets', 'workbench.es5.js'), 'utf8').match(/--[A-Za-z][\w-]*/g) || [])
+// the blocks of at-rules (@media and the like): prelude, where the block starts and ends
+function atRuleBlocks(text) {
+  const blocks = [], stack = []
+  let quote = null, start = 0
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (quote) { if (c === '\\') i++; else if (c === quote) quote = null; continue }
+    if (c === '"' || c === "'") quote = c
+    else if (c === '/' && text[i + 1] === '*') { const e = text.indexOf('*/', i + 2); i = e < 0 ? text.length : e + 1; start = i + 1 }
+    else if (c === '{') { stack.push({ prelude: text.slice(start, i).trim(), start: i }); start = i + 1 }
+    else if (c === '}') { const b = stack.pop(); if (b && b.prelude.startsWith('@')) blocks.push({ prelude: b.prelude, start: b.start, end: i }); start = i + 1 }
+    else if (c === ';') start = i + 1
+  }
+  return blocks
+}
 function settleStatically(text, vars) {
   const defined = new Set(text.match(/(?<=[{;\s])--[A-Za-z][\w-]*(?=\s*:)/g) || [])
   const dynamic = (name) => defined.has(name) || codeNames.has(name)
   const stats = { theme: 0, fallback: 0, dropped: 0, kept: 0, sizes: 0 }
-  // var(...) in a value: null when the declaration has to go
-  const resolve = (value, depth) => {
+  const atBlocks = atRuleBlocks(text)
+  const template = []   // [at-rule preludes, selector, declarations]
+  let usedTheme = false
+  // var(...) in a value: null when the declaration has to go; keepTheme leaves the theme's variables as they are
+  const resolve = (value, depth, keepTheme) => {
     let out = '', i = 0, at
     while ((at = value.indexOf('var(', i)) >= 0) {
       out += value.slice(i, at)
@@ -70,13 +91,15 @@ function settleStatically(text, vars) {
       const name = value.slice(at + 4, comma < 0 ? k - 1 : comma).trim()
       const fallback = comma < 0 ? null : value.slice(comma + 1, k - 1).trim()
       if (Object.prototype.hasOwnProperty.call(vars, name) && !defined.has(name)) {
-        const v = depth < 8 ? resolve(String(vars[name]), depth + 1) : null
+        usedTheme = true
+        if (keepTheme) { out += value.slice(at, k); i = k; continue }
+        const v = depth < 8 ? resolve(String(vars[name]), depth + 1, false) : null
         if (v === null) return null
         out += v; stats.theme++
       } else if (dynamic(name)) {
         out += value.slice(at, k); stats.kept++
       } else if (fallback !== null) {
-        const v = depth < 8 ? resolve(fallback, depth + 1) : null
+        const v = depth < 8 ? resolve(fallback, depth + 1, keepTheme) : null
         if (v === null) return null
         out += v; stats.fallback++
       } else return null
@@ -87,8 +110,15 @@ function settleStatically(text, vars) {
   const SIZE = /^(-webkit-)?(min-|max-)?(width|height)$|^(-webkit-)?flex-basis$/i
   const INTRINSIC = /(^|[\s(,:])(-webkit-|-moz-)?(fit-content|min-content|max-content|fill-available)\b/i
   // each innermost block's declarations, split at semicolons outside strings and parentheses (data: URLs have them)
-  const result = text.replace(/\{([^{}]*)\}/g, (all, body) => {
+  const result = text.replace(/\{([^{}]*)\}/g, (all, body, offset) => {
     if (body.indexOf('var(') < 0 && !INTRINSIC.test(body)) return all
+    // (its selector: back to the end of what came before; the at-rules around it, keyframes and fonts left out)
+    let s = offset
+    while (s > 0 && text[s - 1] !== '}' && text[s - 1] !== '{' && text[s - 1] !== ';') s--
+    const selector = text.slice(s, offset).trim()
+    const around = atBlocks.filter((b) => b.start < offset && offset < b.end).sort((a, b) => a.start - b.start).map((b) => b.prelude)
+    const forTemplate = !selector.startsWith('@') && !around.some((p) => /^@(-webkit-)?(keyframes|font-face)/i.test(p))
+    const themed = []
     const parts = []
     let depth = 0, quote = null, start = 0
     for (let i = 0; i < body.length; i++) {
@@ -106,19 +136,37 @@ function settleStatically(text, vars) {
       const prop = colon < 0 ? '' : decl.slice(0, colon).trim()
       if (colon < 0 || prop.startsWith('--')) { kept.push(decl); continue }
       let value = decl.slice(colon + 1)
-      if (SIZE.test(prop) && INTRINSIC.test(value)) { stats.sizes++; continue }
+      if (SIZE.test(prop) && INTRINSIC.test(value)) {
+        stats.sizes++
+        // a width or height of the content's size becomes auto (a box's child takes its content's size by itself, and
+        // the declaration often undoes a width: 100% of a broader rule - a dialog's buttons each took the whole row);
+        // a minimum or maximum goes
+        if (/^(-webkit-)?(width|height)$/i.test(prop) && !/fill-available/i.test(value)) kept.push(decl.slice(0, colon + 1) + 'auto')
+        continue
+      }
       if (value.indexOf('var(') >= 0) {
-        value = resolve(value, 0)
+        usedTheme = false
+        const original = value
+        value = resolve(value, 0, false)
         if (value === null) { stats.dropped++; continue }
+        if (usedTheme && forTemplate) {
+          const withVars = resolve(original, 0, true)
+          if (withVars !== null) themed.push(prop + ':' + withVars)
+        }
       }
       kept.push(decl.slice(0, colon + 1) + value)
     }
+    if (themed.length) template.push([around, selector, themed])
     return '{' + kept.join(';') + '}'
   })
-  console.log('settled before the rewriter:', JSON.stringify(stats))
-  return result
+  console.log('settled before the rewriter:', JSON.stringify(stats), '- theme template:', template.length, 'rules')
+  return { css: result, template }
 }
-const css = settleStatically(fs.readFileSync(cssPath, 'utf8'), theme.vars)
+const settled = settleStatically(fs.readFileSync(cssPath, 'utf8'), theme.vars)
+const css = settled.css
+// the template: the rules in their order, each in its at-rules
+fs.writeFileSync(path.join(out, 'assets', 'theme-template.css'), settled.template.map(([around, selector, decls]) =>
+  around.reduceRight((inner, prelude) => prelude + '{' + inner + '}', selector + '{' + decls.join(';') + '}')).join('\n') + '\n')
 // (the app's web view: the whole screen below the status bar of an iPad, in both orientations)
 const options = { pageURL: 'https://kodium.invalid/index.html', viewportWidth: 768, devicePixelRatio: 1,
                   viewportPortrait: [768, 1004], viewportLandscape: [1024, 748], orientation: 'landscape' }

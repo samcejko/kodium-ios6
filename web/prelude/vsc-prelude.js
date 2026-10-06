@@ -44,7 +44,11 @@
     var manifestAdd = G.__brManifestAdd;
     if (typeof manifestAdd === 'function' && !manifestAdd.__kd) {
         G.__brManifestAdd = function (add) {
-            if (add && typeof add === 'object') { add.mk = []; add.cv = []; add.dv = []; }
+            if (add && typeof add === 'object') {
+                add.mk = []; add.cv = []; add.dv = [];
+                // (the variables a rewritten style defines: VS Code's theme, see setThemeVars)
+                if (add.vars && typeof add.vars === 'object') { try { setThemeVars(add.vars); } catch (e) {} }
+            }
             return manifestAdd.call(this, add);
         };
         G.__brManifestAdd.__kd = true;
@@ -182,18 +186,66 @@
         if (nativeVars || typeof text !== 'string' || text.indexOf('var(') < 0) return text;
         return resolveVars(text, 0);
     };
-    // the theme VS Code applies: its <style class="contributedColorTheme"> with .monaco-workbench { --vscode-...: ...; }
-    // (a theme chosen later changes the values for what is made from then on)
+    // The theme VS Code applies: its <style class="contributedColorTheme"> with .monaco-workbench { --vscode-...: ...; }.
+    // The engine rewrites that style as it goes in (custom properties out) and hands the values to its shims, where
+    // __brManifestAdd below takes them; in a desktop browser (?novar) the text itself is read. A whole theme's worth of
+    // them replaces the values (one the new theme lacks has none then).
+    var setThemeVars = function (defs) {
+        var k, changed = false;
+        for (k in defs) if (defs.hasOwnProperty(k) && k.indexOf('--vscode-') === 0 && themeVars[k] !== defs[k]) { themeVars[k] = defs[k]; changed = true; }
+        if (changed) themeChanged();
+    };
+    // (the theme the stylesheet was settled with: its colours of the big surfaces, to tell it from another)
+    var SIGNATURE = ['--vscode-editor-background', '--vscode-editor-foreground', '--vscode-sideBar-background', '--vscode-activityBar-background',
+                     '--vscode-statusBar-background', '--vscode-titleBar-activeBackground', '--vscode-panel-background', '--vscode-tab-activeBackground'];
+    var settledSignature = [];
+    for (var si = 0; si < SIGNATURE.length; si++) settledSignature.push(String(themeVars[SIGNATURE[si]]));
     var readTheme = function () {
         var styles = document.getElementsByTagName('style');
         for (var i = 0; i < styles.length; i++) {
             if (!/(^|\s)contributedColorTheme(\s|$)/.test(styles[i].className)) continue;
-            var text = styles[i].textContent || '', re = /(--[\w-]+)\s*:\s*([^;{}]+)/g, m, n = 0;
+            var text = styles[i].textContent || '', re = /(--[\w-]+)\s*:\s*([^;{}]+)/g, m, defs = {};
             if (text === readTheme.last) return;
             readTheme.last = text;
-            while ((m = re.exec(text)) !== null) { themeVars[m[1]] = cssTrim(m[2]); n++; }
+            while ((m = re.exec(text)) !== null) defs[m[1]] = cssTrim(m[2]);
+            setThemeVars(defs);
             return;
         }
+    };
+    // Another theme than the one the stylesheet was settled with (Dark Modern, see web/tools/assemble-site.mjs): the
+    // rules that took the theme's colours (assets/theme-template.css) come again with the new ones, after the stylesheet.
+    // (Its own style element: the engine leaves it as it is - plain colour declarations; going back removes it.)
+    var templateText = null, overrideTimer = null;
+    G.__kd_themeState = function () {
+        var n = 0;
+        for (var k in themeVars) if (themeVars.hasOwnProperty(k)) n++;
+        return { vars: n, read: !!readTheme.last, template: templateText === null ? null : templateText.length, bg: themeVars['--vscode-sideBar-background'] };
+    };
+    var themeChanged = function () {
+        if (nativeVars || overrideTimer) return;
+        overrideTimer = setTimeout(function () {
+            overrideTimer = null;
+            var settled = true;
+            for (var s = 0; s < SIGNATURE.length; s++) if (String(themeVars[SIGNATURE[s]]) !== settledSignature[s]) { settled = false; break; }
+            var el = document.getElementById('kd-theme-override');
+            if (settled) { if (el) el.parentNode.removeChild(el); return; }
+            if (templateText === null) {
+                try {
+                    var x = new XMLHttpRequest();
+                    x.open('GET', 'assets/theme-template.css', false);
+                    x.send(null);
+                    templateText = x.status === 200 || x.status === 0 ? x.responseText : '';
+                } catch (e) { templateText = ''; }
+            }
+            if (!templateText) return;
+            if (!el) {
+                el = document.createElement('style');
+                el.id = 'kd-theme-override';
+                el.__brOwn = true;
+                document.head.appendChild(el);
+            }
+            el.textContent = resolveVars(templateText, 0);
+        }, 0);
     };
     if (!nativeVars) {
         var MO = G.MutationObserver || G.WebKitMutationObserver;

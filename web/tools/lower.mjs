@@ -90,7 +90,11 @@ function prepare(src) {
   return parts.reverse().join('')
 }
 
-const src = fs.readFileSync(input, 'utf8')
+// Vite's IIFE output resolves its assets (the default themes' files, icons) against the running script's src, or the
+// document's address: the page runs the bundle as an inline script (index.html), which has no src - those went to the
+// site's root. The bundle's address instead (window.__vsc_meta, set by the page).
+const VITE_ASSET_BASE = 'document.currentScript&&document.currentScript.tagName.toUpperCase()==="SCRIPT"&&document.currentScript.src||document.baseURI'
+const src = fs.readFileSync(input, 'utf8').split(VITE_ASSET_BASE).join('__vsc_meta.url')
 console.log('read', input, src.length, 'characters')
 const text = prepare(src)
 acorn.parse(text, { ecmaVersion: 'latest', sourceType: 'script' })
@@ -112,7 +116,8 @@ try {
   // UTF-16, 25 MB, and lexed it as such; ASCII can stay 8-bit.
   const { transformSync } = await import('esbuild')
   const before = out.length
-  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, target: 'es5', charset: 'ascii', legalComments: 'none' }).code
+  // (minifySyntax too: the engine keeps the text as UTF-16 for as long as the page lives, two bytes a character)
+  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, minifySyntax: true, target: 'es5', charset: 'ascii', legalComments: 'none' }).code
   acorn.parse(out, { ecmaVersion: 5 })
   console.log('minified:', (before / 1048576).toFixed(1), 'MB ->', (out.length / 1048576).toFixed(1), 'MB, still ES5', since())
 } catch (e) {

@@ -1,6 +1,7 @@
 #import "KDAppDelegate.h"
 #import "KDWorkbenchViewController.h"
 #import "KDSiteProtocol.h"
+#import "KDRedirectProtocol.h"
 #import "BRURLProtocol.h"
 #import "BRHTTPRequest.h"
 #import "BRSettings.h"
@@ -156,6 +157,8 @@ static void KDWriteResult(NSString *name, NSString *text)
     // (https://kodium.invalid/) through KDSiteProtocol, registered last so that it is asked first.
     [BRURLProtocol registerProtocol];
     [KDSiteProtocol registerProtocol];
+    // (Open VSX's assets, which redirect: see KDRedirectProtocol)
+    [KDRedirectProtocol registerProtocol];
     [BRMemory start];
     [BRTLSSocket warmUp];
     [BRCSSRewriter warmUp];

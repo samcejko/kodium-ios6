@@ -6,6 +6,16 @@ The changes of each Kodium version; the newest is at the top.
 
 The first build.
 
+- Extensions from Open VSX: the Extensions view (search, install, update, the "install from the publisher?" question).
+  Web extensions run in an extension host in the page - their code lowered to ES5 by the engine as it comes from the
+  network, or by the page's Function - and declarative ones (themes, snippets, keymaps, icon themes) need none. A
+  theme from an extension colours the whole workbench: the stylesheet's rules with the theme's colours come again with
+  the new ones (the engine has no custom properties). Open VSX's redirected assets (readme, changelog, icons, manifest)
+  are fetched by the app, as the engine refuses a redirected cross-origin request.
+- Run JavaScript (the play button above a JavaScript file, F5, Ctrl+Alt+N): the file runs in a worker of its own, its
+  console goes to the Output panel ("Kodium: Run"), modern syntax goes through the engine's transpiler first; Stop ends
+  a program that does not.
+
 - The VS Code workbench (monaco-vscode-api 37.3.3) lowered to ES5 for the iOS 6 engine, with an explorer, editor
   tabs, search, the command palette, settings, keybindings and themes; a small workspace in memory.
 - The engine of the Surfari browser 1.0.0: TLS 1.2, the CSS rewriter, the page polyfills and shims, the JIT.

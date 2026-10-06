@@ -1,8 +1,7 @@
-// Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - only what coding needs on the
-// iPad 2 now (editor, files, search, problems, output, settings, keybindings, themes). Left out for memory (the iPad 2
-// has 512 MB and the whole workbench ran at 313-330 MB): extensions and the Open VSX gallery (they come back with the
-// extension host, step 3), Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs,
-// telemetry, sync.
+// Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - what coding needs on the iPad 2
+// (editor, files, search, problems, output, settings, keybindings, themes, extensions from Open VSX, running
+// JavaScript). Left out for memory (the iPad 2 has 512 MB): Git, accounts and secret storage; and AI/chat, notebooks,
+// debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, LogLevel } from '@codingame/monaco-vscode-api'
 import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api'
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override'
@@ -27,7 +26,14 @@ import getSnippetServiceOverride from '@codingame/monaco-vscode-snippets-service
 import getWorkingCopyServiceOverride from '@codingame/monaco-vscode-working-copy-service-override'
 import getStatusBarServiceOverride from '@codingame/monaco-vscode-view-status-bar-service-override'
 import getMonarchServiceOverride from '@codingame/monaco-vscode-monarch-service-override'
+import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override'
+// Extensions: Open VSX's gallery, and an extension host in the page (LocalProcess). Web extensions run there - the
+// worker host would be an iframe and a worker, each with a copy of the engine's shims, on 512 MB - and their code is
+// ES5 by the time it runs: the engine lowers JavaScript it fetches over the network, and the page's Function whatever
+// else needs it. Declarative extensions (themes, snippets, keymaps) need no host at all.
+import 'vscode/localExtensionHost'
 import '@codingame/monaco-vscode-theme-defaults-default-extension'
+import './run'
 import { registerLanguages } from './languages'
 import { DOCUMENTS, registerAppFolders } from './files'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
@@ -87,6 +93,8 @@ async function start() {
       nameLong: 'Kodium',
       extensionsGallery: {
         serviceUrl: 'https://open-vsx.org/vscode/gallery',
+        itemUrl: 'https://open-vsx.org/vscode/item',
+        publisherUrl: '',
         resourceUrlTemplate: 'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
         extensionUrlTemplate: 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest',
         controlUrl: '',
@@ -124,6 +132,7 @@ async function start() {
       ...getSnippetServiceOverride(),
       ...getWorkingCopyServiceOverride(),
       ...getStatusBarServiceOverride(),
+      ...getExtensionGalleryServiceOverride({ webOnly: true }),
       ...getWorkbenchServiceOverride(),
       ...getQuickAccessServiceOverride({
         isKeybindingConfigurationVisible: () => true,
