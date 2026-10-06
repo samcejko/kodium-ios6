@@ -13,6 +13,8 @@ typedef void (^KDFilesCompletion)(NSInteger status, NSData *body, NSString *cont
 
 + (NSString *)rootDirectory;   // Documents of the app's home
 + (NSString *)rootDirectoryNamed:(NSString *)name;   // "userdata", or Documents for anything else
+// a path of the page ("/a/b", inside the root) as a file path; nil when it leads out of the root
++ (NSString *)filePathFor:(NSString *)path root:(NSString *)root;
 + (void)performOperation:(NSString *)operation request:(NSURLRequest *)request completion:(KDFilesCompletion)completion;
 
 @end

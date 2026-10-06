@@ -11,7 +11,14 @@ The first build.
   network, or by the page's Function - and declarative ones (themes, snippets, keymaps, icon themes) need none. A
   theme from an extension colours the whole workbench: the stylesheet's rules with the theme's colours come again with
   the new ones (the engine has no custom properties). Open VSX's redirected assets (readme, changelog, icons, manifest)
-  are fetched by the app, as the engine refuses a redirected cross-origin request.
+  are fetched by the app, as the engine refuses a redirected cross-origin request. The extension host starts only when
+  an extension with code is there, at the start or when one is installed: without one the workbench starts 3 s sooner
+  and takes 14 MB less. An extension's README, features and changelog show in the page itself (VS Code's webview, an
+  iframe with scripts of its own, does not run on iOS 6: it said "No README available").
+- Preview of HTML and Markdown beside the file (Open Preview: the button above the file, the explorer's menu,
+  Ctrl+Shift+V). A page shows as Surfari's engine shows the web - its scripts lowered, its CSS rewritten - from the
+  Documents as a site of its own (another origin than the workbench's, which it cannot reach into), and loads again
+  when a file is saved. Markdown is rendered as it is typed, its code in the colours of the editor's grammars.
 - Run JavaScript (the play button above a JavaScript file, F5, Ctrl+Alt+N): the file runs in a worker of its own, its
   console goes to the Output panel ("Kodium: Run"), modern syntax goes through the engine's transpiler first; Stop ends
   a program that does not.

@@ -103,6 +103,95 @@ function eagerServices() {
   }
 }
 
+// Edits of VS Code's modules as they come into the bundle. Each text to find must be there once: an update of
+// monaco-vscode-api that changed it stops the build rather than leave the edit out.
+function patchModules(name, patches) {
+  return {
+    name,
+    transform(code, id) {
+      const p = id.replace(/\\/g, '/')
+      for (const [suffix, edits, prefix] of patches) {
+        if (!p.endsWith(suffix)) continue
+        for (const [find, replace] of edits) {
+          if (code.split(find).length !== 2) this.error(name + ': ' + suffix + ' has another form')
+          code = code.replace(find, () => replace)
+        }
+        return { code: (prefix || '') + code, map: null }
+      }
+      return null
+    }
+  }
+}
+
+// An extension's README, features and changelog in the page itself: VS Code shows them in a webview - an iframe with
+// scripts of its own, which the iOS 6 engine does not run (the page said "No README available"), and the memory of
+// another page. The HTML is the one VS Code made for it (sanitized); its links open in the browser, as there.
+function inlineMarkdown() {
+  return patchModules('kodium-inline-markdown', [
+    ['/vs/workbench/contrib/extensions/browser/extensionEditor.js', [
+      ['            const webview = this.contentDisposables.add(this.webviewService.createWebviewOverlay({',
+       '            if (typeof document !== "undefined") {\n                return __kdInlineMarkdown(this, body, container);\n            }\n' +
+       '            const webview = this.contentDisposables.add(this.webviewService.createWebviewOverlay({']],
+     'function __kdInlineMarkdown(editor, html, container) {\n' +
+     '    const at = html.indexOf("<body");\n' +
+     '    const from = at < 0 ? 0 : html.indexOf(">", at) + 1;\n' +
+     '    const to = html.lastIndexOf("</body>");\n' +
+     '    const element = document.createElement("div");\n' +
+     '    element.className = "kodium-markdown";\n' +
+     '    element.tabIndex = 0;\n' +
+     '    element.innerHTML = html.slice(from, to > from ? to : html.length).replace(/<a id="scroll-to-top"[\\s\\S]*?<\\/a>/, "");\n' +
+     '    element.addEventListener("click", (e) => {\n' +
+     '        let node = e.target;\n' +
+     '        while (node && node !== element && !(node.tagName === "A" && node.getAttribute("href"))) node = node.parentNode;\n' +
+     '        if (!node || node === element) return;\n' +
+     '        e.preventDefault();\n' +
+     '        const href = node.getAttribute("href");\n' +
+     '        if (/^(https?|mailto):/i.test(href)) editor.openerService.open(href);\n' +
+     '    });\n' +
+     '    container.appendChild(element);\n' +
+     '    return element;\n' +
+     '}\n']
+  ])
+}
+
+// The extension host in the page starts only for an extension with code it can run: VS Code starts it at once
+// for any extension it hosts, the default themes and snippets included - 3.5 s and 14 MB more at every start on the
+// iPad 2, for nothing to run. Lazily, and counting only extensions with code, it starts when one is installed or
+// enabled, or at the start when one is there.
+function lazyExtensionHost() {
+  return patchModules('kodium-lazy-extension-host', [
+    ['/@codingame/monaco-vscode-extensions-service-override/index.js', [
+      ['createInstance(localExtensionHost, runningLocation, ExtensionHostStartup.EagerAutoStart,',
+       'createInstance(localExtensionHost, runningLocation, ExtensionHostStartup.LazyAutoStart,']]],
+    ['/vs/workbench/services/extensions/common/lazyCreateExtensionHostManager.js', [
+      ['        if (myExtensions.length > 0) {', '        if (__kdWithCode(myExtensions, allExtensions).length > 0) {'],
+      // (a change without code for a host not made: nothing to wait for - the default themes register before the
+      // service starts, and waiting for its start under the registry's lock locked the workbench's start; a host made
+      // later is given every extension there is then)
+      ['    async deltaExtensions(extensionsDelta) {\n        await this._startCalled.wait();',
+       '    async deltaExtensions(extensionsDelta) {\n        if (!this._actual && __kdWithCode(extensionsDelta.myToAdd, extensionsDelta.toAdd).length === 0) {\n            return;\n        }\n        await this._startCalled.wait();'],
+      ['        if (extensionsDelta.myToAdd.length > 0) {', '        if (__kdWithCode(extensionsDelta.myToAdd, extensionsDelta.toAdd).length > 0) {']],
+     // (code a host in the page can run: an extension's browser entry - its main is for Node)
+     'function __kdWithCode(ids, descriptions) {\n' +
+     '    const code = new Set();\n' +
+     '    for (const d of descriptions || []) if (d && d.browser) code.add(String(d.identifier.value).toLowerCase());\n' +
+     '    return (ids || []).filter((id) => code.has(String(id.value).toLowerCase()));\n' +
+     '}\n'],
+    // (a host made later is given the extensions there are then - the registry's, as VS Code gives a host it starts
+    // again: the list of the start is kept from the start, without what came since)
+    ['/vs/workbench/services/extensions/browser/extensionService.js', [
+      ['                if (isInitialStart) {',
+       '                if (isInitialStart && desiredRunningLocation.kind !== ExtensionHostKind.LocalProcess) {']]],
+    // (the 'vscode' module's default API came when the workbench started, from the host it started: the start waited for
+    // a host that now comes later. It comes with the host; nothing of Kodium's own uses it. And a host started lazily
+    // starts its extensions itself, as VS Code's worker host does: nothing else asks it to.)
+    ['/node_modules/vscode/localExtensionHost.js', [
+      ['    defaultApi = await createLocalApi();', '    void createLocalApi().then((api) => { defaultApi = api; });'],
+      ['autoStart: this.startup === ExtensionHostStartup.EagerAutoStart,',
+       'autoStart: this.startup === ExtensionHostStartup.EagerAutoStart || this.startup === ExtensionHostStartup.LazyAutoStart,']]]
+  ])
+}
+
 // Contributions the service overrides bring that Kodium has no use for yet (each is imported only for what it registers):
 // the merge editor (Git), call and type hierarchies (language servers), the refactoring preview and the search editor
 const LEFT_OUT = [
@@ -124,7 +213,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

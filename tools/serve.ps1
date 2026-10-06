@@ -2,6 +2,7 @@
 # POST /save?name=<file> writes the body to <Root>\out\<file> (pages that measure something send it back this way).
 # .../__kd/fs/<operation> is the app's Documents folder as the app answers it (src/KDFiles.m), here a folder on the PC
 # (default .tools\documents, which a build does not empty); with root=userdata, VS Code's user data (.tools\userdata).
+# .../__kd/preview/<path> is that folder as the preview's web site (the app's https://preview.kodium.invalid/).
 #   .\tools\serve.ps1 [-Root <folder>] [-Documents <folder>] [-Port 8767] [-Minutes 120]
 param([string]$Root = '', [string]$Documents = '', [int]$Port = 8767, [int]$Minutes = 120)
 if (-not $Root) { $Root = [IO.Path]::Combine((Split-Path $PSScriptRoot -Parent), 'web', 'dist') }
@@ -86,9 +87,11 @@ $listener.Prefixes.Add("http://localhost:$Port/")
 $listener.Start()
 Write-Output "serving $Root on http://localhost:$Port/ for $Minutes minutes (Documents: $Documents)"
 $until = (Get-Date).AddMinutes($Minutes)
-$types = @{ '.html' = 'text/html; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'; '.mjs' = 'text/javascript; charset=utf-8';
-            '.css' = 'text/css; charset=utf-8'; '.json' = 'application/json'; '.svg' = 'image/svg+xml'; '.png' = 'image/png';
-            '.ttf' = 'font/ttf'; '.wasm' = 'application/wasm' }
+$types = @{ '.html' = 'text/html; charset=utf-8'; '.htm' = 'text/html; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8';
+            '.mjs' = 'text/javascript; charset=utf-8'; '.css' = 'text/css; charset=utf-8'; '.json' = 'application/json';
+            '.svg' = 'image/svg+xml'; '.png' = 'image/png'; '.jpg' = 'image/jpeg'; '.jpeg' = 'image/jpeg'; '.gif' = 'image/gif';
+            '.ico' = 'image/x-icon'; '.ttf' = 'font/ttf'; '.woff' = 'font/woff'; '.woff2' = 'font/woff2'; '.wasm' = 'application/wasm';
+            '.txt' = 'text/plain; charset=utf-8'; '.md' = 'text/plain; charset=utf-8'; '.xml' = 'application/xml' }
 while ((Get-Date) -lt $until) {
     $task = $listener.GetContextAsync()
     while (-not $task.AsyncWaitHandle.WaitOne(1000)) { if ((Get-Date) -ge $until) { break } }
@@ -116,10 +119,20 @@ while ((Get-Date) -lt $until) {
             $ctx.Response.Close()
             continue
         }
-        $path = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.TrimStart('/'))
-        if (-not $path) { $path = 'index.html' }
-        $file = [IO.Path]::GetFullPath([IO.Path]::Combine($Root, $path))
-        if ($file.StartsWith($Root) -and [IO.File]::Exists($file)) {
+        # .../__kd/preview/<path>: the Documents as the preview's web site (the app's https://preview.kodium.invalid/)
+        $previewAt = $ctx.Request.Url.AbsolutePath.IndexOf('/__kd/preview/')
+        $base = $Root
+        if ($previewAt -ge 0) {
+            $base = $Documents
+            $path = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.Substring($previewAt + 14))
+            $dir = [IO.Path]::GetFullPath([IO.Path]::Combine($Documents, $path.Replace('/', '\')))
+            if (-not $path -or [IO.Directory]::Exists($dir)) { $path = ($path.TrimEnd('/') + '/index.html').TrimStart('/') }
+        } else {
+            $path = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.TrimStart('/'))
+            if (-not $path) { $path = 'index.html' }
+        }
+        $file = [IO.Path]::GetFullPath([IO.Path]::Combine($base, $path))
+        if ($file.StartsWith($base) -and [IO.File]::Exists($file)) {
             $ext = [IO.Path]::GetExtension($file).ToLower()
             $ctx.Response.ContentType = if ($types.ContainsKey($ext)) { $types[$ext] } else { 'application/octet-stream' }
             $ctx.Response.Headers.Add('Cache-Control', 'no-store')

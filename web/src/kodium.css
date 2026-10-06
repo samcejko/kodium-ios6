@@ -1,0 +1,98 @@
+/* Kodium's own parts of the workbench. The theme's var(--vscode-...) colours are settled when the app is built and
+   come again with another theme, as VS Code's own (tools/assemble-site.mjs). */
+
+/* Markdown as Kodium shows it: an extension's README, features and changelog (in a webview in VS Code, which the iOS 6
+   engine cannot run), and the preview of a Markdown file */
+.kodium-markdown {
+  box-sizing: border-box;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 26px 40px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--vscode-editor-foreground);
+  word-wrap: break-word;
+  -webkit-user-select: text;
+  user-select: text;
+  outline: none;
+}
+.kodium-markdown > :first-child { margin-top: 16px; }
+.kodium-markdown img { max-width: 100%; }
+.kodium-markdown a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+.kodium-markdown a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
+.kodium-markdown h1, .kodium-markdown h2, .kodium-markdown h3, .kodium-markdown h4, .kodium-markdown h5, .kodium-markdown h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 24px 0 12px;
+}
+.kodium-markdown h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid var(--vscode-widget-border); }
+.kodium-markdown h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid var(--vscode-widget-border); }
+.kodium-markdown h3 { font-size: 1.25em; }
+.kodium-markdown p, .kodium-markdown ul, .kodium-markdown ol, .kodium-markdown table, .kodium-markdown pre, .kodium-markdown blockquote {
+  margin: 0 0 12px;
+}
+.kodium-markdown ul, .kodium-markdown ol { padding-left: 2em; }
+.kodium-markdown code {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: var(--vscode-textCodeBlock-background);
+}
+.kodium-markdown pre {
+  padding: 12px 16px;
+  border-radius: 3px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background-color: var(--vscode-textCodeBlock-background);
+}
+.kodium-markdown pre code { padding: 0; background: none; font-size: 13px; line-height: 19px; }
+/* (a code block in the colours of its language: the editor's tokens in place of the pre) */
+.kodium-markdown [data-code] {
+  margin: 0 0 12px;
+  padding: 12px 16px;
+  border-radius: 3px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: pre;
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 19px;
+  background-color: var(--vscode-textCodeBlock-background);
+}
+.kodium-markdown blockquote {
+  padding: 0 12px;
+  border-left: 4px solid var(--vscode-textBlockQuote-border);
+  background: var(--vscode-textBlockQuote-background);
+}
+.kodium-markdown table { display: block; overflow: auto; border-collapse: collapse; }
+.kodium-markdown th, .kodium-markdown td { padding: 5px 10px; border: 1px solid var(--vscode-widget-border); }
+.kodium-markdown th { text-align: left; }
+.kodium-markdown hr { height: 1px; border: 0; background: var(--vscode-widget-border); }
+.kodium-markdown kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* the preview (preview.ts): a page in a frame, or Markdown. (iOS 6 lays a frame out as tall as its page and does not
+   scroll it: the box around it scrolls.) */
+.kodium-preview {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--vscode-editor-background);
+}
+.kodium-preview.kodium-page {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.kodium-preview-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background-color: #fff;
+}

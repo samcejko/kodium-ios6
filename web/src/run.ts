@@ -1,8 +1,21 @@
-// Kodium's own extension: Run - the active JavaScript file in a worker of its own (a loop that never ends can be
-// stopped: the worker goes), its console in the Output panel. Code the iOS 6 engine cannot parse (ES2015 and later)
-// goes to the engine's transpiler first (https://ios6-browser.invalid/lower, the app's own; a desktop browser runs it
-// as it is). It runs as an extension of the in-page extension host, as the extensions from Open VSX do.
-import { ExtensionHostKind, registerExtension } from '@codingame/monaco-vscode-api/extensions'
+// Run: the active JavaScript file in a worker of its own (a loop that never ends can be stopped: the worker goes), its
+// console in the Output panel. Code the iOS 6 engine cannot parse (ES2015 and later) goes to the engine's transpiler
+// first (https://ios6-browser.invalid/lower, the app's own; a desktop browser runs it as it is).
+// Made with the workbench's own registries, not as an extension: an extension would start the extension host when the
+// workbench starts (3.5 s and 14 MB on the iPad 2), which otherwise waits for an installed extension that needs it.
+import { Action2, MenuId, registerAction2 } from '@codingame/monaco-vscode-api/vscode/vs/platform/actions/common/actions'
+import { ContextKeyExpr, RawContextKey } from '@codingame/monaco-vscode-api/vscode/vs/platform/contextkey/common/contextkey'
+import { IContextKeyService } from '@codingame/monaco-vscode-api/vscode/vs/platform/contextkey/common/contextkey.service'
+import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
+import { Extensions as OutputExtensions, type IOutputChannelRegistry } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/output/common/output'
+import { IOutputService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/output/common/output.service'
+import { Registry } from '@codingame/monaco-vscode-api/vscode/vs/platform/registry/common/platform'
+import { Codicon } from '@codingame/monaco-vscode-api/vscode/vs/base/common/codicons'
+import { KeyCode, KeyMod } from '@codingame/monaco-vscode-api/vscode/vs/base/common/keyCodes'
+import { KeybindingWeight } from '@codingame/monaco-vscode-api/vscode/vs/platform/keybinding/common/keybindingsRegistry'
+import { INotificationService } from '@codingame/monaco-vscode-api/vscode/vs/platform/notification/common/notification.service'
+import type { ServicesAccessor } from '@codingame/monaco-vscode-api/vscode/vs/platform/instantiation/common/instantiation'
+import type { IContextKey } from '@codingame/monaco-vscode-api/vscode/vs/platform/contextkey/common/contextkey'
 
 const cs = /^cs/i.test((window as { __kd_lang?: string }).__kd_lang || '')
 const T = cs
@@ -62,75 +75,89 @@ const RUNNER = [
 
 // (the engine's transpiler answers on the iPad only)
 const LOWER_URL = /iPad|iPhone|iPod/.test(navigator.userAgent) ? 'https://ios6-browser.invalid/lower' : ''
+const CHANNEL = 'kodium.run'
+const RUNNING = new RawContextKey<boolean>('kodium.running', false)
+const isJavaScript = ContextKeyExpr.equals('resourceLangId', 'javascript')
 
-const { getApi } = registerExtension({
-  name: 'run',
-  publisher: 'kodium',
-  version: '0.1.0',
-  displayName: 'Kodium Run',
-  engines: { vscode: '*' },
-  contributes: {
-    commands: [
-      { command: 'kodium.run', title: T.run, category: 'Kodium', icon: '$(play)' },
-      { command: 'kodium.stop', title: T.stop, category: 'Kodium', icon: '$(debug-stop)' }
-    ],
-    menus: {
-      'editor/title': [
-        { command: 'kodium.run', when: 'resourceLangId == javascript && !kodium.running', group: 'navigation' },
-        { command: 'kodium.stop', when: 'kodium.running', group: 'navigation' }
-      ],
-      commandPalette: [{ command: 'kodium.stop', when: 'kodium.running' }]
-    },
-    keybindings: [
-      { command: 'kodium.run', key: 'f5', when: 'editorLangId == javascript' },
-      { command: 'kodium.run', key: 'ctrl+alt+n', when: 'editorLangId == javascript' }
-    ]
-  }
-}, ExtensionHostKind.LocalProcess, { system: true })
+Registry.as<IOutputChannelRegistry>(OutputExtensions.OutputChannels).registerChannel({ id: CHANNEL, label: T.channel, log: false })
 
-void getApi().then((vscode) => {
-  // (the API for the app's developer commands over SSH: eval can run VS Code's commands - see tools/ipad.ps1)
-  ;(window as { __kd_api?: unknown }).__kd_api = vscode
-  const channel = vscode.window.createOutputChannel(T.channel)
-  let worker: Worker | null = null
-  let blobUrl: string | null = null
-  const setRunning = (on: boolean) => { void vscode.commands.executeCommand('setContext', 'kodium.running', on) }
-  const end = () => {
-    if (worker) worker.terminate()
-    worker = null
-    if (blobUrl) URL.revokeObjectURL(blobUrl)
-    blobUrl = null
-    setRunning(false)
+let worker: Worker | null = null
+let blobUrl: string | null = null
+let running: IContextKey<boolean> | null = null
+const end = () => {
+  if (worker) worker.terminate()
+  worker = null
+  if (blobUrl) URL.revokeObjectURL(blobUrl)
+  blobUrl = null
+  running?.set(false)
+}
+
+registerAction2(class RunAction extends Action2 {
+  constructor() {
+    super({
+      id: 'kodium.run',
+      title: { value: T.run, original: 'Run JavaScript' },
+      category: { value: 'Kodium', original: 'Kodium' },
+      icon: Codicon.play,
+      f1: true,
+      menu: [{ id: MenuId.EditorTitle, group: 'navigation', when: ContextKeyExpr.and(isJavaScript, RUNNING.negate()) }],
+      keybinding: [
+        { primary: KeyCode.F5, when: ContextKeyExpr.equals('editorLangId', 'javascript'), weight: KeybindingWeight.WorkbenchContrib },
+        { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.KeyN, when: ContextKeyExpr.equals('editorLangId', 'javascript'), weight: KeybindingWeight.WorkbenchContrib }
+      ]
+    })
   }
-  vscode.commands.registerCommand('kodium.run', () => {
-    const editor = vscode.window.activeTextEditor
-    if (!editor || editor.document.languageId !== 'javascript') {
-      void vscode.window.showInformationMessage(T.notJs)
+
+  run(accessor: ServicesAccessor): void {
+    const control = accessor.get(IEditorService).activeTextEditorControl as { getModel?: () => unknown } | undefined
+    const model = control?.getModel?.() as { getLanguageId?: () => string, getValue: () => string, uri: { path: string } } | null | undefined
+    if (!model || typeof model.getLanguageId !== 'function' || model.getLanguageId() !== 'javascript') {
+      accessor.get(INotificationService).info(T.notJs)
       return
     }
+    running = running ?? RUNNING.bindTo(accessor.get(IContextKeyService))
+    const output = accessor.get(IOutputService)
     end()
-    channel.clear()
-    channel.show(true)
-    channel.appendLine(fill(T.running, editor.document.uri.path.split('/').pop() || ''))
+    void output.showChannel(CHANNEL, true)
+    const channel = output.getChannel(CHANNEL)
+    const line = (text: string) => channel?.append(text + '\n')
+    channel?.clear()
+    line(fill(T.running, model.uri.path.split('/').pop() || ''))
     blobUrl = URL.createObjectURL(new Blob([RUNNER], { type: 'application/javascript' }))
     const w = new Worker(blobUrl)
     worker = w
-    setRunning(true)
+    running.set(true)
     w.onmessage = (e: MessageEvent) => {
       const m = e.data as { type: string, text?: string, ms?: number }
-      if (m.type === 'log') channel.appendLine(m.text || '')
-      else if (m.type === 'done') { channel.appendLine(fill(T.finished, m.ms || 0)); setRunning(false) }
-      else if (m.type === 'error') { channel.appendLine(fill(T.error, m.text || '')); setRunning(false) }
+      if (m.type === 'log') line(m.text || '')
+      else if (m.type === 'done') { line(fill(T.finished, m.ms || 0)); running?.set(false) }
+      else if (m.type === 'error') { line(fill(T.error, m.text || '')); running?.set(false) }
     }
     w.onerror = (e: ErrorEvent) => {
-      channel.appendLine(fill(T.error, e.message))
-      setRunning(false)
+      line(fill(T.error, e.message))
+      running?.set(false)
       e.preventDefault()
     }
-    w.postMessage({ code: editor.document.getText(), lower: LOWER_URL })
-  })
-  vscode.commands.registerCommand('kodium.stop', () => {
-    if (worker) channel.appendLine(T.stopped)
+    w.postMessage({ code: model.getValue(), lower: LOWER_URL })
+  }
+})
+
+registerAction2(class StopAction extends Action2 {
+  constructor() {
+    super({
+      id: 'kodium.stop',
+      title: { value: T.stop, original: 'Stop' },
+      category: { value: 'Kodium', original: 'Kodium' },
+      icon: Codicon.debugStop,
+      f1: true,
+      precondition: RUNNING,
+      menu: [{ id: MenuId.EditorTitle, group: 'navigation', when: RUNNING }]
+    })
+  }
+
+  run(accessor: ServicesAccessor): void {
+    const channel = accessor.get(IOutputService).getChannel(CHANNEL)
+    if (worker) channel?.append(T.stopped + '\n')
     end()
-  })
+  }
 })

@@ -153,11 +153,13 @@ static NSString *KDShimArgument(NSURL *url)
         return NO;
     }
     if ([scheme hasPrefix:@"br"]) return NO;   // (the browser's own: share, print, saved logins)
-    if ([scheme isEqualToString:@"about"] || [scheme isEqualToString:@"data"] || [scheme isEqualToString:@"blob"]) return YES;
+    // Frames of extensions and previews load in the page; the page itself stays the workbench: a link the user followed
+    // to the web opens outside, and a page in a frame that would take the whole view (top.location = ...) is stopped.
+    BOOL wholeView = [request.mainDocumentURL isEqual:url];
+    if ([scheme isEqualToString:@"about"] || [scheme isEqualToString:@"data"] || [scheme isEqualToString:@"blob"]) return !wholeView;
     if ([[url.host lowercaseString] isEqualToString:[KDSiteProtocol startURL].host]) return YES;
-    // frames of extensions and previews load in the page; a link the user followed to the web opens outside
-    if (navigationType == UIWebViewNavigationTypeLinkClicked && [request.mainDocumentURL isEqual:url]) {
-        [self openOutside:url];
+    if (wholeView) {
+        if (navigationType == UIWebViewNavigationTypeLinkClicked) [self openOutside:url];
         return NO;
     }
     return YES;

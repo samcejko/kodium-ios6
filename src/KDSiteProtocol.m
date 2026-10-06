@@ -4,15 +4,22 @@
 #import "BRCommon.h"
 
 static NSString * const KDSiteHost = @"kodium.invalid";
+// the app's Documents as a web site of its own, for the preview of a page (web/src/preview.ts)
+static NSString * const KDPreviewHost = @"preview.kodium.invalid";
 
 static NSString *KDContentType(NSString *extension)
 {
     static NSDictionary *types;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        types = @{ @"html": @"text/html; charset=utf-8", @"js": @"text/javascript; charset=utf-8", @"css": @"text/css; charset=utf-8",
-                   @"json": @"application/json; charset=utf-8", @"txt": @"text/plain; charset=utf-8", @"svg": @"image/svg+xml",
-                   @"png": @"image/png", @"gif": @"image/gif", @"ttf": @"font/ttf", @"wasm": @"application/wasm", @"mp3": @"audio/mpeg" };
+        types = @{ @"html": @"text/html; charset=utf-8", @"htm": @"text/html; charset=utf-8", @"xhtml": @"application/xhtml+xml; charset=utf-8",
+                   @"js": @"text/javascript; charset=utf-8", @"mjs": @"text/javascript; charset=utf-8", @"css": @"text/css; charset=utf-8",
+                   @"json": @"application/json; charset=utf-8", @"txt": @"text/plain; charset=utf-8", @"md": @"text/plain; charset=utf-8",
+                   @"xml": @"application/xml; charset=utf-8", @"csv": @"text/csv; charset=utf-8", @"svg": @"image/svg+xml",
+                   @"png": @"image/png", @"gif": @"image/gif", @"jpg": @"image/jpeg", @"jpeg": @"image/jpeg", @"webp": @"image/webp",
+                   @"ico": @"image/x-icon", @"ttf": @"font/ttf", @"otf": @"font/otf", @"woff": @"font/woff", @"woff2": @"font/woff2",
+                   @"wasm": @"application/wasm", @"mp3": @"audio/mpeg", @"m4a": @"audio/mp4", @"wav": @"audio/wav",
+                   @"mp4": @"video/mp4", @"mov": @"video/quicktime", @"pdf": @"application/pdf" };
     });
     return types[[extension lowercaseString]] ?: @"application/octet-stream";
 }
@@ -45,8 +52,9 @@ static NSString *KDStylesheetCacheDirectory(void)
     NSURL *url = request.URL;
     NSString *scheme = [url.scheme lowercaseString];
     if (!([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"])) return NO;
-    if (![[url.host lowercaseString] isEqualToString:KDSiteHost]) return NO;
-    return ![url.path hasPrefix:@"/__br_"];
+    NSString *host = [url.host lowercaseString];
+    if (![host isEqualToString:KDSiteHost] && ![host isEqualToString:KDPreviewHost]) return NO;
+    return ![url.path hasPrefix:@"/__br_"];   // (the engine's own: its polyfills, which it serves itself)
 }
 
 + (NSURLRequest *)canonicalRequestForRequest:(NSURLRequest *)request
@@ -92,6 +100,10 @@ static NSString *KDStylesheetCacheDirectory(void)
     self.clientModes = modes;
 
     NSURL *url = self.request.URL;
+    if ([[url.host lowercaseString] isEqualToString:KDPreviewHost]) {
+        [self servePreview];
+        return;
+    }
     // the files of the app's Documents (KDFiles)
     if ([url.path hasPrefix:@"/__kd/fs/"]) {
         [KDFiles performOperation:[url.path substringFromIndex:9] request:self.request completion:^(NSInteger status, NSData *body, NSString *type) {
@@ -124,6 +136,52 @@ static NSString *KDStylesheetCacheDirectory(void)
 - (void)stopLoading
 {
     self.stopped = YES;
+}
+
+// The app's Documents as a web site of its own (https://preview.kodium.invalid/<path>), for the preview of a page the
+// user writes (web/src/preview.ts): another origin than the workbench's, so that the page cannot reach into the
+// workbench. Its documents, stylesheets and scripts go through the engine's rewriters as a web site's do in Surfari
+// (modern scripts lowered, modern CSS rewritten, the polyfills in the page); a folder is its index.html.
+- (void)servePreview
+{
+    NSURL *url = self.request.URL;
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *file = [KDFiles filePathFor:url.path.length ? url.path : @"/" root:[KDFiles rootDirectory]];
+    BOOL directory = NO;
+    if (file && [fm fileExistsAtPath:file isDirectory:&directory] && directory) file = [file stringByAppendingPathComponent:@"index.html"];
+    if (!file || ![fm fileExistsAtPath:file isDirectory:&directory] || directory) {
+        NSString *path = [[url.path ?: @"" stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"] stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+        NSString *page = [NSString stringWithFormat:@"<!DOCTYPE html><meta charset=\"utf-8\"><title>404</title>"
+                          "<p style=\"font:14px sans-serif;color:#777;margin:20px\">404: %@</p>", path];
+        NSData *body = [page dataUsingEncoding:NSUTF8StringEncoding];
+        [self performOnClientThread:^{ [self deliverData:body type:KDContentType(@"html") status:404]; }];
+        return;
+    }
+    NSString *extension = [[file pathExtension] lowercaseString];
+    NSData *data = [NSData dataWithContentsOfFile:file options:NSDataReadingMappedIfSafe error:NULL] ?: [NSData data];
+    NSString *kind = ([extension isEqualToString:@"html"] || [extension isEqualToString:@"htm"]) ? @"html"
+                   : [extension isEqualToString:@"css"] ? @"css"
+                   : ([extension isEqualToString:@"js"] || [extension isEqualToString:@"mjs"]) ? @"js" : nil;
+    BRCSSRewriter *rewriter = [BRCSSRewriter shared];
+    if (!kind || !rewriter.available || !data.length) {
+        [self performOnClientThread:^{ [self deliverData:data type:KDContentType(extension)]; }];
+        return;
+    }
+    // the page a stylesheet or script is for: the document that asked for it (the engine keeps a page's variables and
+    // rules by its address, and the page's shim asks for them by it)
+    BOOL document = [kind isEqualToString:@"html"];
+    NSURL *referer = [NSURL URLWithString:[self.request valueForHTTPHeaderField:@"Referer"] ?: @""];
+    NSURL *page = (!document && [[referer.host lowercaseString] isEqualToString:KDPreviewHost]) ? referer : url;
+    [rewriter rewriteData:data kind:kind charset:@"utf-8" pageURL:page sourceURL:url mainFrame:document
+               completion:^(NSData *output, NSString *charset, BOOL keep) {
+        if (self.stopped) return;
+        NSData *body = output ?: data;
+        if (![kind isEqualToString:@"js"]) {
+            [rewriter registerManifestInData:body pageURL:page sourceURL:url];
+            body = [BRCSSRewriter dataWithoutManifest:body];
+        }
+        [self performOnClientThread:^{ [self deliverData:body type:KDContentType(extension)]; }];
+    }];
 }
 
 // A document or stylesheet through the engine's rewriter; its manifest (the rules the page shim evaluates) goes to the
