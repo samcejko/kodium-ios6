@@ -5,6 +5,8 @@
 #import "BRCSSRewriter.h"
 #import "BRURLProtocol.h"
 #import "BRCommon.h"
+#import <objc/message.h>
+#include <dlfcn.h>
 
 // what follows "<scheme>:" in a request of the page shim, percent-decoded
 static NSString *KDShimArgument(NSURL *url)
@@ -135,6 +137,25 @@ static NSString *KDShimArgument(NSURL *url)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         self.webView.keyboardDisplayRequiresUserAction = YES;
     });
+}
+
+- (BOOL)enableJavaScriptProfiling
+{
+    // (UIWebView -> its document view -> WebKit's WebView -> WebInspector; WebView calls need the web lock)
+    static void (*lockFn)(void);
+    if (!lockFn) lockFn = (void (*)(void))dlsym(RTLD_DEFAULT, "WebThreadLock");
+    if (lockFn) lockFn();
+    SEL documentSel = NSSelectorFromString(@"_documentView"), webViewSel = NSSelectorFromString(@"webView");
+    SEL inspectorSel = NSSelectorFromString(@"inspector"), enableSel = NSSelectorFromString(@"setJavaScriptProfilingEnabled:");
+    id document = [self.webView respondsToSelector:documentSel] ? ((id (*)(id, SEL))objc_msgSend)(self.webView, documentSel) : nil;
+    id webView = [document respondsToSelector:webViewSel] ? ((id (*)(id, SEL))objc_msgSend)(document, webViewSel) : nil;
+    id inspector = [webView respondsToSelector:inspectorSel] ? ((id (*)(id, SEL))objc_msgSend)(webView, inspectorSel) : nil;
+    if (![inspector respondsToSelector:enableSel]) {
+        BRLog(@"JavaScript profiling: no switch (document %@, web view %@, inspector %@)", document ? @"yes" : @"no", webView ? @"yes" : @"no", inspector ? @"yes" : @"no");
+        return NO;
+    }
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(inspector, enableSel, YES);
+    return YES;
 }
 
 - (void)sendKey:(NSString *)key

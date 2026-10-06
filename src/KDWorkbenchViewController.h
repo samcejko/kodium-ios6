@@ -10,5 +10,8 @@
 - (void)openReceivedFile:(NSString *)path;
 // The on-screen keyboard over the editor without a tap (developer commands: the key bar, typing tests)
 - (void)showKeyboard;
+// WebKit's JavaScript profiler for the page, as its inspector has it: console.profile()/profileEnd() then fill
+// console.profiles with call trees (developer commands); NO when this WebKit has no such switch
+- (BOOL)enableJavaScriptProfiling;
 
 @end

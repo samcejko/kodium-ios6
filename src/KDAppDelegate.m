@@ -57,6 +57,7 @@ static void KDWriteResult(NSString *name, NSString *text)
 //   reload                  loads the workbench again
 //   receive?file=<path>     takes a file of the app's home as another app's file ("Open in Kodium")
 //   keyboard                the on-screen keyboard over the editor, as after a tap into it
+//   jsprofile               WebKit's JavaScript profiler on (console.profile/profileEnd -> console.profiles), to tmp/eval.txt
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
 {
     // "Open in Kodium" from another app (Mail, Safari, Dropbox...): the file comes into Documents and opens
@@ -131,6 +132,10 @@ static void KDWriteResult(NSString *name, NSString *text)
     }
     if ([command isEqualToString:@"keyboard"]) {
         [workbench showKeyboard];
+        return YES;
+    }
+    if ([command isEqualToString:@"jsprofile"]) {
+        KDWriteResult(@"eval.txt", [workbench enableJavaScriptProfiling] ? @"profiling on" : @"no profiling switch");
         return YES;
     }
     if ([command isEqualToString:@"receive"]) {
