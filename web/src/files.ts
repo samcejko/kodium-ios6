@@ -1,9 +1,13 @@
-// The iPad's own files: the app's Documents folder (shared through iTunes) as file:///Documents, the workspace. The app
-// answers https://kodium.invalid/__kd/fs/<operation> (src/KDFiles.m); tools/serve.ps1 does the same for a folder on
-// the PC, for trying the workbench in a desktop browser. Plain XMLHttpRequest: the iOS 6 engine has it with array
-// buffers, and its fetch is a polyfill over it anyway.
+// The iPad's own files: the app's Documents folder (shared through iTunes) as file:///Documents, the workspace; and
+// VS Code's user data (vscode-userdata:/User/settings.json, keybindings.json, snippets...), which VS Code would keep in
+// memory only, in the app's Library. The app answers https://kodium.invalid/__kd/fs/<operation> (src/KDFiles.m, with
+// root=userdata for the second); tools/serve.ps1 does the same for folders on the PC, for trying the workbench in a
+// desktop browser. Plain XMLHttpRequest: the iOS 6 engine has it with array buffers, and its fetch is a polyfill over it
+// anyway.
 import {
   registerFileSystemOverlay,
+  registerCustomProvider,
+  FileChangeType,
   FileSystemProviderCapabilities,
   FileSystemProviderError,
   FileSystemProviderErrorCode,
@@ -16,24 +20,19 @@ import {
   type IStat
 } from '@codingame/monaco-vscode-files-service-override'
 import { Emitter } from '@codingame/monaco-vscode-api/vscode/vs/base/common/event'
-import * as vscode from 'vscode'
+import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
+import { Schemas } from '@codingame/monaco-vscode-api/vscode/vs/base/common/network'
 
 export const DOCUMENTS = '/Documents'
 const API = location.href.replace(/[?#].*$/, '').replace(/\/[^/]*$/, '') + '/__kd/fs/'
 
-type Uri = { readonly path: string, toString(): string }
+type Root = 'documents' | 'userdata'
 
-// file:///Documents/a/b -> "/a/b"; null outside Documents (another provider's)
-function apiPath(resource: Uri): string | null {
-  const p = resource.path
-  if (p === DOCUMENTS) return '/'
-  return p.startsWith(DOCUMENTS + '/') ? p.slice(DOCUMENTS.length) : null
-}
-
-function call(op: string, params: Record<string, string>, body?: Uint8Array, binary = false): Promise<XMLHttpRequest> {
+function call(root: Root, op: string, params: Record<string, string>, body?: Uint8Array, binary = false): Promise<XMLHttpRequest> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    const query = Object.keys(params).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(params[k])).join('&')
+    const all: Record<string, string> = root === 'documents' ? params : { ...params, root }
+    const query = Object.keys(all).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(all[k])).join('&')
     const reading = op === 'stat' || op === 'list' || op === 'read'
     xhr.open(reading ? 'GET' : 'POST', API + op + '?' + query, true)
     if (binary) xhr.responseType = 'arraybuffer'
@@ -45,7 +44,7 @@ function call(op: string, params: Record<string, string>, body?: Uint8Array, bin
   })
 }
 
-function check(xhr: XMLHttpRequest, resource: Uri): void {
+function check(xhr: XMLHttpRequest, resource: URI): void {
   if (xhr.status === 200) return
   const code = xhr.status === 404 ? FileSystemProviderErrorCode.FileNotFound
     : xhr.status === 409 ? FileSystemProviderErrorCode.FileExists
@@ -54,62 +53,78 @@ function check(xhr: XMLHttpRequest, resource: Uri): void {
   throw FileSystemProviderError.create(resource.toString() + ' (' + xhr.status + ')', code)
 }
 
-function notHere(resource: Uri): never {
+function notHere(resource: URI): never {
   throw FileSystemProviderError.create(resource.toString(), FileSystemProviderErrorCode.FileNotFound)
 }
 
-class DocumentsProvider implements IFileSystemProviderWithFileReadWriteCapability {
+// A folder of the app. toPath gives a resource's path in it ("/a/b"), null for one that is not there.
+// (No watching: what changes, changes through the workbench. The workspace's changes the file service reports itself;
+// the user data's are reported here, which is what makes VS Code read settings.json again when it is saved.)
+class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapability {
   readonly capabilities = FileSystemProviderCapabilities.FileReadWrite | FileSystemProviderCapabilities.PathCaseSensitive
   private readonly changes = new Emitter<readonly IFileChange[]>()
   readonly onDidChangeFile = this.changes.event
   readonly onDidChangeCapabilities = new Emitter<void>().event
 
-  // (no watching: what changes, changes through the workbench, whose file service reports it itself)
+  constructor(
+    private readonly root: Root,
+    private readonly toPath: (resource: URI) => string | null,
+    private readonly reportChanges: boolean
+  ) {}
+
   watch() {
     return { dispose() {} }
   }
 
-  async stat(resource: Uri): Promise<IStat> {
-    const path = apiPath(resource) ?? notHere(resource)
-    const xhr = await call('stat', { path })
+  private changed(...changes: IFileChange[]): void {
+    if (this.reportChanges) this.changes.fire(changes)
+  }
+
+  async stat(resource: URI): Promise<IStat> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    const xhr = await call(this.root, 'stat', { path })
     check(xhr, resource)
     const s = JSON.parse(xhr.responseText) as { type: number, size: number, mtime: number, ctime: number }
     return { type: s.type === 2 ? FileType.Directory : FileType.File, size: s.size, mtime: s.mtime, ctime: s.ctime }
   }
 
-  async readdir(resource: Uri): Promise<[string, FileType][]> {
-    const path = apiPath(resource) ?? notHere(resource)
-    const xhr = await call('list', { path })
+  async readdir(resource: URI): Promise<[string, FileType][]> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    const xhr = await call(this.root, 'list', { path })
     check(xhr, resource)
     return (JSON.parse(xhr.responseText) as [string, number][]).map(([name, type]) => [name, type === 2 ? FileType.Directory : FileType.File])
   }
 
-  async readFile(resource: Uri): Promise<Uint8Array> {
-    const path = apiPath(resource) ?? notHere(resource)
-    const xhr = await call('read', { path }, undefined, true)
+  async readFile(resource: URI): Promise<Uint8Array> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    const xhr = await call(this.root, 'read', { path }, undefined, true)
     check(xhr, resource)
     return new Uint8Array(xhr.response as ArrayBuffer)
   }
 
-  async writeFile(resource: Uri, content: Uint8Array, opts: IFileWriteOptions): Promise<void> {
-    const path = apiPath(resource) ?? notHere(resource)
-    check(await call('write', { path, create: opts.create ? '1' : '0', overwrite: opts.overwrite ? '1' : '0' }, content), resource)
+  async writeFile(resource: URI, content: Uint8Array, opts: IFileWriteOptions): Promise<void> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    check(await call(this.root, 'write', { path, create: opts.create ? '1' : '0', overwrite: opts.overwrite ? '1' : '0' }, content), resource)
+    this.changed({ type: FileChangeType.UPDATED, resource })
   }
 
-  async mkdir(resource: Uri): Promise<void> {
-    const path = apiPath(resource) ?? notHere(resource)
-    check(await call('mkdir', { path }), resource)
+  async mkdir(resource: URI): Promise<void> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    check(await call(this.root, 'mkdir', { path }), resource)
+    this.changed({ type: FileChangeType.ADDED, resource })
   }
 
-  async delete(resource: Uri, opts: IFileDeleteOptions): Promise<void> {
-    const path = apiPath(resource) ?? notHere(resource)
-    check(await call('delete', { path, recursive: opts.recursive ? '1' : '0' }), resource)
+  async delete(resource: URI, opts: IFileDeleteOptions): Promise<void> {
+    const path = this.toPath(resource) ?? notHere(resource)
+    check(await call(this.root, 'delete', { path, recursive: opts.recursive ? '1' : '0' }), resource)
+    this.changed({ type: FileChangeType.DELETED, resource })
   }
 
-  async rename(from: Uri, to: Uri, opts: IFileOverwriteOptions): Promise<void> {
-    const path = apiPath(from) ?? notHere(from)
-    const target = apiPath(to) ?? notHere(to)
-    check(await call('rename', { path, to: target, overwrite: opts.overwrite ? '1' : '0' }), from)
+  async rename(from: URI, to: URI, opts: IFileOverwriteOptions): Promise<void> {
+    const path = this.toPath(from) ?? notHere(from)
+    const target = this.toPath(to) ?? notHere(to)
+    check(await call(this.root, 'rename', { path, to: target, overwrite: opts.overwrite ? '1' : '0' }), from)
+    this.changed({ type: FileChangeType.DELETED, resource: from }, { type: FileChangeType.ADDED, resource: to })
   }
 }
 
@@ -118,16 +133,24 @@ const SAMPLES: [string, string][] = [
   ['/hello.js', '// Kodium on iOS 6\nfunction greet(name) {\n  return \'Hello, \' + name + \'!\'\n}\n\nconsole.log(greet(\'iPad 2\'))\n']
 ]
 
-// The provider, and two files to start with when Documents is empty (the first start)
-export async function registerDocuments(): Promise<void> {
-  const provider = new DocumentsProvider()
-  registerFileSystemOverlay(2, provider)
-  const root = vscode.Uri.file(DOCUMENTS)
+// The two folders (before the workbench starts), and two files to start with when Documents is empty (the first start)
+export async function registerAppFolders(): Promise<void> {
+  // file:///Documents/a/b -> "/a/b"; null outside Documents (another provider's)
+  const documents = new AppFolderProvider('documents', (resource) => {
+    const p = resource.path
+    if (p === DOCUMENTS) return '/'
+    return p.startsWith(DOCUMENTS + '/') ? p.slice(DOCUMENTS.length) : null
+  }, false)
+  registerFileSystemOverlay(2, documents)
+  // vscode-userdata:/User/settings.json -> "/User/settings.json"
+  registerCustomProvider(Schemas.vscodeUserData, new AppFolderProvider('userdata', (resource) => resource.path.startsWith('/') ? resource.path : null, true))
+
+  const root = URI.file(DOCUMENTS)
   try {
-    if ((await provider.readdir(root)).length) return
+    if ((await documents.readdir(root)).length) return
     const encoder = new TextEncoder()
     for (const [path, text] of SAMPLES) {
-      await provider.writeFile(vscode.Uri.file(DOCUMENTS + path), encoder.encode(text), { create: true, overwrite: false, unlock: false, atomic: false })
+      await documents.writeFile(URI.file(DOCUMENTS + path), encoder.encode(text), { create: true, overwrite: false, unlock: false, atomic: false })
     }
   } catch (e) {
     console.warn('Documents:', e)

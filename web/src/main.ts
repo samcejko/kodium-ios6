@@ -8,7 +8,6 @@ import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override'
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override'
 import getConfigurationServiceOverride from '@codingame/monaco-vscode-configuration-service-override'
-import { initUserConfiguration } from '@codingame/monaco-vscode-configuration-service-override/common'
 import getKeybindingsServiceOverride from '@codingame/monaco-vscode-keybindings-service-override'
 import getThemeServiceOverride from '@codingame/monaco-vscode-theme-service-override'
 import getLanguagesServiceOverride from '@codingame/monaco-vscode-languages-service-override'
@@ -30,8 +29,10 @@ import getStatusBarServiceOverride from '@codingame/monaco-vscode-view-status-ba
 import getMonarchServiceOverride from '@codingame/monaco-vscode-monarch-service-override'
 import '@codingame/monaco-vscode-theme-defaults-default-extension'
 import { registerLanguages } from './languages'
-import { DOCUMENTS, registerDocuments } from './files'
-import * as vscode from 'vscode'
+import { DOCUMENTS, registerAppFolders } from './files'
+// (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
+// service with it, a seventh of the bundle, for one Uri.file)
+import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 
 declare global {
   interface Window {
@@ -42,20 +43,20 @@ const mark = (name: string) => window.__vsc_mark?.(name)
 
 async function start() {
   mark('main')
-  // the workspace: the app's Documents folder (files.ts)
-  await registerDocuments()
-
-  await initUserConfiguration(
-    JSON.stringify({
-      'workbench.colorTheme': 'Default Dark Modern',
-      'editor.minimap.enabled': false,
-      'workbench.startupEditor': 'none',
-      'editor.fontSize': 14
-    })
-  )
+  // the workspace (the app's Documents folder) and the user's settings (files.ts)
+  await registerAppFolders()
   mark('config')
 
   const options: IWorkbenchConstructionOptions = {
+    // Kodium's defaults: the user's settings.json holds only what the user changes
+    configurationDefaults: {
+      'workbench.colorTheme': 'Default Dark Modern',
+      'editor.minimap.enabled': false,
+      'workbench.startupEditor': 'none',
+      'editor.fontSize': 14,
+      // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
+      'files.autoSave': 'afterDelay'
+    },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
     windowIndicator: { label: 'iOS 6', tooltip: 'Kodium on iOS 6', command: '' },
@@ -75,7 +76,7 @@ async function start() {
       async open() {
         return false
       },
-      workspace: { folderUri: vscode.Uri.file(DOCUMENTS) }
+      workspace: { folderUri: URI.file(DOCUMENTS) }
     }
   }
 

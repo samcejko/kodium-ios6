@@ -121,9 +121,11 @@ fs.writeFileSync(output, out)
 console.log('written', output, fs.statSync(output).size, 'bytes', since())
 
 // the names for the Proxy stand-in (jsfix-helpers' __br_Proxy keeps one shared prototype of accessors for proxies
-// that only have a get trap): added to it before the bundle runs
+// that only have a get trap): added to it before the bundle runs. Only the names such proxies are read by - the
+// methods ($name) and events (onName) of the RPC and IPC proxies: VS Code's services are no proxies here (eagerServices
+// in vite.config.mjs), and every name is two closures on the iPad (all 36,000 of them were megabytes)
 const skip = new Set(Object.getOwnPropertyNames(Object.prototype).concat(Object.getOwnPropertyNames(Function.prototype), ['prototype', 'length', 'name', 'arguments', 'caller']))
-const names = [...memberNames].filter((n) => !skip.has(n) && !n.startsWith('__br_')).sort()
+const names = [...memberNames].filter((n) => !skip.has(n) && !n.startsWith('__br_') && (n[0] === '$' || /^on[A-Z]/.test(n))).sort()
 const namesScript = `/* property names of ${path.basename(input)}, for the Proxy stand-in (see vsc-prelude.js) */
 window.__vsc_proxyNames = ${JSON.stringify(names.join(' '))}.split(' ');
 `

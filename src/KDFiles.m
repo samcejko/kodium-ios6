@@ -53,11 +53,25 @@ static NSNumber *KDMillis(NSDate *date)
     return [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByStandardizingPath];
 }
 
-// a path of the page ("/a/b", inside Documents) as a file path; nil when it leads out of Documents
-+ (NSString *)filePathFor:(NSString *)path
++ (NSString *)rootDirectoryNamed:(NSString *)name
+{
+    if (![name isEqualToString:@"userdata"]) return [self rootDirectory];
+    static NSString *userData;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *support = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
+        NSString *dir = [support stringByAppendingPathComponent:@"Kodium/userdata"];
+        // (with the User folder VS Code expects there)
+        [[NSFileManager defaultManager] createDirectoryAtPath:[dir stringByAppendingPathComponent:@"User"] withIntermediateDirectories:YES attributes:nil error:NULL];
+        userData = [dir stringByStandardizingPath];
+    });
+    return userData;
+}
+
+// a path of the page ("/a/b", inside the root) as a file path; nil when it leads out of the root
++ (NSString *)filePathFor:(NSString *)path root:(NSString *)root
 {
     if (![path hasPrefix:@"/"]) return nil;
-    NSString *root = [self rootDirectory];
     NSString *file = [[root stringByAppendingPathComponent:path] stringByStandardizingPath];
     if (![file isEqualToString:root] && ![file hasPrefix:[root stringByAppendingString:@"/"]]) return nil;
     return file;
@@ -77,14 +91,15 @@ static NSNumber *KDMillis(NSDate *date)
     NSData *body = [operation isEqualToString:@"write"] ? KDBody(request) : nil;   // (read on the loading thread, as WebKit gave it)
     dispatch_async([self queue], ^{
         @autoreleasepool {
-            NSString *file = [self filePathFor:q[@"path"] ?: @""];
+            NSString *root = [self rootDirectoryNamed:q[@"root"]];
+            NSString *file = [self filePathFor:q[@"path"] ?: @"" root:root];
             if (!file) { completion(KDNotAllowed, nil, nil); return; }
-            [self perform:operation file:file query:q body:body completion:completion];
+            [self perform:operation file:file root:root query:q body:body completion:completion];
         }
     });
 }
 
-+ (void)perform:(NSString *)op file:(NSString *)file query:(NSDictionary *)q body:(NSData *)body completion:(KDFilesCompletion)completion
++ (void)perform:(NSString *)op file:(NSString *)file root:(NSString *)root query:(NSDictionary *)q body:(NSData *)body completion:(KDFilesCompletion)completion
 {
     NSFileManager *fm = [NSFileManager defaultManager];
     BOOL dir = NO, exists = [fm fileExistsAtPath:file isDirectory:&dir];
@@ -136,15 +151,15 @@ static NSNumber *KDMillis(NSDate *date)
     }
     if ([op isEqualToString:@"delete"]) {
         if (!exists) { completion(KDNotFound, nil, nil); return; }
-        if ([file isEqualToString:[self rootDirectory]]) { completion(KDNotAllowed, nil, nil); return; }
+        if ([file isEqualToString:root]) { completion(KDNotAllowed, nil, nil); return; }
         if (dir && ![q[@"recursive"] isEqualToString:@"1"] && [[fm contentsOfDirectoryAtPath:file error:NULL] count]) { completion(KDFailed, nil, nil); return; }
         BOOL ok = [fm removeItemAtPath:file error:&error];
         completion(ok ? 200 : KDFailed, nil, nil);
         return;
     }
     if ([op isEqualToString:@"rename"]) {
-        NSString *to = [self filePathFor:q[@"to"] ?: @""];
-        if (!to || [file isEqualToString:[self rootDirectory]]) { completion(KDNotAllowed, nil, nil); return; }
+        NSString *to = [self filePathFor:q[@"to"] ?: @"" root:root];
+        if (!to || [file isEqualToString:root]) { completion(KDNotAllowed, nil, nil); return; }
         if (!exists) { completion(KDNotFound, nil, nil); return; }
         if ([fm fileExistsAtPath:to]) {
             if (![q[@"overwrite"] isEqualToString:@"1"]) { completion(KDExists, nil, nil); return; }

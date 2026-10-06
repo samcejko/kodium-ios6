@@ -1,7 +1,7 @@
 # A static file server on localhost for testing the web build in a desktop browser (default: web\dist on port 8767).
 # POST /save?name=<file> writes the body to <Root>\out\<file> (pages that measure something send it back this way).
 # .../__kd/fs/<operation> is the app's Documents folder as the app answers it (src/KDFiles.m), here a folder on the PC
-# (default .tools\documents, which a build does not empty).
+# (default .tools\documents, which a build does not empty); with root=userdata, VS Code's user data (.tools\userdata).
 #   .\tools\serve.ps1 [-Root <folder>] [-Documents <folder>] [-Port 8767] [-Minutes 120]
 param([string]$Root = '', [string]$Documents = '', [int]$Port = 8767, [int]$Minutes = 120)
 if (-not $Root) { $Root = [IO.Path]::Combine((Split-Path $PSScriptRoot -Parent), 'web', 'dist') }
@@ -9,10 +9,13 @@ $Root = (Resolve-Path $Root).Path
 if (-not $Documents) { $Documents = [IO.Path]::Combine((Split-Path $PSScriptRoot -Parent), '.tools', 'documents') }
 [IO.Directory]::CreateDirectory($Documents) | Out-Null
 $Documents = (Resolve-Path $Documents).Path
+$UserData = [IO.Path]::Combine((Split-Path $PSScriptRoot -Parent), '.tools', 'userdata')
+[IO.Directory]::CreateDirectory([IO.Path]::Combine($UserData, 'User')) | Out-Null
 
-# the app's file operations (KDFiles.m) on $Documents: status, body bytes, content type
+# the app's file operations (KDFiles.m) on $Documents (or the user data): status, body bytes, content type
 function Invoke-Files([string]$op, $request) {
     $q = $request.QueryString
+    $Documents = if ($q['root'] -eq 'userdata') { $script:UserData } else { $script:Documents }
     $rel = [string]$q['path']
     if (-not $rel.StartsWith('/')) { return 403, $null, $null }
     $file = [IO.Path]::GetFullPath([IO.Path]::Combine($Documents, $rel.TrimStart('/').Replace('/', '\')))

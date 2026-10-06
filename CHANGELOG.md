@@ -16,10 +16,17 @@ The first build.
   theme's values, and the code's own var(--...) strings get them at run time.
 - A splash with the loading steps (English and Czech), and the error if the workbench cannot start.
 - The app's Documents folder (iTunes File Sharing) is the workspace.
-- For the iPad 2's memory: the lowered workbench is minified (16.8 -> 13.1 MB), and extensions, Git, accounts and
-  secret storage are left out until the extension host comes.
+- The user's settings, keybindings and snippets are kept (Library/Application Support/Kodium): VS Code in a browser keeps
+  them in memory only. Kodium's own defaults (the theme, no minimap, auto save) are defaults, not entries in them.
+- Auto save after a second: the on-screen keyboard has no Cmd+S, and iOS ends an app that runs short of memory.
+- For the iPad 2's memory: the lowered workbench is minified (16.8 -> 12.0 MB); extensions, Git, accounts and secret
+  storage are left out until the extension host comes, and so are the merge editor, call and type hierarchies, the
+  refactoring preview and the search editor; VS Code's services are created at once instead of behind proxies, which
+  the engine has to imitate with an accessor for every name (36,000 of them, now 1,900). About 245 MB once started
+  (from 290).
 - Developer commands over SSH with the device's debug key: eval, snapshot, screen, mem, profile, reload.
 - Transpiler fixes over Surfari's: `super.x` reads, writes and calls with getters and setters of the parent class.
 - Fixes for the iOS 6 engine: Number's constants (`Number.POSITIVE_INFINITY` and the like, which the engine's `Number`
-  lacked: every part of the workbench was laid out at 0 x 0), and reversed flex boxes, whose direction the engine passes
-  down to everything inside them (the title bar was the wrong way round).
+  lacked: every part of the workbench was laid out at 0 x 0), reversed flex boxes, whose direction the engine passes
+  down to everything inside them (the title bar was the wrong way round), and SVG images with an opacity on the root
+  element, which the engine ignores (the editor's watermark was black).

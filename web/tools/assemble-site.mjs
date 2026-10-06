@@ -51,6 +51,19 @@ if (!result || typeof result.out !== 'string' || !result.out.length) throw new E
 // rule of a reversed box still wins (any selector is more specific than *).
 const boxDirectionReset = '*{-webkit-box-direction:normal}\n'
 fs.writeFileSync(cssPath, '/*kodium:rewritten*/\n' + boxDirectionReset + result.out)
+
+// SVG images whose root element has an opacity (the editor's watermark, at 0.3): the iOS 6 engine ignores it there and
+// draws them at full strength, so it goes on a group around the content instead
+let svgs = 0
+for (const name of fs.readdirSync(path.join(out, 'assets'))) {
+  if (!name.endsWith('.svg')) continue
+  const file = path.join(out, 'assets', name)
+  const svg = fs.readFileSync(file, 'utf8')
+  const m = svg.match(/<svg\b([^>]*?)\sopacity="([^"]*)"([^>]*)>([\s\S]*)<\/svg>\s*$/)
+  if (!m) continue
+  fs.writeFileSync(file, svg.slice(0, m.index) + `<svg${m[1]}${m[3]}><g opacity="${m[2]}">${m[4]}</g></svg>\n`)
+  svgs++
+}
 // VS Code's texts in Czech (monaco-vscode-api's language pack, built for this version: the messages by the numbers the
 // bundle asks for). A classic script the page loads before the workbench on a Czech device: the texts must be there
 // before the first one is used.
@@ -70,4 +83,5 @@ fs.writeFileSync(path.join(out, 'kd-theme.js'), '/* the variables of VS Code\'s 
 const manifest = (result.out.match(/\/\*br-manifest:([\s\S]*?)\*\/\s*$/) || [])[1]
 const counts = manifest ? Object.entries(JSON.parse(manifest)).map(([k, v]) => k + ' ' + (Array.isArray(v) ? v.length : '')).join(', ') : 'none'
 console.log('style.css for iOS 6:', (css.length / 1024).toFixed(0), 'KB ->', (result.out.length / 1024).toFixed(0), 'KB; manifest:', counts)
+console.log('SVG images with the opacity on a group:', svgs)
 console.log('site:', files + 2, 'files,', (bytes / 1048576).toFixed(1), 'MB ->', out)
