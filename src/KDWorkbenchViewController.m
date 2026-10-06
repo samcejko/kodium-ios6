@@ -74,6 +74,11 @@ static NSString *KDShimArgument(NSURL *url)
     [BRCSSRewriter noteWebViewSize:self.webView.frame.size landscape:b.size.width > b.size.height];
 }
 
+- (NSString *)evaluateJavaScript:(NSString *)code
+{
+    return [self.webView stringByEvaluatingJavaScriptFromString:code ?: @""] ?: @"";
+}
+
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations
 {
     return BRIsPad() ? UIInterfaceOrientationMaskAll : UIInterfaceOrientationMaskAllButUpsideDown;
