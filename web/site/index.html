@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>window.__vsc_t0 = Date.now();</script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+<title>Kodium</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+html, body { height: 100%; margin: 0; overflow: hidden; background: #1e1e1e; }
+#kd-splash { position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index: 100000; background: #1e1e1e; color: #ccc;
+             font: 15px "Helvetica Neue", Helvetica, sans-serif; text-align: center; }
+#kd-splash .kd-name { margin-top: 38%; font-size: 30px; font-weight: bold; color: #eee; text-shadow: 0 -1px 0 #000; }
+#kd-splash .kd-step { margin-top: 14px; color: #999; }
+#kd-splash .kd-error { margin: 18px 40px 0; color: #f48771; white-space: pre-wrap; text-align: left; font-size: 13px; }
+</style>
+<script>
+// the device's language (?lang=cs tries Czech in a desktop browser): VS Code's texts in Czech come before the workbench
+window.__kd_lang = (location.search.match(/[?&]lang=(\w+)/) || [])[1] || navigator.language || 'en';
+if (/^cs\b/i.test(window.__kd_lang)) document.write('<script src="nls.cs.js"><\/script>');
+</script>
+<script src="kd-theme.js"></script>
+<script src="vsc-prelude.js"></script>
+</head>
+<body>
+<div id="kd-splash"><div class="kd-name">Kodium</div><div class="kd-step" id="kd-step"></div><div class="kd-error" id="kd-error"></div></div>
+<script>
+// The splash while the workbench loads (half a minute on an iPad 2): the step it is at, the error if it fails. In the
+// device's language (English or Czech).
+(function () {
+    var cs = /^cs/i.test(window.__kd_lang || ''), step = document.getElementById('kd-step');
+    var words = cs ? { load: 'Načítání editoru…', run: 'Spouštění…', open: 'Otevírání pracovní plochy…', failed: 'Editor se nepodařilo spustit:' }
+                   : { load: 'Loading the editor…', run: 'Starting…', open: 'Opening the workbench…', failed: 'The editor could not start:' };
+    var show = function (name) {
+        if (name === 'main') step.innerHTML = words.run;
+        else if (name === 'config') step.innerHTML = words.open;
+        else if (name === 'workbench') { var s = document.getElementById('kd-splash'); if (s) s.parentNode.removeChild(s); }
+        else if (name.indexOf('failed: ') === 0) {
+            step.innerHTML = words.failed;
+            document.getElementById('kd-error').appendChild(document.createTextNode(name.slice(8)));
+        }
+    };
+    step.innerHTML = words.load;
+    // (an error before the workbench runs, a script that did not load: shown, the splash would wait for ever)
+    window.addEventListener('error', function (e) {
+        var box = document.getElementById('kd-error');
+        if (box && !box.firstChild) box.appendChild(document.createTextNode(String(e.message || 'error') + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')'));
+    }, false);
+    var mark = window.__vsc_mark;
+    window.__vsc_mark = function (name) { mark(name); try { show(String(name)); } catch (e) {} };
+    var base = location.href.replace(/[?#].*$/, '').replace(/\/[^\/]*$/, '');
+    window.__vsc_meta = { url: base + '/assets/workbench.js' };
+    window.__vsc_mark('willLoadWorkbench');
+})();
+</script>
+<script src="assets/workbench.es5.names.js"></script>
+<script src="assets/workbench.es5.js"></script>
+<script>__vsc_mark('workbenchScriptRan');</script>
+</body>
+</html>

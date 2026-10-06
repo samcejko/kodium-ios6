@@ -1,0 +1,316 @@
+name: Build Kodium (iOS 6, armv7)
+
+# Pushes to main build the packages (Actions artifacts, kept 14 days).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pinned inputs, as in Surfari's build (the engine and its libraries are Surfari's, see tools/sync-engine.ps1)
+env:
+  THEOS: /home/runner/theos
+  THEOS_COMMIT: dd5c14bb9d91311e221d51b5bfb8c9e5948156db
+  # L1ghtmann/llvm-project, release v11.1.0-L3 (clang 11)
+  TOOLCHAIN_RELEASE: test-210562a
+  # theos/sdks, "SDK Release 1"
+  SDK_RELEASE: master-146e41f
+  # (empty: the build prints the SHA-256 it got as a warning, to be pinned here)
+  TOOLCHAIN_SHA256: ""
+  SDK_SHA256: ""
+  THEOS_CACHE_KEY: theos-linux-v2
+  MBEDTLS_VERSION: "3.6.7"
+  MBEDTLS_SHA256: a7e8bcbec0e6f761b4af24f25677626b35f762f68eef79c08677a363212d11f6
+  WOFF2_COMMIT: 1bccf208bca986e53a647dfe4811322adb06ecf8
+  BROTLI_COMMIT: ed738e842d2fbdf2d6459e39267a633c4a9b2f5d
+  LIBWEBP_COMMIT: ca332209cb5567c9b249c86788cb2dbf8847e760
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential fakeroot rsync curl perl zip unzip git libxml2 xz-utils python3-pil fonts-dejavu-core librsvg2-bin libplist-utils libtinfo5 || \
+          sudo apt-get install -y --no-install-recommends \
+            build-essential fakeroot rsync curl perl zip unzip git libxml2 xz-utils python3-pil fonts-dejavu-core librsvg2-bin libplist-utils
+
+      - name: Node.js for the workbench build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Restore Theos cache
+        id: theos-cache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/theos
+          key: ${{ env.THEOS_CACHE_KEY }}-${{ env.THEOS_COMMIT }}-${{ env.TOOLCHAIN_RELEASE }}-${{ env.TOOLCHAIN_SHA256 }}-${{ env.SDK_RELEASE }}-${{ env.SDK_SHA256 }}
+
+      - name: Install Theos, toolchain and iOS 9.3 SDK
+        if: steps.theos-cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          check_sha256() {
+            ACTUAL=$(sha256sum "$1" | cut -d' ' -f1)
+            echo "$1: SHA-256 $ACTUAL"
+            if [ -z "$2" ]; then echo "::warning::$3 is not pinned: set $3 to $ACTUAL in build.yml"; return 0; fi
+            if [ "$ACTUAL" != "$2" ]; then echo "::error::$1 has the SHA-256 $ACTUAL, $3 says $2"; return 1; fi
+          }
+          git clone https://github.com/theos/theos.git "$THEOS"
+          git -C "$THEOS" checkout --quiet "$THEOS_COMMIT"
+          git -C "$THEOS" submodule update --init --recursive
+          mkdir -p "$THEOS/toolchain" "$THEOS/sdks"
+          curl -sSfL "https://github.com/L1ghtmann/llvm-project/releases/download/${TOOLCHAIN_RELEASE}/iOSToolchain-x86_64.tar.xz" -o /tmp/toolchain.tar.xz
+          check_sha256 /tmp/toolchain.tar.xz "$TOOLCHAIN_SHA256" TOOLCHAIN_SHA256
+          tar -xJf /tmp/toolchain.tar.xz -C "$THEOS/toolchain/"
+          rm -f /tmp/toolchain.tar.xz
+          if [ ! -x "$THEOS/toolchain/linux/iphone/bin/clang" ]; then
+            CLANG=$(find "$THEOS/toolchain" -type f -name clang -path '*/bin/*' | head -n1)
+            ROOT=$(dirname "$(dirname "$CLANG")")
+            mkdir -p "$THEOS/toolchain/linux"
+            ln -sfn "$ROOT" "$THEOS/toolchain/linux/iphone"
+          fi
+          curl -sSfL "https://github.com/theos/sdks/releases/download/${SDK_RELEASE}/iPhoneOS9.3.sdk.tar.xz" -o /tmp/sdk.tar.xz
+          check_sha256 /tmp/sdk.tar.xz "$SDK_SHA256" SDK_SHA256
+          tar -xJf /tmp/sdk.tar.xz -C "$THEOS/sdks/"
+          rm -f /tmp/sdk.tar.xz
+          test -d "$THEOS/sdks/iPhoneOS9.3.sdk"
+
+      - name: Version and build number
+        id: version
+        run: |
+          set -e
+          # One version: Info.plist's CFBundleShortVersionString, which control must repeat. CFBundleVersion becomes
+          # the run number, so that every build can be told apart.
+          VERSION=$(python3 -c 'import plistlib; print(plistlib.load(open("Resources/Info.plist", "rb"))["CFBundleShortVersionString"])')
+          CONTROL_VERSION=$(sed -n 's/^Version: *//p' control)
+          if [ "$VERSION" != "$CONTROL_VERSION" ]; then
+            echo "::error::Resources/Info.plist says $VERSION, control says $CONTROL_VERSION"
+            exit 1
+          fi
+          python3 - "$GITHUB_RUN_NUMBER" <<'EOF'
+          import plistlib, sys
+          path = "Resources/Info.plist"
+          with open(path, "rb") as f:
+              info = plistlib.load(f)
+          info["CFBundleVersion"] = sys.argv[1]
+          with open(path, "wb") as f:
+              plistlib.dump(info, f)
+          EOF
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Kodium $VERSION, build $GITHUB_RUN_NUMBER"
+
+      # The VS Code workbench (monaco-vscode-api) bundled by Vite, lowered to ES5 by Kodium's transpiler (Surfari's
+      # jsfix.js with web/tools/patch-jsfix.mjs) and put into Resources/site, which the app serves (src/KDSiteProtocol.m)
+      - name: Build the workbench
+        working-directory: web
+        run: |
+          set -e
+          npm ci --no-audit --no-fund
+          node node_modules/vite/bin/vite.js build --logLevel warn
+          node --max-old-space-size=6144 --stack-size=8000 tools/lower.mjs dist/assets/workbench.js dist/assets/workbench.es5.js
+          node tools/assemble-site.mjs dist ../Resources/site
+          ls -la ../Resources/site ../Resources/site/assets | head -n 80
+
+      - name: Fetch mbedTLS ${{ env.MBEDTLS_VERSION }}
+        run: |
+          set -e
+          curl -sSfL "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-${MBEDTLS_VERSION}/mbedtls-${MBEDTLS_VERSION}.tar.bz2" -o /tmp/mbedtls.tar.bz2
+          echo "${MBEDTLS_SHA256}  /tmp/mbedtls.tar.bz2" | sha256sum -c -
+          rm -rf vendor/mbedtls && mkdir -p vendor/mbedtls
+          tar -xjf /tmp/mbedtls.tar.bz2 -C vendor/mbedtls --strip-components=1
+          mv vendor/mbedtls/include/mbedtls/mbedtls_config.h vendor/mbedtls/include/mbedtls/mbedtls_config_default.h
+          cp engine/vendor/mbedtls_config_ios6.h vendor/mbedtls/include/mbedtls/mbedtls_config.h
+
+      - name: Fetch woff2, brotli and libwebp
+        run: |
+          set -e
+          rm -rf vendor/woff2 vendor/brotli vendor/libwebp
+          mkdir -p vendor/woff2 vendor/brotli vendor/libwebp
+          curl -sSfL "https://github.com/google/woff2/archive/${WOFF2_COMMIT}.tar.gz" | tar -xz -C vendor/woff2 --strip-components=1
+          curl -sSfL "https://github.com/google/brotli/archive/${BROTLI_COMMIT}.tar.gz" | tar -xz -C vendor/brotli --strip-components=1
+          curl -sSfL "https://github.com/webmproject/libwebp/archive/${LIBWEBP_COMMIT}.tar.gz" | tar -xz -C vendor/libwebp --strip-components=1
+          rm -f vendor/libwebp/src/dsp/enc*.c vendor/libwebp/src/dsp/cost*.c vendor/libwebp/src/dsp/ssim*.c vendor/libwebp/src/dsp/lossless_enc*.c
+
+      - name: Fetch CA bundle
+        run: |
+          set -e
+          curl -sSf https://curl.se/ca/cacert.pem -o Resources/cacert.pem
+          grep -c "BEGIN CERTIFICATE" Resources/cacert.pem
+          sed -n 's/^## Certificate data from Mozilla as of: *//p' Resources/cacert.pem | head -n1
+
+      # The engine's page scripts and rewriters (engine/Resources), with Kodium's transpiler in place of Surfari's
+      - name: The engine's scripts, a trimmed core-js and the polyfills
+        run: |
+          set -e
+          cp web/tp/jsfix.js engine/Resources/jsfix.js
+          cp engine/Resources/*.js engine/Resources/adblock-base.txt Resources/
+          mkdir -p Resources/js /tmp/cjs
+          (
+            cd /tmp/cjs
+            npm init -y >/dev/null 2>&1
+            npm install core-js-builder@3.41.0 terser@5.39.0 --no-audit --no-fund --silent
+            cat > build.js <<'EOF'
+          const builder = require('core-js-builder');
+          builder({
+            modules: ['es', 'web.url', 'web.url-search-params', 'web.url.to-json', 'web.dom-collections.for-each', 'web.dom-collections.iterator',
+                      'web.structured-clone', 'web.queue-microtask', 'web.dom-exception', 'web.timers', 'web.immediate', 'web.self', 'web.atob', 'web.btoa'],
+            exclude: ['es.regexp', 'es.string.replace', 'es.string.split', 'es.string.match', 'es.string.search', 'es.string.match-all',
+                      'es.json.stringify', 'es.json.to-string-tag', 'es.array.sort', 'es.array.splice', 'es.array.slice', 'es.array.concat',
+                      'es.array.filter', 'es.array.map', 'es.array.reverse', 'es.array.index-of', 'es.array.last-index-of', 'es.array.join',
+                      'es.array.for-each', 'es.array.reduce', 'es.array.reduce-right', 'es.array.some', 'es.array.every', 'es.array.push',
+                      'es.array.unshift', 'es.parse-int', 'es.parse-float', 'es.number.to-fixed', 'es.number.to-precision', 'es.number.constructor',
+                      'es.date', 'es.function.name', 'es.function.has-instance', 'es.string.trim', 'es.string.trim-start', 'es.string.trim-end', 'es.object.to-string',
+                      'esnext'],
+            format: 'bundle',
+            filename: 'core-js-custom.js'
+          }).then(() => console.log('core-js custom bundle built')).catch(e => { console.error(e); process.exit(1); });
+          EOF
+            node build.js
+            NODE_PATH=/tmp/cjs/node_modules node "$GITHUB_WORKSPACE/engine/tools/minify-page-scripts.js" core-js-custom.js "$GITHUB_WORKSPACE/Resources/js/core-js-custom.js"
+          )
+          # (the same npm files as Surfari's build, checked by their SHA-256)
+          curl -sSfL "https://cdn.jsdelivr.net/npm/acorn@8.14.0/dist/acorn.js" -o Resources/js/acorn.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/regenerator-runtime@0.13.11/runtime.js" -o Resources/js/regenerator-runtime.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/whatwg-fetch@3.6.20/dist/fetch.umd.js" -o Resources/js/fetch.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/intersection-observer@0.12.2/intersection-observer.js" -o Resources/js/intersection-observer.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/resize-observer-polyfill@1.5.1/dist/ResizeObserver.js" -o Resources/js/resize-observer.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/picturefill@3.0.3/dist/picturefill.min.js" -o Resources/js/picturefill.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/dialog-polyfill@0.5.6/dist/dialog-polyfill.js" -o Resources/js/dialog-polyfill.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/object-fit-images@3.2.4/dist/ofi.min.js" -o Resources/js/object-fit-images.js
+          curl -sSfL "https://cdn.jsdelivr.net/npm/indexeddbshim@3.10.0/dist/indexeddbshim.min.js" -o Resources/js/indexeddbshim.js
+          sha256sum -c - <<'EOF'
+          bec194b9abb10147d3bb77e544d95cf1c7b4f9f42dad00dfc83791909ebf49c7  Resources/js/acorn.js
+          e4fa2bcc7507e23fb226bad104bd3c526149ebc9891afbc4bb3a4a0c88afded3  Resources/js/regenerator-runtime.js
+          8c006dece7b95b63787c3ae297593c6bad9386cb8054697d18104177a5f52c87  Resources/js/fetch.js
+          bf73170c8637bae8c328ed21dfb368825343a7abb0abee0498cd04907f7d52ea  Resources/js/intersection-observer.js
+          2290b5c60e0cdc62851fb687800237273ac53797595b1b133860c4f1386de378  Resources/js/resize-observer.js
+          893fa7fe8b6e69e2828319c04a7cbb6f129ea820db695d4ced5757d59450b6a8  Resources/js/picturefill.js
+          7d5b4a5c45b61245429184d1a4af62dcf5d3a05d346428c5b00dcf4d7e901994  Resources/js/dialog-polyfill.js
+          37217cfedb39356d2a0fd317e4a8ee87d225f4364e3afc7473ab5a8e7d97ec64  Resources/js/object-fit-images.js
+          b278430c64e09ab0c401d17b7b824876b22f487b3fe78d6d974739ff027ba276  Resources/js/indexeddbshim.js
+          EOF
+          sed -i 's/literal.exec(this.input.slice(start))/literal.exec(this.input.slice(start, start + 4096))/' Resources/js/acorn.js
+          grep -q 'this.input.slice(start, start + 4096)' Resources/js/acorn.js
+          npm install --no-save --silent acorn@8.14.0 terser@5.39.0
+          node engine/tools/gen-unicode.js > Resources/js/unicode-props.js
+          node engine/tools/patch-ofi.js Resources/js/object-fit-images.js
+          # (the page shims minified; the app takes js/<name>.js first, see the Makefile)
+          node engine/tools/minify-page-scripts.js Resources/shims.js Resources/js/shims.js Resources/shims-extra.js Resources/js/shims-extra.js \
+            Resources/page-prelude.js Resources/js/page-prelude.js Resources/regexp-shim.js Resources/js/regexp-shim.js \
+            Resources/cssfix.js Resources/js/cssfix.js
+          node engine/tools/gen-helpers.js > Resources/js/jsfix-helpers.js
+          for f in regenerator-runtime fetch intersection-observer resize-observer dialog-polyfill jsfix-helpers; do
+            node engine/tools/minify-page-scripts.js Resources/js/$f.js Resources/js/$f.js
+          done
+          node engine/tools/check-es5.js Resources/page-prelude.js Resources/shims.js Resources/shims-extra.js Resources/cssfix.js Resources/jsfix.js \
+            Resources/worker-shims.js Resources/regexp-shim.js Resources/js/*.js Resources/site/vsc-prelude.js
+          # the transpiler's tests (Surfari's cases, on Kodium's transpiler)
+          node engine/tools/jsfix-ci.js
+          ls -la Resources Resources/js
+
+      - name: Generate icons and launch images
+        run: python3 tools/gen_assets.py Resources
+
+      - name: Patch SDK (stub re-exported libraries missing from theos/sdks)
+        run: |
+          set -e
+          TBIN="$THEOS/toolchain/linux/iphone/bin"
+          if [ -x /usr/bin/plistutil ]; then ln -sf /usr/bin/plistutil "$TBIN/plistutil"; fi
+          SDK="$THEOS/sdks/iPhoneOS9.3.sdk"
+          LIBSYS="$SDK/usr/lib/libSystem.tbd"
+          test -f "$LIBSYS"
+          for lib in $(grep -o "/usr/lib/system/lib[A-Za-z0-9_]*\.dylib" "$LIBSYS" | sort -u); do
+            base="${lib%.dylib}"
+            if [ ! -f "$SDK$base.tbd" ] && [ ! -f "$SDK$lib" ]; then
+              mkdir -p "$(dirname "$SDK$base.tbd")"
+              printf -- '---\narchs:           [ armv7, armv7s, arm64 ]\nplatform:        ios\ninstall-name:    %s\ncurrent-version: 1.0\ncompatibility-version: 1.0\nexports:\n  - archs:           [ armv7, armv7s, arm64 ]\n    symbols:         [ ]\n...\n' "$lib" > "$SDK$base.tbd"
+            fi
+          done
+          LIBC="$SDK/usr/lib/system/libsystem_c.tbd"
+          ADD=""
+          for sym in _memcpy _memset _memmove _memcmp _memchr _strchr _strcmp _strncmp _strlen _strnlen _bzero \
+                     _strcpy _strncpy _strcat _strlcpy _strlcat _strstr _strrchr _strdup _memset_s _memset_pattern4 \
+                     _memset_pattern8 _memset_pattern16 _strncasecmp _strcasecmp; do
+            if ! grep -Eq "[[ ,]${sym}[], ]" "$LIBC" "$SDK/usr/lib/system/libsystem_platform.tbd"; then
+              ADD="${ADD}${sym}, "
+            fi
+          done
+          if [ -n "$ADD" ]; then
+            sed -i "0,/symbols:            \[ /s//symbols:            [ ${ADD}/" "$LIBC"
+          fi
+
+      - name: Build
+        run: |
+          set -o pipefail
+          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
+          make clean || true
+          make package FINALPACKAGE=1 -j"$(nproc)" 2>&1 | tee build.log
+          ls -la .theos/_/Applications/Kodium.app | head -n 60
+
+      - name: Make the IPAs and name the packages
+        run: |
+          set -e
+          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
+          APP=.theos/_/Applications/Kodium.app
+          LDID=$(command -v ldid || find "$THEOS" -type f -name ldid | head -n1)
+          rm -rf /tmp/ipa && mkdir -p /tmp/ipa/Payload packages
+          cp -a "$APP" /tmp/ipa/Payload/
+          BIN=/tmp/ipa/Payload/Kodium.app/Kodium
+          # 1) with the JIT entitlement (dynamic-codesigning): the workbench needs it
+          "$LDID" -SResources/entitlements.plist "$BIN"
+          (cd /tmp/ipa && zip -qr9 "$GITHUB_WORKSPACE/packages/Kodium-$VERSION.ipa" Payload)
+          # 2) without it, for devices where the JIT build does not start
+          python3 - <<'EOF'
+          import plistlib
+          with open("Resources/entitlements.plist", "rb") as f:
+              entitlements = plistlib.load(f)
+          for key in ("dynamic-codesigning", "get-task-allow"):
+              entitlements.pop(key, None)
+          with open("/tmp/entitlements-nojit.plist", "wb") as f:
+              plistlib.dump(entitlements, f)
+          EOF
+          "$LDID" -S/tmp/entitlements-nojit.plist "$BIN"
+          if "$LDID" -e "$BIN" | grep -q dynamic-codesigning; then echo "::error::the nojit IPA kept the JIT entitlement"; exit 1; fi
+          (cd /tmp/ipa && zip -qr9 "$GITHUB_WORKSPACE/packages/Kodium-$VERSION-nojit.ipa" Payload)
+          DEB=$(ls packages/com.samcejko.kodium_*_iphoneos-arm.deb | head -n1)
+          mv "$DEB" "packages/Kodium-$VERSION.deb"
+          # (what the app cannot start without)
+          dpkg-deb -c "packages/Kodium-$VERSION.deb" > /tmp/deb-files.txt
+          for f in Kodium site/index.html site/vsc-prelude.js site/assets/workbench.es5.js site/assets/style.css js/core-js-custom.js js/shims.js cssfix.js jsfix.js cacert.pem; do
+            grep -q "Applications/Kodium.app/$f\$" /tmp/deb-files.txt || { echo "::error::$f is not in the .deb"; exit 1; }
+          done
+          (cd packages && sha256sum "Kodium-$VERSION.ipa" "Kodium-$VERSION-nojit.ipa" "Kodium-$VERSION.deb" > SHA256SUMS && cat SHA256SUMS)
+          ls -la packages/
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kodium-packages
+          path: |
+            packages/*.ipa
+            packages/*.deb
+            packages/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 14

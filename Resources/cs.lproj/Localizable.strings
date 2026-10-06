@@ -1,0 +1,33 @@
+/* Kodium - Czech */
+
+"The editor could not be loaded." = "Editor se nepodařilo načíst.";
+
+/* --- engine: Surfari's translations of the engine's messages, copied by tools/sync-engine.ps1 --- */
+"Cancelled" = "Zrušeno";
+"Check the date and time of this device." = "Zkontrolujte datum a čas v zařízení.";
+"Connection failed." = "Připojení selhalo.";
+"Connection lost." = "Spojení bylo přerušeno.";
+"connection timed out" = "vypršel čas připojení";
+"Content decoding failed." = "Dekódování obsahu selhalo.";
+"Could not connect to %@: %@" = "Nepodařilo se připojit k %@: %@";
+"Could not resolve %@ (%s). Is the device online?" = "Nepodařilo se přeložit adresu %@ (%s). Je zařízení online?";
+"Custom" = "Vlastní";
+"Desktop (Safari 6)" = "Desktop (Safari 6)";
+"iPad with iOS 6" = "iPad s iOS 6";
+"iPhone with iOS 6 (lighter pages)" = "iPhone s iOS 6 (lehčí stránky)";
+"Modern iPad (Safari 17)" = "Moderní iPad (Safari 17)";
+"Modern iPhone (Safari 17)" = "Moderní iPhone (Safari 17)";
+"Receiving the response failed: %@" = "Příjem odpovědi selhal: %@";
+"Sending the request failed." = "Odeslání požadavku selhalo.";
+"Sending the request failed: %@" = "Odeslání požadavku selhalo: %@";
+"The certificate bundle is missing, cannot verify the server." = "Chybí balík certifikátů, server nelze ověřit.";
+"The file could not be saved." = "Soubor se nepodařilo uložit.";
+"The server closed the connection without responding." = "Server ukončil spojení bez odpovědi.";
+"The server sent an invalid response." = "Server poslal neplatnou odpověď.";
+"The server stopped responding (timeout)." = "Server přestal odpovídat (timeout).";
+"The server's certificate could not be verified (%@). The page was blocked to protect you." = "Certifikát serveru se nepodařilo ověřit (%@). Stránka byla pro vaši ochranu zablokována.";
+"The server's response is too large." = "Odpověď serveru je příliš velká.";
+"TLS handshake failed: %@" = "TLS handshake selhal: %@";
+"TLS handshake timed out." = "Vypršel čas TLS handshaku.";
+"Unexpected response: %@" = "Neočekávaná odpověď: %@";
+/* --- end of engine --- */
