@@ -21,6 +21,12 @@ The first build.
 - Auto save after a second: the on-screen keyboard has no Cmd+S, and iOS ends an app that runs short of memory.
 - The workbench fits itself above the on-screen keyboard and lays itself out again when the iPad turns (the engine's
   visualViewport, which VS Code follows on iOS, kept the size of the start and never told of a change).
+- Typing on the iPad 2, measured key by key (from about a second until a key showed): the stylesheet is settled when
+  the app is built (the theme's variables, the sizes the engine lacks), so that the engine's shims no longer redo it
+  after every change of the page; the editor's costliest helpers are off by default (word suggestions, link, colour and
+  Unicode detection, the sticky scroll, bracket pair colours, the blinking cursor); the workbench's script is kept as
+  text by the engine (it decoded all 12 MB again for each function it compiled); the engine's memory relief waits
+  until 290 MB. The theme is Dark Modern again (the default named it as older VS Code did, and a light theme came).
 - For the iPad 2's memory: the lowered workbench is minified (16.8 -> 12.0 MB); extensions, Git, accounts and secret
   storage are left out until the extension host comes, and so are the merge editor, call and type hierarchies, the
   refactoring preview and the search editor; VS Code's services are created at once instead of behind proxies, which

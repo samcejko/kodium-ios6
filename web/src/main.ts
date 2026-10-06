@@ -50,12 +50,34 @@ async function start() {
   const options: IWorkbenchConstructionOptions = {
     // Kodium's defaults: the user's settings.json holds only what the user changes
     configurationDefaults: {
-      'workbench.colorTheme': 'Default Dark Modern',
+      // (the theme's id as VS Code knows it now: 'Default Dark Modern' is migrated in settings.json only, and a
+      // default it could not find left it to fall back on Light+ or Dark 2026, whichever it had last)
+      'workbench.colorTheme': 'Dark Modern',
       'editor.minimap.enabled': false,
       'workbench.startupEditor': 'none',
       'editor.fontSize': 14,
       // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
-      'files.autoSave': 'afterDelay'
+      'files.autoSave': 'afterDelay',
+      'files.autoSaveDelay': 2000,
+      // What the iPad 2 cannot afford at every keystroke. The editor's worker runs on the main thread here (no worker
+      // of its own), so word suggestions, link and colour detection and the Unicode highlighting each went through the
+      // whole file in it; the sticky scroll and bracket pair colours recompute as well; the blinking cursor changed the
+      // page twice a second (and every change has the engine's shims run). Layer hints made composited layers the old
+      // WebKit rebuilt at every layout. Typing went from a third of a second a key to a quarter with these alone.
+      'editor.quickSuggestions': { other: 'off', comments: 'off', strings: 'off' },
+      'editor.wordBasedSuggestions': 'off',
+      'editor.occurrencesHighlight': 'off',
+      'editor.links': false,
+      'editor.colorDecorators': false,
+      'editor.unicodeHighlight.ambiguousCharacters': false,
+      'editor.unicodeHighlight.invisibleCharacters': false,
+      'editor.unicodeHighlight.nonBasicASCII': false,
+      'editor.stickyScroll.enabled': false,
+      'editor.bracketPairColorization.enabled': false,
+      'editor.cursorBlinking': 'solid',
+      'editor.inlineSuggest.enabled': false,
+      'editor.lightbulb.enabled': 'off',
+      'editor.disableLayerHinting': true
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },

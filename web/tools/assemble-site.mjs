@@ -39,12 +39,101 @@ const ctx = vm.createContext({})
 vm.runInContext(fs.readFileSync(path.join(web, '..', 'engine', 'Resources', 'cssfix.js'), 'utf8'), ctx, { filename: 'cssfix.js' })
 const theme = JSON.parse(fs.readFileSync(path.join(web, 'theme', 'dark-modern.json'), 'utf8'))
 const cssPath = path.join(out, 'assets', 'style.css')
-const css = fs.readFileSync(cssPath, 'utf8')
+
+// ---- What can be settled before the rewriter is settled here, so that the engine's shims have nothing to keep up
+// for it on the iPad: they redo their work after every change of the page, and with VS Code's stylesheet that was a
+// third of a second a keystroke (measured: emulating fit-content for three elements 336 ms a pass, the variables
+// pass 50 ms each time VS Code set one of its own).
+// - var(): a variable of the theme gets its value; one nobody defines (not the theme, not a rule here, not the code)
+//   its fallback, and without one the declaration goes (a browser drops it as well: invalid when computed); the
+//   variables VS Code's code sets on elements (tab and activity bar sizes, the zoom factor...) stay for the engine.
+// - fit-content, min-content, max-content and fill-available sizes, which the engine lacks and the shims emulated by
+//   measuring: the declarations go (as the engine itself ignores them).
+const codeNames = new Set(fs.readFileSync(path.join(out, 'assets', 'workbench.es5.js'), 'utf8').match(/--[A-Za-z][\w-]*/g) || [])
+function settleStatically(text, vars) {
+  const defined = new Set(text.match(/(?<=[{;\s])--[A-Za-z][\w-]*(?=\s*:)/g) || [])
+  const dynamic = (name) => defined.has(name) || codeNames.has(name)
+  const stats = { theme: 0, fallback: 0, dropped: 0, kept: 0, sizes: 0 }
+  // var(...) in a value: null when the declaration has to go
+  const resolve = (value, depth) => {
+    let out = '', i = 0, at
+    while ((at = value.indexOf('var(', i)) >= 0) {
+      out += value.slice(i, at)
+      let k = at + 4, open = 1, comma = -1
+      for (; k < value.length && open; k++) {
+        const c = value[k]
+        if (c === '(') open++
+        else if (c === ')') open--
+        else if (c === ',' && open === 1 && comma < 0) comma = k
+      }
+      if (open) return out + value.slice(at)
+      const name = value.slice(at + 4, comma < 0 ? k - 1 : comma).trim()
+      const fallback = comma < 0 ? null : value.slice(comma + 1, k - 1).trim()
+      if (Object.prototype.hasOwnProperty.call(vars, name) && !defined.has(name)) {
+        const v = depth < 8 ? resolve(String(vars[name]), depth + 1) : null
+        if (v === null) return null
+        out += v; stats.theme++
+      } else if (dynamic(name)) {
+        out += value.slice(at, k); stats.kept++
+      } else if (fallback !== null) {
+        const v = depth < 8 ? resolve(fallback, depth + 1) : null
+        if (v === null) return null
+        out += v; stats.fallback++
+      } else return null
+      i = k
+    }
+    return out + value.slice(i)
+  }
+  const SIZE = /^(-webkit-)?(min-|max-)?(width|height)$|^(-webkit-)?flex-basis$/i
+  const INTRINSIC = /(^|[\s(,:])(-webkit-|-moz-)?(fit-content|min-content|max-content|fill-available)\b/i
+  // each innermost block's declarations, split at semicolons outside strings and parentheses (data: URLs have them)
+  const result = text.replace(/\{([^{}]*)\}/g, (all, body) => {
+    if (body.indexOf('var(') < 0 && !INTRINSIC.test(body)) return all
+    const parts = []
+    let depth = 0, quote = null, start = 0
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i]
+      if (quote) { if (c === '\\') i++; else if (c === quote) quote = null; continue }
+      if (c === '"' || c === "'") quote = c
+      else if (c === '(') depth++
+      else if (c === ')') depth--
+      else if (c === ';' && !depth) { parts.push(body.slice(start, i)); start = i + 1 }
+    }
+    parts.push(body.slice(start))
+    const kept = []
+    for (const decl of parts) {
+      const colon = decl.indexOf(':')
+      const prop = colon < 0 ? '' : decl.slice(0, colon).trim()
+      if (colon < 0 || prop.startsWith('--')) { kept.push(decl); continue }
+      let value = decl.slice(colon + 1)
+      if (SIZE.test(prop) && INTRINSIC.test(value)) { stats.sizes++; continue }
+      if (value.indexOf('var(') >= 0) {
+        value = resolve(value, 0)
+        if (value === null) { stats.dropped++; continue }
+      }
+      kept.push(decl.slice(0, colon + 1) + value)
+    }
+    return '{' + kept.join(';') + '}'
+  })
+  console.log('settled before the rewriter:', JSON.stringify(stats))
+  return result
+}
+const css = settleStatically(fs.readFileSync(cssPath, 'utf8'), theme.vars)
 // (the app's web view: the whole screen below the status bar of an iPad, in both orientations)
 const options = { pageURL: 'https://kodium.invalid/index.html', viewportWidth: 768, devicePixelRatio: 1,
                   viewportPortrait: [768, 1004], viewportLandscape: [1024, 748], orientation: 'landscape' }
 const result = JSON.parse(ctx.CSSFix.run('css', css, JSON.stringify(theme.vars), JSON.stringify(options)))
 if (!result || typeof result.out !== 'string' || !result.out.length) throw new Error('assemble-site: the CSS rewriter gave nothing')
+// The manifest is what the engine's shims redo after every change of the page. Kept: :has(), container queries and
+// grids (few, and a grid's layout needs them). Left out: the marker rules (percentage heights, z-index and the like,
+// where the engine's own layout is right for VS Code: the scan read the style of hundreds of elements a keystroke)
+// and the variables VS Code sets at run time (each one it set had the variables pass look through every rule with
+// one). Measured on the iPad 2 with both: 330 ms of shims a keystroke; without: 70.
+result.out = result.out.replace(/\/\*br-manifest:([\s\S]*?)\*\/(\s*)$/, (all, json, tail) => {
+  const m = JSON.parse(json)
+  for (const kind of ['mk', 'cv']) if (Array.isArray(m[kind])) m[kind] = []
+  return '/*br-manifest:' + JSON.stringify(m) + '*/' + tail
+})
 // The rewriter writes flex-direction: *-reverse as -webkit-box-direction: reverse too, which the iOS 6 engine inherits
 // (flex-direction is not inherited): .monaco-workbench.mac .part.titlebar{flex-direction:row-reverse}, for the one
 // child of the title bar, turned the whole title bar around. Every element gets the initial value as its own; the

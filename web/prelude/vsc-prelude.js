@@ -32,6 +32,12 @@
         }
     })();
 
+    // The engine's flex shims (shims-extra.js) mark the children of every flex box and align them by measuring, after
+    // every change of the page - 30 ms a keystroke in the editor - for what the rewritten stylesheet already lays out
+    // right here
+    G.__brNoFlexItems = true;
+    G.__brNoAlignSelf = true;
+
     // The engine's visualViewport (shims.js) is the window's size when the page started, and its addEventListener does
     // nothing - and on iOS VS Code takes its size from there and lays out again on its resize event alone: after the
     // iPad turned, or the keyboard came up (the app shrinks the web view above it), the workbench kept its old size. Here

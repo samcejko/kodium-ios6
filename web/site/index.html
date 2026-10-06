@@ -54,7 +54,24 @@ if (/^cs\b/i.test(window.__kd_lang)) document.write('<script src="nls.cs.js"><\/
 })();
 </script>
 <script src="assets/workbench.es5.names.js"></script>
-<script src="assets/workbench.es5.js"></script>
+<script>
+// The workbench is fetched as text and run as an inline script, not loaded with src: for a script file the old WebKit
+// keeps the bytes, and JSC compiles a function when it is first called - each time from the text, which it decoded
+// again, all 12 MB of it, whenever the memory cache had dropped the decoded copy (every keystroke was a tenth of a
+// second of that). An inline script's text stays with its code. (__brClassic: the engine's shim would hand a big
+// inserted script to the app to be lowered, and it is ES5 already.)
+(function () {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'assets/workbench.es5.js', false);
+    xhr.send(null);
+    if (xhr.status !== 200 && xhr.status !== 0) throw new Error('assets/workbench.es5.js: ' + xhr.status);
+    var s = document.createElement('script');
+    s.__brClassic = true;
+    s.text = xhr.responseText;
+    xhr = null;
+    document.body.appendChild(s);
+})();
+</script>
 <script>__vsc_mark('workbenchScriptRan');</script>
 </body>
 </html>

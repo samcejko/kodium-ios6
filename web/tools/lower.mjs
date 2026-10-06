@@ -108,9 +108,11 @@ try {
   // Short names and no white space (esbuild, Vite's own minifier; nothing else is changed): the lowering's temporaries
   // (_this$46s626321...) were 2.6 MB, and the iOS 6 engine keeps a script's whole text for as long as the page lives
   // (a function is compiled from it when first called). The globals - the helpers, __vsc_*, __kd_* - keep their names.
+  // ASCII only (the rest as \u escapes, 0.4 MB more): with 72,000 characters beyond Latin-1 the engine held the text as
+  // UTF-16, 25 MB, and lexed it as such; ASCII can stay 8-bit.
   const { transformSync } = await import('esbuild')
   const before = out.length
-  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, target: 'es5', charset: 'utf8', legalComments: 'none' }).code
+  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, target: 'es5', charset: 'ascii', legalComments: 'none' }).code
   acorn.parse(out, { ecmaVersion: 5 })
   console.log('minified:', (before / 1048576).toFixed(1), 'MB ->', (out.length / 1048576).toFixed(1), 'MB, still ES5', since())
 } catch (e) {
