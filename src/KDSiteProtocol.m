@@ -3,6 +3,8 @@
 #import "BRCSSRewriter.h"
 #import "BRCommon.h"
 
+NSString * const KDShareFileNotification = @"KDShareFileNotification";
+
 static NSString * const KDSiteHost = @"kodium.invalid";
 // the app's Documents as a web site of its own, for the preview of a page (web/src/preview.ts)
 static NSString * const KDPreviewHost = @"preview.kodium.invalid";
@@ -102,6 +104,21 @@ static NSString *KDStylesheetCacheDirectory(void)
     NSURL *url = self.request.URL;
     if ([[url.host lowercaseString] isEqualToString:KDPreviewHost]) {
         [self servePreview];
+        return;
+    }
+    // the workbench's Share... (web/src/share.ts): the view controller shows the system's menu
+    if ([url.path isEqualToString:@"/__kd/app/share"]) {
+        NSMutableDictionary *q = [NSMutableDictionary dictionary];
+        for (NSString *pair in [url.query ?: @"" componentsSeparatedByString:@"&"]) {
+            NSRange eq = [pair rangeOfString:@"="];
+            if (eq.location == NSNotFound) continue;
+            NSString *value = [[pair substringFromIndex:eq.location + 1] stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+            if (value) q[[pair substringToIndex:eq.location]] = value;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:KDShareFileNotification object:nil userInfo:q];
+        });
+        [self deliverData:[NSData data] type:@"text/plain" status:200];
         return;
     }
     // the files of the app's Documents (KDFiles)

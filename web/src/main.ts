@@ -1,7 +1,7 @@
 // Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - what coding needs on the iPad 2
 // (editor, files, search, problems, output, settings, keybindings, themes, extensions from Open VSX, running
-// JavaScript, the preview of HTML and Markdown). Left out for memory (the iPad 2 has 512 MB): Git, accounts and secret
-// storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
+// JavaScript, the preview of HTML and Markdown, files from and to other apps). Left out for memory (the iPad 2 has
+// 512 MB): Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api'
@@ -37,6 +37,9 @@ import '@codingame/monaco-vscode-theme-defaults-default-extension'
 import './run'
 import './preview'
 import { registerLanguages } from './languages'
+import { followTheme } from './theme'
+import { standInForLeftOutParts } from './exthost'
+import { receiveFiles } from './share'
 import { DOCUMENTS, registerAppFolders } from './files'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
 // service with it, a seventh of the bundle, for one Uri.file)
@@ -51,6 +54,7 @@ const mark = (name: string) => window.__vsc_mark?.(name)
 
 async function start() {
   mark('main')
+  standInForLeftOutParts()
   // the workspace (the app's Documents folder) and the user's settings (files.ts)
   await registerAppFolders()
   mark('config')
@@ -146,6 +150,8 @@ async function start() {
   )
   await registerLanguages()
   mark('workbench')
+  receiveFiles()
+  void followTheme()
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
   const commands = await getService(ICommandService)
   ;(window as { __kd_commands?: unknown }).__kd_commands = (id: string, ...args: unknown[]) => commands.executeCommand(id, ...args)

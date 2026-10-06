@@ -1,3 +1,5 @@
 /* Kodium - English (the keys are the English texts; the engine's messages need no entries here) */
 
 "The editor could not be loaded." = "The editor could not be loaded.";
+"No app can take this file." = "No app can take this file.";
+"OK" = "OK";

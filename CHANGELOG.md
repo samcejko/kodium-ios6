@@ -15,6 +15,17 @@ The first build.
   an extension with code is there, at the start or when one is installed: without one the workbench starts 3 s sooner
   and takes 14 MB less. An extension's README, features and changelog show in the page itself (VS Code's webview, an
   iframe with scripts of its own, does not run on iOS 6: it said "No README available").
+- Themes from extensions colour the whole workbench on the iPad too: the theme's colours come from VS Code's theme
+  service (the engine takes the custom properties out of the theme's style), and the rules that took the default
+  theme's colours are kept as text (the stylesheet rewriter had emptied them). Dialogs, buttons and other parts that
+  VS Code colours from its code got no colour on the iPad (the engine's CSS.supports says yes to var(), which the
+  engine's own styles do not have): the trust dialog of an extension had no background.
+- Files from and to other apps: "Open in Kodium" (Mail, Safari, Dropbox...) puts the file into the Documents and opens
+  it; Share... in the explorer's menu and a tab's menu shows the system's menu (Open In..., Mail, Print, Copy).
+- Smaller for the iPad 2: VS Code's own splash, the "modern UI" (off, 14 stylesheets) and the extension host's parts
+  for what an extension cannot do on the iPad (comments, tests, tasks, terminals, debugging, source control, the
+  editor tabs API) are left out: the workbench script 14.4 -> 13.9 MB, the stylesheet 703 -> 593 KB; 278 MB at the
+  most after the start with an extension running (from 290).
 - Preview of HTML and Markdown beside the file (Open Preview: the button above the file, the explorer's menu,
   Ctrl+Shift+V). A page shows as Surfari's engine shows the web - its scripts lowered, its CSS rewritten - from the
   Documents as a site of its own (another origin than the workbench's, which it cannot reach into), and loads again

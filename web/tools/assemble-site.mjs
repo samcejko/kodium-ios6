@@ -49,9 +49,10 @@ const cssPath = path.join(out, 'assets', 'style.css')
 //   variables VS Code's code sets on elements (tab and activity bar sizes, the zoom factor...) stay for the engine.
 // - fit-content, min-content, max-content and fill-available sizes, which the engine lacks and the shims emulated by
 //   measuring: the declarations go (as the engine itself ignores them).
-// - The declarations that took the theme's variables are kept as theme-template.css as well, var() and all: when
+// - The declarations that took the theme's variables are kept as theme-template.txt as well, var() and all: when
 //   another theme is chosen (an extension's), vsc-prelude.js fills them with its values and puts them after the
-//   stylesheet, the engine having no custom properties of its own.
+//   stylesheet, the engine having no custom properties of its own. (Text, not .css: the app runs every stylesheet it
+//   serves through the engine's rewriter, which took the var() declarations out of it.)
 const codeNames = new Set(fs.readFileSync(path.join(out, 'assets', 'workbench.es5.js'), 'utf8').match(/--[A-Za-z][\w-]*/g) || [])
 // the blocks of at-rules (@media and the like): prelude, where the block starts and ends
 function atRuleBlocks(text) {
@@ -165,7 +166,7 @@ function settleStatically(text, vars) {
 const settled = settleStatically(fs.readFileSync(cssPath, 'utf8'), theme.vars)
 const css = settled.css
 // the template: the rules in their order, each in its at-rules
-fs.writeFileSync(path.join(out, 'assets', 'theme-template.css'), settled.template.map(([around, selector, decls]) =>
+fs.writeFileSync(path.join(out, 'assets', 'theme-template.txt'), settled.template.map(([around, selector, decls]) =>
   around.reduceRight((inner, prelude) => prelude + '{' + inner + '}', selector + '{' + decls.join(';') + '}')).join('\n') + '\n')
 // (the app's web view: the whole screen below the status bar of an iPad, in both orientations)
 const options = { pageURL: 'https://kodium.invalid/index.html', viewportWidth: 768, devicePixelRatio: 1,
@@ -207,8 +208,11 @@ for (const name of fs.readdirSync(path.join(out, 'assets'))) {
 const pack = fs.readFileSync(path.join(web, 'node_modules', '@codingame', 'monaco-vscode-language-pack-cs', 'translations', 'main.i18n.json.js'), 'utf8')
 const tail = /\n\s*export\s*\{\s*content\s+as\s+default\s*\};?\s*$/
 if (!/^var content = \[/.test(pack) || !tail.test(pack)) throw new Error('assemble-site: the Czech language pack has another form')
+// (two buttons of the "trust the publisher?" question came out as "Důvěřovat vydavateli &> Nainstalovat" in the
+// translation: the "&&" of an ampersand gone wrong)
 const nls = '/* VS Code\'s texts in Czech: @codingame/monaco-vscode-language-pack-cs (MIT; the vscode-loc translations, MIT) */\n' +
-  '(function () {\n' + pack.replace(tail, '\n') + 'window._VSCODE_NLS_MESSAGES = content;\nwindow._VSCODE_NLS_LANGUAGE = \'cs\';\n})();\n'
+  '(function () {\n' + pack.replace(tail, '\n').replace(/ &> Nainstalovat"/g, ' a nainstalovat"') +
+  'window._VSCODE_NLS_MESSAGES = content;\nwindow._VSCODE_NLS_LANGUAGE = \'cs\';\n})();\n'
 const acornCtx = vm.createContext({})
 vm.runInContext(fs.readFileSync(path.join(web, 'tp', 'acorn.js'), 'utf8'), acornCtx)
 acornCtx.acorn.parse(nls, { ecmaVersion: 5 })   // (the iOS 6 engine reads it as it is)

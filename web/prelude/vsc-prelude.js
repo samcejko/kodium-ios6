@@ -155,8 +155,17 @@
     // the current theme's values put in place. The values: the default theme's, from the build (kd-theme.js, the same
     // the stylesheet was rewritten with), then whatever VS Code applies (its theme style, watched below). A variable
     // without a value and without a fallback stays as it was. ?novar tries this in a desktop browser.
-    var nativeVars = !/[?&]novar\b/.test(G.location ? G.location.search : '') &&
-                     !!(G.CSS && typeof G.CSS.supports === 'function' && G.CSS.supports('color', 'var(--kd)'));
+    // (an element's own style says it: the engine's CSS.supports answers yes to var() - the engine has custom properties
+    // in the stylesheets it rewrites, not in the styles the code sets - and every such value was left out on the iPad)
+    var nativeVars = !/[?&]novar\b/.test(G.location ? G.location.search : '') && (function () {
+        try {
+            var probe = document.createElement('div');
+            probe.style.cssText = 'color:var(--kd)';
+            return probe.style.cssText.indexOf('var(') >= 0;
+        } catch (e) {
+            return false;
+        }
+    })();
     var themeVars = G.__kd_themeVars || {};
     var cssTrim = function (s) { return s.replace(/^\s+|\s+$/g, ''); };
     var resolveVars = function (text, depth) {
@@ -195,6 +204,8 @@
         for (k in defs) if (defs.hasOwnProperty(k) && k.indexOf('--vscode-') === 0 && themeVars[k] !== defs[k]) { themeVars[k] = defs[k]; changed = true; }
         if (changed) themeChanged();
     };
+    // (the workbench's own, from the theme service: web/src/theme.ts)
+    G.__kd_setThemeVars = function (defs) { setThemeVars(defs); };
     // (the theme the stylesheet was settled with: its colours of the big surfaces, to tell it from another)
     var SIGNATURE = ['--vscode-editor-background', '--vscode-editor-foreground', '--vscode-sideBar-background', '--vscode-activityBar-background',
                      '--vscode-statusBar-background', '--vscode-titleBar-activeBackground', '--vscode-panel-background', '--vscode-tab-activeBackground'];
@@ -213,7 +224,7 @@
         }
     };
     // Another theme than the one the stylesheet was settled with (Dark Modern, see web/tools/assemble-site.mjs): the
-    // rules that took the theme's colours (assets/theme-template.css) come again with the new ones, after the stylesheet.
+    // rules that took the theme's colours (assets/theme-template.txt) come again with the new ones, after the stylesheet.
     // (Its own style element: the engine leaves it as it is - plain colour declarations; going back removes it.)
     var templateText = null, overrideTimer = null;
     G.__kd_themeState = function () {
@@ -232,7 +243,7 @@
             if (templateText === null) {
                 try {
                     var x = new XMLHttpRequest();
-                    x.open('GET', 'assets/theme-template.css', false);
+                    x.open('GET', 'assets/theme-template.txt', false);
                     x.send(null);
                     templateText = x.status === 200 || x.status === 0 ? x.responseText : '';
                 } catch (e) { templateText = ''; }

@@ -1,5 +1,6 @@
 #import "KDWorkbenchViewController.h"
 #import "KDSiteProtocol.h"
+#import "KDFiles.h"
 #import "BRCSSRewriter.h"
 #import "BRURLProtocol.h"
 #import "BRCommon.h"
@@ -17,6 +18,10 @@ static NSString *KDShimArgument(NSURL *url)
 @property (nonatomic, strong) UIWebView *webView;
 @property (nonatomic, strong) UILabel *messageLabel;
 @property (nonatomic) CGFloat keyboardHeight;   // how much of the view the on-screen keyboard covers
+@property (nonatomic, strong) NSMutableArray *receivedFiles;   // paths in Documents the workbench is still to open
+@property (nonatomic, strong) NSTimer *receiveTimer;
+@property (nonatomic) NSInteger receiveAttempts;
+@property (nonatomic, strong) UIDocumentInteractionController *sharing;   // (alive while the system sends the file)
 @end
 
 @implementation KDWorkbenchViewController
@@ -64,6 +69,7 @@ static NSString *KDShimArgument(NSURL *url)
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
     // (WebKit scrolls to the caret once the keyboard is up, before the workbench has laid itself out again)
     [nc addObserver:self selector:@selector(layoutWebView) name:UIKeyboardDidShowNotification object:nil];
+    [nc addObserver:self selector:@selector(shareRequested:) name:KDShareFileNotification object:nil];
     [self.webView loadRequest:[NSURLRequest requestWithURL:[KDSiteProtocol startURL]]];
 }
 
@@ -114,6 +120,62 @@ static NSString *KDShimArgument(NSURL *url)
 - (NSString *)evaluateJavaScript:(NSString *)code
 {
     return [self.webView stringByEvaluatingJavaScriptFromString:code ?: @""] ?: @"";
+}
+
+#pragma mark - Files in and out
+
+- (void)openReceivedFile:(NSString *)path
+{
+    if (!path.length) return;
+    if (!self.receivedFiles) self.receivedFiles = [NSMutableArray array];
+    [self.receivedFiles addObject:path];
+    self.receiveAttempts = 0;
+    [self deliverReceivedFiles];
+}
+
+// The workbench answers "ok" once it can open files (web/src/share.ts): until then the files wait, asked again every
+// second for two minutes (the start takes about twenty seconds).
+- (void)deliverReceivedFiles
+{
+    [self.receiveTimer invalidate];
+    self.receiveTimer = nil;
+    while (self.receivedFiles.count) {
+        NSData *json = [NSJSONSerialization dataWithJSONObject:@[self.receivedFiles[0]] options:0 error:NULL];
+        NSString *arg = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil;
+        if (!arg) { [self.receivedFiles removeObjectAtIndex:0]; continue; }
+        NSString *answer = [self evaluateJavaScript:[NSString stringWithFormat:@"window.__kd_receive ? window.__kd_receive(%@[0]) : ''", arg]];
+        if (![answer isEqualToString:@"ok"]) break;
+        [self.receivedFiles removeObjectAtIndex:0];
+    }
+    if (self.receivedFiles.count && self.receiveAttempts++ < 120) {
+        self.receiveTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(deliverReceivedFiles) userInfo:nil repeats:NO];
+    }
+}
+
+// Share... of the workbench (KDShareFileNotification): the system's menu for a file of Documents - Open In..., Mail,
+// Print, Copy - pointing at what the page asked from (the explorer's row, the tab), else at the top of the view
+- (void)shareRequested:(NSNotification *)note
+{
+    NSDictionary *q = note.userInfo;
+    NSString *file = [KDFiles filePathFor:q[@"path"] ?: @"" root:[KDFiles rootDirectory]];
+    BOOL directory = NO;
+    if (!file || ![[NSFileManager defaultManager] fileExistsAtPath:file isDirectory:&directory] || directory) return;
+    CGRect rect = CGRectMake([q[@"x"] floatValue], [q[@"y"] floatValue], [q[@"w"] floatValue], [q[@"h"] floatValue]);
+    CGRect anchor = (rect.size.width > 0 && rect.size.height > 0) ? [self.view convertRect:rect fromView:self.webView]
+                                                                  : CGRectMake(CGRectGetMidX(self.view.bounds) - 1, 30, 2, 2);
+    UIDocumentInteractionController *menu = [UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:file]];
+    menu.delegate = self;
+    self.sharing = menu;
+    if (![menu presentOptionsMenuFromRect:anchor inView:self.view animated:YES]) {
+        self.sharing = nil;
+        [[[UIAlertView alloc] initWithTitle:nil message:L(@"No app can take this file.") delegate:nil
+                          cancelButtonTitle:L(@"OK") otherButtonTitles:nil] show];
+    }
+}
+
+- (UIViewController *)documentInteractionControllerViewControllerForPreview:(UIDocumentInteractionController *)controller
+{
+    return self;
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations

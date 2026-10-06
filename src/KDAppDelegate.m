@@ -2,6 +2,7 @@
 #import "KDWorkbenchViewController.h"
 #import "KDSiteProtocol.h"
 #import "KDRedirectProtocol.h"
+#import "KDFiles.h"
 #import "BRURLProtocol.h"
 #import "BRHTTPRequest.h"
 #import "BRSettings.h"
@@ -54,8 +55,15 @@ static void KDWriteResult(NSString *name, NSString *text)
 //   mem, mem?relieve=1      WebKit's memory numbers (after freeing what can be freed), to tmp/eval.txt
 //   profile?secs=<s>&thread=<name>   samples a thread (default WebThread), to tmp/profile.txt
 //   reload                  loads the workbench again
+//   receive?file=<path>     takes a file of the app's home as another app's file ("Open in Kodium")
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
 {
+    // "Open in Kodium" from another app (Mail, Safari, Dropbox...): the file comes into Documents and opens
+    if (url.isFileURL) {
+        NSString *path = [self takeReceivedFile:url];
+        if (path) [(KDWorkbenchViewController *)self.window.rootViewController openReceivedFile:path];
+        return path != nil;
+    }
     if (![[url.scheme lowercaseString] isEqualToString:@"kodium"]) return NO;
     NSString *s = url.absoluteString ?: @"";
     NSString *target = [s substringFromIndex:MIN(s.length, url.scheme.length + 1)];
@@ -120,8 +128,43 @@ static void KDWriteResult(NSString *name, NSString *text)
         [workbench evaluateJavaScript:@"location.reload()"];
         return YES;
     }
+    if ([command isEqualToString:@"receive"]) {
+        NSString *file = q[@"file"];
+        if (![file hasPrefix:[NSHomeDirectory() stringByAppendingString:@"/"]]) return NO;
+        NSString *path = [self takeReceivedFile:[NSURL fileURLWithPath:file]];
+        if (path) [workbench openReceivedFile:path];
+        return YES;
+    }
     BRLog(@"Unknown command %@", command);
     return NO;
+}
+
+// A file another app gave: iOS puts it into Documents/Inbox, where the app may read and delete but not write. It goes
+// to Documents itself, the workspace, under a name of its own ("name 2.ext" when the name is taken); the path in
+// Documents ("/name.ext"), nil when it could not be taken.
+- (NSString *)takeReceivedFile:(NSURL *)url
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *source = url.path;
+    if (!source.length || ![fm fileExistsAtPath:source]) return nil;
+    NSString *documents = [KDFiles rootDirectory];
+    NSString *name = [source lastPathComponent];
+    NSString *stem = [name stringByDeletingPathExtension], *extension = [name pathExtension];
+    NSString *target = [documents stringByAppendingPathComponent:name];
+    for (NSInteger n = 2; [fm fileExistsAtPath:target] && n < 1000; n++) {
+        NSString *other = [NSString stringWithFormat:@"%@ %ld", stem, (long)n];
+        target = [documents stringByAppendingPathComponent:extension.length ? [other stringByAppendingPathExtension:extension] : other];
+    }
+    NSError *error = nil;
+    if (![fm moveItemAtPath:source toPath:target error:&error] && ![fm copyItemAtPath:source toPath:target error:&error]) {
+        BRLog(@"Receiving %@ failed: %@", name, error.localizedDescription);
+        return nil;
+    }
+    // (iOS made the Inbox for these: it goes once empty, not to show in the explorer)
+    NSString *inbox = [documents stringByAppendingPathComponent:@"Inbox"];
+    if ([[fm contentsOfDirectoryAtPath:inbox error:NULL] count] == 0) [fm removeItemAtPath:inbox error:NULL];
+    BRLog(@"Received %@ from another app", [target lastPathComponent]);
+    return [@"/" stringByAppendingString:[target lastPathComponent]];
 }
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions

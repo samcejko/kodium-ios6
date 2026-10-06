@@ -70,8 +70,9 @@ function bundleReport() {
       }
       const all = reach(null)
       const contributions = []
+      // (contributions, the extension host's main thread parts and chat's: modules imported for what they register)
       for (const id of all) {
-        if (!/\.contribution\.js$/.test(id)) continue
+        if (!/\.contribution\.js$|\/api\/browser\/mainThread\w+\.js$|\/[a-zA-Z]*[cC]hat\w*\.js$/.test(id.replace(/\\/g, '/'))) continue
         const without = reach(id)
         let only = 0
         for (const other of all) if (!without.has(other)) only += sizes.get(other) || 0
@@ -80,7 +81,7 @@ function bundleReport() {
       }
       const source = `Bundle before minifying: ${kb(total).trim()}, ${modules.length} modules\n\n` +
         `Packages\n${list(packages, 60)}\n\nParts of VS Code and other packages\n${list(areas, 150)}\n\n` +
-        `Contributions: what only each brings in\n${contributions.sort((a, b) => b[0] - a[0]).slice(0, 80).map(([n, k]) => kb(n) + '  ' + k).join('\n')}\n\n` +
+        `Contributions: what only each brings in\n${contributions.sort((a, b) => b[0] - a[0]).slice(0, 150).map(([n, k]) => kb(n) + '  ' + k).join('\n')}\n\n` +
         `Modules\n${modules.sort((a, b) => b[0] - a[0]).slice(0, 150).map(([n, k]) => kb(n) + '  ' + k).join('\n')}\n`
       this.emitFile({ type: 'asset', fileName: 'bundle-report.txt', source })
     }
@@ -193,13 +194,23 @@ function lazyExtensionHost() {
 }
 
 // Contributions the service overrides bring that Kodium has no use for yet (each is imported only for what it registers):
-// the merge editor (Git), call and type hierarchies (language servers), the refactoring preview and the search editor
+// the merge editor (Git), call and type hierarchies (language servers), the refactoring preview and the search editor;
+// VS Code's splash (Kodium has its own) and the "modern UI" (a setting that is off, with 14 stylesheets).
+// And the extension host's main thread parts of what an extension cannot do on the iPad - comments (pull requests),
+// tests, tasks, terminals, debugging, source control, CLI commands, tunnels, speech, sockets - and the editor tabs API,
+// which brings every kind of editor there is (chat, notebooks, the merge editor...) to tell tabs apart: half a megabyte.
+// They get an empty stand-in (web/src/exthost.ts): an extension that calls one of them gets an error from that call.
 const LEFT_OUT = [
   'vs/workbench/contrib/mergeEditor/browser/mergeEditor.contribution.js',
   'vs/workbench/contrib/callHierarchy/browser/callHierarchy.contribution.js',
   'vs/workbench/contrib/typeHierarchy/browser/typeHierarchy.contribution.js',
   'vs/workbench/contrib/bulkEdit/browser/preview/bulkEdit.contribution.js',
-  'vs/workbench/contrib/searchEditor/browser/searchEditor.contribution.js'
+  'vs/workbench/contrib/searchEditor/browser/searchEditor.contribution.js',
+  'vs/workbench/contrib/splash/browser/splash.contribution.js',
+  'vs/workbench/contrib/modernUI/browser/modernUI.contribution.js',
+  ...['EditorTabs', 'Comments', 'Testing', 'Task', 'TerminalService', 'TerminalShellIntegration', 'DebugService', 'SCM',
+      'CLICommands', 'TunnelService', 'Speech', 'ManagedSockets', 'DataChannels', 'Browsers']
+    .map((name) => 'vs/workbench/api/browser/mainThread' + name + '.js')
 ]
 function leaveOut() {
   return {

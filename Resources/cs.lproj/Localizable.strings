@@ -1,6 +1,8 @@
 /* Kodium - Czech */
 
 "The editor could not be loaded." = "Editor se nepodařilo načíst.";
+"No app can take this file." = "Tento soubor neumí převzít žádná aplikace.";
+"OK" = "OK";
 
 /* --- engine: Surfari's translations of the engine's messages, copied by tools/sync-engine.ps1 --- */
 "Cancelled" = "Zrušeno";
