@@ -513,10 +513,36 @@ static BOOL BRFindCodeClock(void)
     return YES;
 }
 
+// The pages' garbage collected in the user's pauses only (collectPageGarbageInPauses): JavaScriptCore's own timer is
+// kept quiet. It collects some seconds after a few megabytes were allocated - lastGCLength / (0.01 per megabyte, at
+// most 0.05): 6.6 s after 5 MB with Kodium's 0.33 s collections - which put a collection in the middle of every second
+// switch of editors even with the pauses' collections, when one switch had allocated a little less than they wait
+// for. With the last collection's length read as 30 s the timer waits 10 minutes; the length is set again after each
+// collection (the engine writes the real one) and at every keeper tick. The allocation limit still collects at once.
+static BOOL g_keepCode, g_ownGarbageTimer;
+static const double BRQuietCollectionLength = 30;
+
+static void BRQuietGarbageTimer(void)
+{
+    if (g_ownGarbageTimer && g_lastCodeDiscard) *(g_lastCodeDiscard - 1) = BRQuietCollectionLength;
+}
+
++ (void)startCodeKeeper
+{
+    if (!g_codeKeeper) g_codeKeeper = [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(keepPageCodeNow:) userInfo:nil repeats:YES];
+}
+
 + (void)keepPageCode
 {
-    if (g_codeKeeper || ![[NSUserDefaults standardUserDefaults] boolForKey:@"BRJSCKeepCode"]) return;
-    g_codeKeeper = [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(keepPageCodeNow:) userInfo:nil repeats:YES];
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"BRJSCKeepCode"]) return;
+    g_keepCode = YES;
+    [self startCodeKeeper];
+}
+
++ (void)collectPageGarbageInPauses
+{
+    g_ownGarbageTimer = YES;
+    [self startCodeKeeper];
 }
 
 static BRWebThreadRunFn BRWebThreadRunner(void)
@@ -562,11 +588,15 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
     run(^{
         size_t allocated, limit;
         double length;
+        if (!BRFindCodeClock()) return;
+        BRQuietGarbageTimer();
         if (!BRPageHeapBudget(&allocated, &limit, &length) || allocated < bytes) return;
         NSTimeInterval t0 = [NSDate timeIntervalSinceReferenceDate];
         ((void (*)(id, SEL))objc_msgSend)(stats, collect);
+        double took = [NSDate timeIntervalSinceReferenceDate] - t0;
+        BRQuietGarbageTimer();
         BRLog(@"Pages' garbage collected in a pause: %.1f of %.1f MB had been allocated, %ld ms", allocated / 1048576.0,
-              limit / 1048576.0, (long)(([NSDate timeIntervalSinceReferenceDate] - t0) * 1000));
+              limit / 1048576.0, (long)(took * 1000));
     });
 }
 
@@ -592,6 +622,8 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
             dispatch_async(dispatch_get_main_queue(), ^{ [g_codeKeeper invalidate]; });
             return;
         }
+        BRQuietGarbageTimer();
+        if (!g_keepCode) return;
         if (critical) {
             if (!g_codeThrownForMemory) {
                 g_codeThrownForMemory = YES;

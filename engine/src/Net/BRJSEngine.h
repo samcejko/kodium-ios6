@@ -48,6 +48,10 @@ extern NSString * const BRJSEngineDidResetNotification;
 // few megabytes, 11 s after 5 MB; or at once when the allocations reach the heap's size) comes while the user pauses,
 // not in the middle of their next action (0.3-0.6 s). Needs keepPageCode (which finds the heap).
 + (void)collectPageGarbageIfAllocated:(size_t)bytes;
+// Main thread: the app collects the pages' garbage in the user's pauses (collectPageGarbageIfAllocated:), and
+// JavaScriptCore's own collection timer - which collected in the middle of actions - is kept quiet; the allocation
+// limit still collects when reached. Needs collectPageGarbageIfAllocated: to be called at the pauses.
++ (void)collectPageGarbageInPauses;
 // "X of Y MB allocated since the last collection (Z ms)", or nil (the WebThread or a thread holding the web lock)
 + (NSString *)pageHeapReport;
 // The WebThread, between scripts: the pages' compiled code thrown away now (memory relief; JavaScriptCore compiles
