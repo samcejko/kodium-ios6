@@ -61,6 +61,10 @@ The first build.
   synchronous request at every start (nothing in them needed it but Seti's "unset"), the settings' migrations look only
   at keys the settings have, the sash sizes no longer go into a <style> of CSS variables (each new stylesheet makes the
   old WebKit rebuild its rule sets from all of the page's rules), and the paste/drop kinds' schema is left out.
+- JSON with comments (themes, the file icons' theme, the languages' configurations, settings.json) is read by the
+  engine's JSON.parse once comments and trailing commas are taken out, instead of VS Code's scanner character by
+  character: 0.4 s less work after every start on the iPad 2 (16 documents). What JSON.parse cannot read still goes
+  to the scanner.
 - Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
   with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
   made again at every opening of the panel.

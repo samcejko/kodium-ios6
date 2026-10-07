@@ -580,6 +580,24 @@ function quickerStart() {
        '        !/var\\(|calc\\(|@supports|@container|:has\\(|:is\\(|:where\\(|display\\s*:\\s*(inline-)?(flex|grid)|clamp\\(|color-mix\\(/.test(styleSheetContent)) {\n' +
        '        styleSheetContent = "/*br*/" + styleSheetContent.replace(/:\\s*unset\\b/g, ": initial");\n' +
        '    }\n']]],
+    // (JSON with comments - themes, the Seti icon theme's 70 KB, the languages' configurations: 16 documents after every
+    // start - went through VS Code's own scanner, character by character: the comments and trailing commas out by
+    // regular expression and the engine's JSON.parse instead; whatever that cannot read, the scanner as before)
+    ['/vs/base/common/json.js', [
+      ['function parse(text, errors = [], options = ParseOptions.DEFAULT) {\n',
+       'const kdNoFast = {};\n' +
+       'function kdFastParse(text) {\n' +
+       '    try {\n' +
+       '        let clean = text.replace(/("(?:[^"\\\\]|\\\\.)*")|\\/\\*[\\s\\S]*?\\*\\/|\\/\\/[^\\n\\r]*/g, (m, str) => str !== undefined ? str : "");\n' +
+       '        clean = clean.replace(/("(?:[^"\\\\]|\\\\.)*")|,(\\s*[}\\]])/g, (m, str, close) => str !== undefined ? str : close);\n' +
+       '        return /\\S/.test(clean) ? JSON.parse(clean) : kdNoFast;\n' +
+       '    } catch (e) { return kdNoFast; }\n' +
+       '}\n' +
+       'function parse(text, errors = [], options = ParseOptions.DEFAULT) {\n' +
+       '    if (typeof text === "string" && options && options.allowTrailingComma && !options.disallowComments) {\n' +
+       '        const fast = kdFastParse(text);\n' +
+       '        if (fast !== kdNoFast) return fast;\n' +
+       '    }\n']]],
     ['/vs/base/browser/cssValue.js', [
       ['    return asFragment(strings.reduce((result, str, i) => {\n        const value = values[i] || "";\n        return result + str + value;\n    }, ""));',
        '    let result = "";\n    for (let i = 0; i < strings.length; i++) result += strings[i] + (values[i] || "");\n    return asFragment(result);'],
