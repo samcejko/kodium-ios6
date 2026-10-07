@@ -114,6 +114,8 @@ static void KDWriteResult(NSString *name, NSString *text)
         if ([q[@"relieve"] isEqualToString:@"1"]) [BRMemory relieve:@"requested"];
         NSString *report = [q[@"types"] isEqualToString:@"1"] ? [[BRMemory webKitReport] stringByAppendingFormat:@"\n%@", [BRMemory webKitTypesReport]]
                                                                : [BRMemory webKitReport];
+        NSString *budget = [BRJSEngine pageHeapReport];
+        if (budget) report = [report stringByAppendingFormat:@", %@", budget];
         KDWriteResult(@"eval.txt", report);
         BRLog(@"Memory report: %@", report);
         return YES;

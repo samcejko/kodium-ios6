@@ -2,6 +2,7 @@
 #import "KDFiles.h"
 #import "BRCSSRewriter.h"
 #import "BRCommon.h"
+#import "BRJSEngine.h"
 
 NSString * const KDShareFileNotification = @"KDShareFileNotification";
 
@@ -118,6 +119,13 @@ static NSString *KDStylesheetCacheDirectory(void)
         dispatch_async(dispatch_get_main_queue(), ^{
             [[NSNotificationCenter defaultCenter] postNotificationName:KDShareFileNotification object:nil userInfo:q];
         });
+        [self deliverData:[NSData data] type:@"text/plain" status:200];
+        return;
+    }
+    // the workbench has had no input for a while (web/prelude/vsc-prelude.js): the garbage collection the next action
+    // would run into comes now, if half the engine's allocation budget is used (Surfari's engine)
+    if ([url.path isEqualToString:@"/__kd/app/idle"]) {
+        [BRJSEngine collectPageGarbageIfOver:0.5];
         [self deliverData:[NSData data] type:@"text/plain" status:200];
         return;
     }

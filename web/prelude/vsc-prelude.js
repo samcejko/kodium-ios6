@@ -62,9 +62,22 @@
     // VS Code's background work (the rest of a file's tokens, values made when first wanted) asks for idle time. The
     // engine gives it a timer 1 ms later and 50 ms to spend - right after every key, so the next key waited behind it
     // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s, or when its own timeout is up.
+    // The engine's garbage collection while the user pauses, too: JavaScriptCore collects when the allocations since
+    // its last collection reach the heap's size (25 MB in the workbench: every second or third switch of editors, and
+    // 0.6 s inside it). 1.5 s after the last input the app is asked to collect now if half of that is used (Surfari's
+    // engine, KDSiteProtocol /__kd/app/idle; only on the iOS 6 engine).
     (function () {
-        var last = 0, queue = [], timer = null, nextId = 1;
-        var noteInput = function () { last = Date.now(); };
+        var last = 0, queue = [], timer = null, nextId = 1, pause = null;
+        var paused = function () {
+            pause = null;
+            var quiet = Date.now() - last;
+            if (quiet < 1500) { pause = setTimeout(paused, 1500 - quiet); return; }
+            try { var x = new XMLHttpRequest(); x.open('GET', '/__kd/app/idle', true); x.send(null); } catch (e) {}
+        };
+        var noteInput = function () {
+            last = Date.now();
+            if (!pause && G.__brNative) pause = setTimeout(paused, 1500);
+        };
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
         for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);
         var schedule = function () {

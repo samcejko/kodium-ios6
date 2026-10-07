@@ -3,6 +3,7 @@
 #import "BRMemory.h"
 
 #include <dlfcn.h>
+#include <objc/message.h>
 #include <libkern/OSAtomic.h>
 #include <malloc/malloc.h>
 #include <mach-o/dyld.h>
@@ -518,11 +519,60 @@ static BOOL BRFindCodeClock(void)
     g_codeKeeper = [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(keepPageCodeNow:) userInfo:nil repeats:YES];
 }
 
-+ (void)keepPageCodeNow:(NSTimer *)timer
+static BRWebThreadRunFn BRWebThreadRunner(void)
 {
     static BRWebThreadRunFn run;
     static dispatch_once_t once;
     dispatch_once(&once, ^{ run = (BRWebThreadRunFn)dlsym(RTLD_DEFAULT, "WebThreadRun"); });
+    return run;
+}
+
+// The pages' allocation budget, from the heap keepPageCode found. iOS 6.1's Heap starts with its kind, the minimum
+// per cycle (8 MB for the pages' heap), its size after the last collection, the limit (the larger of the two: the
+// allocation that crosses it collects at once, wherever the page is) and the bytes allocated since; the length of the
+// last collection is the double before the clock. Read only where they look like that.
+static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLength)
+{
+    if (!g_codeHeap || !g_lastCodeDiscard) return NO;
+    const size_t *fields = (const size_t *)g_codeHeap;
+    size_t minimum = fields[1], sizeAfter = fields[2], cap = fields[3], used = fields[4];
+    if ((minimum != 0x800000 && minimum != 0x80000) || cap != MAX(sizeAfter, minimum) || used > 16 * cap) return NO;
+    double length = *(g_lastCodeDiscard - 1);
+    if (!(length >= 0 && length < 120)) return NO;
+    *allocated = used;
+    *limit = cap;
+    *lastLength = length;
+    return YES;
+}
+
++ (NSString *)pageHeapReport
+{
+    size_t allocated, limit;
+    double length;
+    if (!BRPageHeapBudget(&allocated, &limit, &length)) return nil;
+    return [NSString stringWithFormat:@"%.1f of %.1f MB allocated since the last collection (%.0f ms)", allocated / 1048576.0, limit / 1048576.0, length * 1000];
+}
+
++ (void)collectPageGarbageIfOver:(double)fraction
+{
+    BRWebThreadRunFn run = BRWebThreadRunner();
+    Class stats = NSClassFromString(@"WebCoreStatistics");
+    SEL collect = NSSelectorFromString(@"garbageCollectJavaScriptObjects");
+    if (!run || ![stats respondsToSelector:collect]) return;
+    run(^{
+        size_t allocated, limit;
+        double length;
+        if (!BRPageHeapBudget(&allocated, &limit, &length) || allocated < fraction * limit) return;
+        NSTimeInterval t0 = [NSDate timeIntervalSinceReferenceDate];
+        ((void (*)(id, SEL))objc_msgSend)(stats, collect);
+        BRLog(@"Pages' garbage collected in a pause: %.1f of %.1f MB had been allocated, %ld ms", allocated / 1048576.0,
+              limit / 1048576.0, (long)(([NSDate timeIntervalSinceReferenceDate] - t0) * 1000));
+    });
+}
+
++ (void)keepPageCodeNow:(NSTimer *)timer
+{
+    BRWebThreadRunFn run = BRWebThreadRunner();
     if (!run) { [g_codeKeeper invalidate]; return; }
     BOOL critical = [BRMemory level] >= BRMemoryLevelCritical;
     run(^{

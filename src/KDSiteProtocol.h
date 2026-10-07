@@ -7,7 +7,8 @@
 // Documents folder (KDFiles). What the engine answers on a page's own host (/__br_polyfills-<crc>.js,
 // /__br_inline-<name>.js) stays with BRURLProtocol. https://preview.kodium.invalid/ is the Documents as a web site of
 // its own, for the preview of a page. /__kd/app/share?path=<path in Documents>&x=&y=&w=&h= asks the app to share a file
-// (KDShareFileNotification on the main thread, with the query as userInfo).
+// (KDShareFileNotification on the main thread, with the query as userInfo). /__kd/app/idle tells that the workbench has
+// had no input for a while (BRJSEngine collectPageGarbageIfOver:).
 extern NSString * const KDShareFileNotification;
 
 @interface KDSiteProtocol : NSURLProtocol
