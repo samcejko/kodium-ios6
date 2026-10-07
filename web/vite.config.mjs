@@ -505,6 +505,21 @@ function leaveOut() {
   }
 }
 
+// The start: Kodium registers monaco's 31 Monarch languages one by one (src/languages.ts), and every registration had
+// the languages' registry made again from all languages so far and the settings' schema told of all of them as
+// override identifiers - 651 language merges and 31 schema updates (0.9 s of a profiled start). Registered together
+// now, with one change event (ModesRegistry.kdRegisterLanguages).
+function quickerStart() {
+  return patchModules('kodium-quicker-start', [
+    ['/vs/editor/common/languages/modesRegistry.js', [
+      ['        this._languages.push(def);\n        this._onDidChangeLanguages.fire(undefined);',
+       '        this._languages.push(def);\n        if (!this.kdBatch) this._onDidChangeLanguages.fire(undefined);'],
+      ['    getLanguages() {',
+       '    kdRegisterLanguages(defs) {\n        this.kdBatch = true;\n        try { return defs.map((def) => this.registerLanguage(def)); }\n' +
+       '        finally { this.kdBatch = false; this._onDidChangeLanguages.fire(undefined); }\n    }\n    getLanguages() {']]]
+  ])
+}
+
 // Modules that came into the bundle for a constant, or for something the iPad never gets to (scratchpad graph analysis,
 // what each module alone brings in): every one of them is parsed and run at each start, and kept in memory.
 // - the diff editor's accessibility help asked the editor's (which nothing registers) whether comments are there: it
@@ -575,7 +590,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

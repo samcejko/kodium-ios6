@@ -6,6 +6,7 @@
 import { editor, languages } from 'monaco-editor'
 import { getService, IThemeService } from '@codingame/monaco-vscode-api/services'
 import { TokenizationRegistry } from '@codingame/monaco-vscode-api/vscode/vs/editor/common/languages'
+import { ModesRegistry } from '@codingame/monaco-vscode-api/vscode/vs/editor/common/languages/modesRegistry'
 import { Color } from '@codingame/monaco-vscode-api/vscode/vs/base/common/color'
 import { generateTokensCSSForColorMap } from '@codingame/monaco-vscode-api/vscode/vs/editor/common/languages/supports/tokenization'
 
@@ -158,11 +159,16 @@ export async function registerLanguages(): Promise<void> {
       get(this: VSCodeTheme) { return this.__kdTokenTheme || (this.__kdTokenTheme = makeTokenTheme(this)) }
     })
   }
+  // (all at once: one by one, each had the languages' registry and the settings' schema made again for all so far -
+  // see quickerStart in vite.config.mjs)
+  const registry = ModesRegistry as unknown as { kdRegisterLanguages?: (defs: languages.ILanguageExtensionPoint[]) => void }
+  const points = DEFINITIONS.map(({ load: _load, ...point }) => point)
+  if (registry.kdRegisterLanguages) registry.kdRegisterLanguages(points)
+  else points.forEach((point) => languages.register(point))
   for (const def of DEFINITIONS) {
-    const { load, ...point } = def
+    const { load } = def
     let loading: Promise<Grammar> | undefined
     const grammar = () => (loading ??= load())
-    languages.register(point)
     languages.registerTokensProviderFactory(def.id, { create: async () => (await grammar()).language })
     languages.onLanguageEncountered(def.id, async () => { languages.setLanguageConfiguration(def.id, (await grammar()).conf) })
   }

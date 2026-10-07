@@ -55,6 +55,9 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- The workbench starts another 0.35 s sooner: Kodium's 31 Monarch languages are registered together. One by one,
+  each made VS Code build its languages' registry again from all languages so far and tell the settings' schema of
+  all of them again (651 language merges, 31 schema updates).
 - The workbench starts another 0.6 s sooner (13.7 s on the iPad 2): every class of the bundle got its methods (40 000)
   and its prototype (2 500) through core-js's Object.defineProperty and Object.create - its symbol polyfill's, which
   converts every key and lists a property map's symbols. The page's prelude gives the lowered code's class helpers
