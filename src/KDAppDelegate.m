@@ -54,7 +54,8 @@ static void KDWriteResult(NSString *name, NSString *text)
 //   eval?js=<code>          the workbench page's answer, to tmp/eval.txt
 //   snapshot / screen       the screen to tmp/screen.png (drawn from the layers / the system's own grab)
 //   mem, mem?relieve=1      WebKit's memory numbers (after freeing what can be freed), to tmp/eval.txt; types=1 adds
-//                           the page's objects by kind (walks the whole heap)
+//                           the page's objects by kind (walks the whole heap); discard=1 throws the compiled code away
+//                           (what keeping it costs: the log)
 //   profile?secs=<s>&thread=<name>   samples a thread (default WebThread), to tmp/profile.txt
 //   reload                  loads the workbench again
 //   receive?file=<path>     takes a file of the app's home as another app's file ("Open in Kodium")
@@ -112,6 +113,7 @@ static void KDWriteResult(NSString *name, NSString *text)
     }
     if ([command isEqualToString:@"mem"]) {
         if ([q[@"relieve"] isEqualToString:@"1"]) [BRMemory relieve:@"requested"];
+        if ([q[@"discard"] isEqualToString:@"1"]) [self discardCompiledCode];
         NSString *report = [q[@"types"] isEqualToString:@"1"] ? [[BRMemory webKitReport] stringByAppendingFormat:@"\n%@", [BRMemory webKitTypesReport]]
                                                                : [BRMemory webKitReport];
         NSString *budget = [BRJSEngine pageHeapReport];
@@ -253,6 +255,22 @@ static void KDWriteResult(NSString *name, NSString *text)
     SEL giveBack = NSSelectorFromString(@"returnFreeMemoryToSystem");
     if (!run || ![stats respondsToSelector:giveBack]) return;
     run(^{ ((void (*)(id, SEL))objc_msgSend)(stats, giveBack); });
+}
+
+// (diagnosis: what keeping the compiled code costs - kodium:mem?discard=1 throws it away, and WebKit's free memory back
+// to the system; the log says the resident memory before and after)
+- (void)discardCompiledCode
+{
+    void (*run)(void (^)(void)) = (void (*)(void (^)(void)))dlsym(RTLD_DEFAULT, "WebThreadRun");
+    if (!run) return;
+    long before = (long)BRResidentMemoryMB();
+    run(^{
+        BOOL done = [BRJSEngine discardPageCode];
+        Class stats = NSClassFromString(@"WebCoreStatistics");
+        SEL giveBack = NSSelectorFromString(@"returnFreeMemoryToSystem");
+        if ([stats respondsToSelector:giveBack]) ((void (*)(id, SEL))objc_msgSend)(stats, giveBack);
+        BRLog(@"Compiled code %@: %ld -> %ld MB", done ? @"thrown away" : @"not found", before, (long)BRResidentMemoryMB());
+    });
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application

@@ -50,6 +50,9 @@ extern NSString * const BRJSEngineDidResetNotification;
 + (void)collectPageGarbageIfAllocated:(size_t)bytes;
 // "X of Y MB allocated since the last collection (Z ms)", or nil (the WebThread or a thread holding the web lock)
 + (NSString *)pageHeapReport;
+// The WebThread, between scripts: the pages' compiled code thrown away now (memory relief; JavaScriptCore compiles
+// again what runs next). NO when keepPageCode found no heap.
++ (BOOL)discardPageCode;
 // Engine thread: the same once the engine has not been used for `seconds` and the process is above `minimumMB`
 // resident (0 = always). Heavy work leaves the heap large, which the other engines and the pages then lack.
 - (void)releaseWhenIdleFor:(NSTimeInterval)seconds aboveMB:(long)minimumMB;

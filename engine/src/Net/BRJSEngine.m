@@ -570,6 +570,14 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
     });
 }
 
++ (BOOL)discardPageCode
+{
+    if (!g_codeHeap || !g_discardAllCompiledCode) return NO;
+    g_discardAllCompiledCode(g_codeHeap);
+    *g_lastCodeDiscard = g_currentTime();
+    return YES;
+}
+
 + (void)keepPageCodeNow:(NSTimer *)timer
 {
     BRWebThreadRunFn run = BRWebThreadRunner();

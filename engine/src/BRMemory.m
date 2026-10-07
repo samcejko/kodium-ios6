@@ -514,6 +514,8 @@ static NSString *BRTopCounts(id set, NSUInteger limit)
     // iOS variant keeps the application caches that +empty would delete), then WebKit's free lists back to the system
     void (^webkit)(void) = ^{
         NSTimeInterval t0 = [NSDate timeIntervalSinceReferenceDate];
+        // (the pages' compiled code too, when the engine keeps it: BRJSEngine keepPageCode)
+        [BRJSEngine discardPageCode];
         BRCallClassVoid(@"WebCoreStatistics", @"garbageCollectJavaScriptObjects");
         BRCallClassVoid(@"WebCache", @"emptyInMemoryResources");
         BRCallClassVoid(@"WebCoreStatistics", @"returnFreeMemoryToSystem");
