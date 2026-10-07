@@ -23,7 +23,8 @@ The first build.
   minute after it last did, and the next action compiled again whatever it ran (a switch of editors took 1.8 s instead
   of 1.3). Surfari's engine keeps it while memory is plentiful (BRJSCKeepCode: 25 MB of bytecode and 3 MB of JIT code
   after a few minutes' use), lets JavaScriptCore throw it away again when memory gets tight, and throws it away at once
-  when it is critical or memory is relieved.
+  when it is critical or memory is relieved. What runs only once at the start (every module's top level, the
+  workbench's construction: 30 MB of bytecode and 7 MB of JIT code) is let go first, a minute after the start.
 - Switching between editors does less (0.68 s on the iPad 2 instead of 0.84, when no garbage collection falls in): the
   menus of the menu bar are made when it opens, not again at every switch; the editor's toolbar is made once per
   switch, not twice (once for the editor that was going); the window's title (which iOS does not show) is put together

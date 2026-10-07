@@ -521,6 +521,12 @@ static BOOL BRFindCodeClock(void)
 // collection (the engine writes the real one) and at every keeper tick. The allocation limit still collects at once.
 static BOOL g_keepCode, g_ownGarbageTimer;
 static const double BRQuietCollectionLength = 30;
+// (what runs once at the start - every module's top level, the workbench's construction - was compiled too, 30 MB of
+// bytecode and 7 MB of JIT code in Kodium: that is let go first, by JavaScriptCore itself at its first collection a
+// minute after the start - or thrown away at 3 minutes if none came - and only the code used after it is kept)
+static BOOL g_startupCodeGone;
+static double g_startClock;
+static CFAbsoluteTime g_keepSince;
 
 static void BRQuietGarbageTimer(void)
 {
@@ -536,6 +542,7 @@ static void BRQuietGarbageTimer(void)
 {
     if (![[NSUserDefaults standardUserDefaults] boolForKey:@"BRJSCKeepCode"]) return;
     g_keepCode = YES;
+    g_keepSince = CFAbsoluteTimeGetCurrent();
     [self startCodeKeeper];
 }
 
@@ -624,6 +631,19 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
         }
         BRQuietGarbageTimer();
         if (!g_keepCode) return;
+        if (!g_startupCodeGone) {
+            if (!g_startClock) g_startClock = *g_lastCodeDiscard;
+            if (*g_lastCodeDiscard != g_startClock) {
+                g_startupCodeGone = YES;
+                BRLog(@"JavaScriptCore code kept: the start's code was let go, what runs from now on is kept");
+            } else if (CFAbsoluteTimeGetCurrent() - g_keepSince > 180) {
+                g_startupCodeGone = YES;
+                g_discardAllCompiledCode(g_codeHeap);
+                *g_lastCodeDiscard = g_currentTime();
+                BRLog(@"JavaScriptCore code kept: the start's code thrown away, what runs from now on is kept");
+            }
+            return;
+        }
         if (critical) {
             if (!g_codeThrownForMemory) {
                 g_codeThrownForMemory = YES;
