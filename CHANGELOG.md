@@ -55,6 +55,15 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- The first seconds after the workbench appears are busy 1.5 s less (6.5 s of work instead of 8 on the iPad 2), so it
+  answers sooner: the icons' stylesheet no longer declares 1900 CSS variables (which iOS 6 does not have), it and the
+  Seti file icons' stylesheet are marked as rewritten for the engine instead of going through its CSS rewriter by a
+  synchronous request at every start (nothing in them needed it but Seti's "unset"), the settings' migrations look only
+  at keys the settings have, the sash sizes no longer go into a <style> of CSS variables (each new stylesheet makes the
+  old WebKit rebuild its rule sets from all of the page's rules), and the paste/drop kinds' schema is left out.
+- Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
+  with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
+  made again at every opening of the panel.
 - The command palette opens 50 ms sooner (0.70 s on the iPad 2 instead of 0.75, warm): its sort of the commands looked
   each one up in the history twice and compared labels with localeCompare in every one of its ~2600 comparisons; the
   history once per command now, and the labels' alphabetical order is kept while they stay the same.

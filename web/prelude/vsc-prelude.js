@@ -583,6 +583,27 @@
         VAssign.__vsc = true;
         G.__br_assignOwn = VAssign;
     }
+    // VS Code's StringBuilder - the HTML of every line the editor renders, at every keystroke, switch and scroll - ends
+    // in TextDecoder('UTF-16LE').decode of a Uint16Array of the characters. iOS 6 has no TextDecoder: the engine's polyfill
+    // pairs the bytes one by one and pushes each character into an array (15 000 pushes in a typing run). The
+    // characters as they are instead, String.fromCharCode in chunks; a text with a lone surrogate (which a decoder
+    // turns into U+FFFD) still goes to the polyfill.
+    var TD = G.TextDecoder;
+    if (TD && TD.prototype && typeof TD.prototype.decode === 'function' && !TD.prototype.decode.__vsc) {
+        var origDecode = TD.prototype.decode, fromCC = String.fromCharCode;
+        var loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+        var vDecode = function (input, options) {
+            if (input && input.BYTES_PER_ELEMENT === 2 && typeof input.subarray === 'function' && this.encoding === 'utf-16le' &&
+                !(options && options.stream) && !this.__dnf) {
+                var n = input.length, s = '', i = (n && !this.ignoreBOM && input[0] === 0xFEFF) ? 1 : 0;
+                for (; i < n; i += 8192) s += fromCC.apply(null, input.subarray(i, i + 8192 < n ? i + 8192 : n));
+                if (!loneSurrogate.test(s)) return s;
+            }
+            return origDecode.apply(this, arguments);
+        };
+        vDecode.__vsc = true;
+        TD.prototype.decode = vDecode;
+    }
     var OrigProps = G.__br_props;
     if (typeof OrigProps === 'function' && !OrigProps.__vsc && typeof nDP === 'function' && typeof nGOPD === 'function') {
         var VProps = function (t, e) {

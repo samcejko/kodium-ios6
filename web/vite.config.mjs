@@ -522,12 +522,70 @@ function leaveOut() {
   }
 }
 
+// Drop-downs as the iPad's own <select>, as VS Code has them on a Mac (and in the Settings editor on an iPad with pointer
+// events): its drawn one is a List widget with a <style> element of its own, made again whenever a view's toolbar is -
+// the Output's channel picker at every opening of the panel - and every new <style> made the old WebKit rebuild its
+// rule sets from all of the page's 5000 rules. The system's picker is the touch one, too.
+function nativeSelects() {
+  return patchModules('kodium-native-selects', [
+    ['/vs/base/browser/ui/selectBox/selectBox.js', [
+      ['        if (isMacintosh && !selectBoxOptions?.useCustomDrawn) {', '        if (true) {']]]
+  ])
+}
+
 // The start: Kodium registers monaco's 31 Monarch languages one by one (src/languages.ts), and every registration had
 // the languages' registry made again from all languages so far and the settings' schema told of all of them as
 // override identifiers - 651 language merges and 31 schema updates (0.9 s of a profiled start). Registered together
 // now, with one change event (ModesRegistry.kdRegisterLanguages).
+// And what the workbench does in the first seconds after it appears (VS Code's own log on the iPad 2: contributions of
+// 100-200 ms each): the settings' migrations inspected all ~100 old keys at every start, though the settings had none
+// of them - only the keys the settings have (all, with a language section in them); the sash sizes went into a <style>
+// of CSS variables, which the iOS 6 engine does not have - only a full rebuild of its rule sets (the sizes still reach
+// the sashes, in code); the schema of the paste/drop kinds (settings' suggestions) is left out.
 function quickerStart() {
   return patchModules('kodium-quicker-start', [
+    ['/vs/workbench/common/configuration.js', [
+      ['    async migrateConfigurations(migrations) {\n',
+       '    async migrateConfigurations(migrations) {\n' +
+       '        try {\n' +
+       '            const k = this.configurationService.keys();\n' +
+       '            const present = [...(k.user || []), ...(k.workspace || []), ...(k.workspaceFolder || []), ...(k.memory || [])];\n' +
+       '            if (!present.some((key) => key.startsWith("["))) {\n' +
+       '                migrations = migrations.filter((m) => present.some((key) => key === m.key || m.key.startsWith(key + ".")));\n' +
+       '            }\n' +
+       '        } catch (e) {}\n' +
+       '        if (!migrations.length) return;\n']]],
+    ['/vs/workbench/contrib/sash/browser/sash.js', [
+      ['        this.styleSheet = createStyleSheet();', '        this.styleSheet = { textContent: "" };']]],
+    // (the icons' stylesheet, 950 icons: each also got two CSS variables in one :root rule of 1900 declarations, which
+    // the iOS 6 engine parses and drops - not made; and the CSS helpers it calls 8000 times without reduce and spread)
+    ['/vs/platform/theme/browser/iconsStyleSheet.js', [
+      ['                const fontFamilyVar = inline`--vscode-icon-${className(contribution.id)}-font-family`;\n' +
+       '                const contentVar = inline`--vscode-icon-${className(contribution.id)}-content`;\n', ''],
+      ['                    rootAttribs.push(\n                        inline`${fontFamilyVar}: ${stringValue(fontContribution.id)};`,\n' +
+       '                        inline`${contentVar}: ${stringValue(definition.fontCharacter)};`\n                    );\n', ''],
+      ["                    rootAttribs.push(\n                        inline`${contentVar}: ${stringValue(definition.fontCharacter)}; ${fontFamilyVar}: 'codicon';`\n                    );\n", ''],
+      ['            rules.push(inline`:root, :host { ${rootAttribs.join(" ")} }`);\n', '']]],
+    // (every <style> VS Code writes goes through the engine's CSS rewriter, a big one by a synchronous request to the
+    // app - the icons' 50 KB and the file icons' 95 KB after every start. Kodium's own icons and Seti's file icons have
+    // nothing the rewriter changes (it compacts the white space, and makes Seti's "unset" "initial"): marked as
+    // rewritten (/*br*/), which the engine's shim leaves alone; another icon theme still goes through it)
+    ['/vs/workbench/services/themes/browser/workbenchThemeService.js', [
+      ['            codiconStyleSheet.textContent = iconsStyleSheet.getCSS();',
+       '            const css = iconsStyleSheet.getCSS();\n' +
+       '            codiconStyleSheet.textContent = css.indexOf("@font-face") < 0 && css.indexOf("var(") < 0 ? "/*br*/" + css : css;'],
+      ['function _applyRules(styleSheetContent, rulesClassName) {\n',
+       'function _applyRules(styleSheetContent, rulesClassName) {\n' +
+       '    if (rulesClassName === "contributedFileIconTheme" && styleSheetContent.indexOf("seti") >= 0 &&\n' +
+       '        !/var\\(|calc\\(|@supports|@container|:has\\(|:is\\(|:where\\(|display\\s*:\\s*(inline-)?(flex|grid)|clamp\\(|color-mix\\(/.test(styleSheetContent)) {\n' +
+       '        styleSheetContent = "/*br*/" + styleSheetContent.replace(/:\\s*unset\\b/g, ": initial");\n' +
+       '    }\n']]],
+    ['/vs/base/browser/cssValue.js', [
+      ['    return asFragment(strings.reduce((result, str, i) => {\n        const value = values[i] || "";\n        return result + str + value;\n    }, ""));',
+       '    let result = "";\n    for (let i = 0; i < strings.length; i++) result += strings[i] + (values[i] || "");\n    return asFragment(result);'],
+      ['        this._parts.push(...parts);', '        for (let i = 0; i < parts.length; i++) this._parts.push(parts[i]);']]],
+    ['/vs/workbench/contrib/dropOrPasteInto/browser/dropOrPasteInto.contribution.js', [
+      ['registerWorkbenchContribution2(\n    DropOrPasteSchemaContribution.ID,\n    DropOrPasteSchemaContribution,\n    WorkbenchPhase.Eventually\n);', '']]],
     ['/vs/editor/common/languages/modesRegistry.js', [
       ['        this._languages.push(def);\n        this._onDidChangeLanguages.fire(undefined);',
        '        this._languages.push(def);\n        if (!this.kdBatch) this._onDidChangeLanguages.fire(undefined);'],
@@ -607,7 +665,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

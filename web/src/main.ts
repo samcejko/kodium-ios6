@@ -76,6 +76,8 @@ import { DOCUMENTS, registerAppFolders } from './files'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
 // service with it, a seventh of the bundle, for one Uri.file)
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
+import { Registry } from '@codingame/monaco-vscode-api/vscode/vs/platform/registry/common/platform'
+import { Extensions as WorkbenchExtensions } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/contributions'
 
 declare global {
   interface Window {
@@ -234,6 +236,14 @@ async function start() {
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
   const commands = await getService(ICommandService)
   ;(window as { __kd_commands?: unknown }).__kd_commands = (id: string, ...args: unknown[]) => commands.executeCommand(id, ...args)
+  // (and the time each of the workbench's contributions took to create, by phase - what VS Code's Startup Performance
+  // view shows: [[id, ms], ...] for phases 1-4)
+  ;(window as { __kd_contribTimes?: unknown }).__kd_contribTimes = () => {
+    const timings = (Registry.as(WorkbenchExtensions.Workbench) as unknown as { timings: Map<number, [string, number][]> }).timings
+    const out: Record<string, [string, number][]> = {}
+    timings.forEach((list, phase) => { out[phase] = list.slice() })
+    return out
+  }
 }
 
 start().catch((e) => {
