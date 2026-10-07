@@ -62,7 +62,9 @@
 
     // VS Code's background work (the rest of a file's tokens, values made when first wanted) asks for idle time. The
     // engine gives it a timer 1 ms later and 50 ms to spend - right after every key, so the next key waited behind it
-    // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s, or when its own timeout is up.
+    // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s and the page itself is idle (three
+    // timers of 10 ms in a row came on time: between the steps of a switch of editors the storage's flush of every
+    // component's state ran, 100 ms), or when its own timeout is up.
     // The engine's garbage collection while the user pauses, too: JavaScriptCore collects on a timer some seconds after
     // a few megabytes were allocated (11 s after 5 MB), and at once when the allocations reach the heap's size - in
     // the middle of the next action as often as not, 0.3-0.6 s in the workbench. Once nothing was typed or touched for
@@ -89,12 +91,18 @@
         G.__kd_afterStart = noteInput;
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
         for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);
-        var schedule = function () {
-            if (!timer) timer = setTimeout(run, Math.max(10, 200 - (Date.now() - last)));
+        var runDue = 0, calm = 0;
+        var schedule = function (ms) {
+            if (timer) return;
+            var delay = ms !== undefined ? ms : Math.max(10, 200 - (Date.now() - last));
+            runDue = Date.now() + delay;
+            timer = setTimeout(run, delay);
         };
         var run = function () {
             timer = null;
             var now = Date.now(), quiet = now - last >= 200, list = queue, start = now;
+            calm = now - runDue <= 15 ? calm + 1 : 0;
+            var ready = quiet && calm >= 3;
             queue = [];
             var idle = { didTimeout: false, timeRemaining: function () { return Math.max(0, 50 - (Date.now() - start)); } };
             var late = { didTimeout: true, timeRemaining: function () { return 0; } };
@@ -102,10 +110,11 @@
                 var it = list[k];
                 if (it.off) continue;
                 var overdue = it.until && now >= it.until;
-                if (!quiet && !overdue) { queue.push(it); continue; }
-                try { it.cb(quiet ? idle : late); } catch (e) { setTimeout(function () { throw e; }, 0); }
+                if (!ready && !overdue) { queue.push(it); continue; }
+                try { it.cb(ready ? idle : late); } catch (e) { setTimeout(function () { throw e; }, 0); }
             }
-            if (queue.length) schedule();
+            if (queue.length) schedule(quiet ? 10 : undefined);
+            else calm = 0;
         };
         G.requestIdleCallback = function (cb, opts) {
             var id = nextId++;

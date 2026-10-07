@@ -36,7 +36,9 @@ The first build.
   allocated - 0.3-0.6 s, inside every second or third switch of editors. Surfari's engine reads the heap's budget
   (BRJSEngine collectPageGarbageIfAllocated:) and collects once 4 MB were allocated, and JavaScriptCore's own timer
   is kept quiet (it still collected in every second switch, 0.65-0.9 s becoming 1.2-1.6 s); the allocation limit still
-  collects when reached, and the start's garbage is collected once the workbench is up and the page idle.
+  collects when reached, and the start's garbage is collected once the workbench is up and the page idle. VS Code's
+  background work also waits until the page is idle, not only 0.2 s after the last touch: the storage's flush of every
+  component's state (every minute, 100 ms) ran between the steps of a switch of editors.
 - Settings, Keyboard Shortcuts and an extension's page open as tabs again, not in VS Code's new overlay
   (workbench.editor.useModal: off): the overlay is an editor area of its own, made at every opening and thrown away
   with the editor in it at closing - the Settings editor took 7 s every time. In a tab it stays made, and opens again
