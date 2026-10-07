@@ -553,7 +553,7 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
     return [NSString stringWithFormat:@"%.1f of %.1f MB allocated since the last collection (%.0f ms)", allocated / 1048576.0, limit / 1048576.0, length * 1000];
 }
 
-+ (void)collectPageGarbageIfOver:(double)fraction
++ (void)collectPageGarbageIfAllocated:(size_t)bytes
 {
     BRWebThreadRunFn run = BRWebThreadRunner();
     Class stats = NSClassFromString(@"WebCoreStatistics");
@@ -562,7 +562,7 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
     run(^{
         size_t allocated, limit;
         double length;
-        if (!BRPageHeapBudget(&allocated, &limit, &length) || allocated < fraction * limit) return;
+        if (!BRPageHeapBudget(&allocated, &limit, &length) || allocated < bytes) return;
         NSTimeInterval t0 = [NSDate timeIntervalSinceReferenceDate];
         ((void (*)(id, SEL))objc_msgSend)(stats, collect);
         BRLog(@"Pages' garbage collected in a pause: %.1f of %.1f MB had been allocated, %ld ms", allocated / 1048576.0,

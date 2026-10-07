@@ -122,10 +122,11 @@ static NSString *KDStylesheetCacheDirectory(void)
         [self deliverData:[NSData data] type:@"text/plain" status:200];
         return;
     }
-    // the workbench has had no input for a while (web/prelude/vsc-prelude.js): the garbage collection the next action
-    // would run into comes now, if half the engine's allocation budget is used (Surfari's engine)
+    // the workbench has had no input for a while (web/prelude/vsc-prelude.js): the garbage collection JavaScriptCore
+    // would run some seconds later - in the middle of the next action, as often as not - comes now, once 4 MB were
+    // allocated since the last one (Surfari's engine)
     if ([url.path isEqualToString:@"/__kd/app/idle"]) {
-        [BRJSEngine collectPageGarbageIfOver:0.5];
+        [BRJSEngine collectPageGarbageIfAllocated:4 * 1024 * 1024];
         [self deliverData:[NSData data] type:@"text/plain" status:200];
         return;
     }

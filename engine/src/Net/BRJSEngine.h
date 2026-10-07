@@ -43,10 +43,11 @@ extern NSString * const BRJSEngineDidResetNotification;
 // Main thread: keeps the compiled code of the pages' scripts while memory allows, if BRJSCKeepCode is set (JavaScriptCore
 // throws it away a minute after it last did, and the next action compiles everything again; see BRJSEngine.m).
 + (void)keepPageCode;
-// Any thread: the pages' garbage collected now (on the WebThread, between scripts) when at least `fraction` of their
-// heap's allocation budget is used - so that the collection the next allocations would cause in the middle of the
-// user's next action (0.5-0.6 s) comes while they pause. Needs keepPageCode (which finds the heap).
-+ (void)collectPageGarbageIfOver:(double)fraction;
+// Any thread: the pages' garbage collected now (on the WebThread, between scripts) when at least `bytes` were allocated
+// since the last collection - so that the collection JavaScriptCore would run anyway (its timer: some seconds after a
+// few megabytes, 11 s after 5 MB; or at once when the allocations reach the heap's size) comes while the user pauses,
+// not in the middle of their next action (0.3-0.6 s). Needs keepPageCode (which finds the heap).
++ (void)collectPageGarbageIfAllocated:(size_t)bytes;
 // "X of Y MB allocated since the last collection (Z ms)", or nil (the WebThread or a thread holding the web lock)
 + (NSString *)pageHeapReport;
 // Engine thread: the same once the engine has not been used for `seconds` and the process is above `minimumMB`
