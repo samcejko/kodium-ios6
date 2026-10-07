@@ -20,6 +20,25 @@
         if (re.__brRe && re.__brRe.flags !== undefined) return re.__brRe.flags;
         return (re.global ? 'g' : '') + (re.ignoreCase ? 'i' : '') + (re.multiline ? 'm' : '');
     };
+    // An app's page (window.__brLeanPage) keeps what was lowered, in its localStorage: the same expressions come at
+    // every start (Kodium's workbench: marked's \p{...} rules - with jsfix.js and the Unicode tables loaded into the page
+    // for them, 0.6 s of every start on the iPad 2)
+    var KEPT_KEY = 'brLoweredRegExps', kept = null, keptTimer = null;
+    var keptLowering = function (q) {
+        if (G.__brLeanPage !== true) return undefined;
+        if (kept === null) {
+            try { kept = JSON.parse(G.localStorage.getItem(KEPT_KEY) || '{}') || {}; } catch (e) { kept = {}; }
+        }
+        return hasOwnR.call(kept, q) ? kept[q] : undefined;
+    };
+    var keepLowering = function (q, out) {
+        if (G.__brLeanPage !== true || kept === null || typeof out !== 'string') return;
+        kept[q] = out;
+        if (!keptTimer) keptTimer = setTimeout(function () {
+            keptTimer = null;
+            try { G.localStorage.setItem(KEPT_KEY, JSON.stringify(kept)); } catch (e) {}
+        }, 2000);
+    };
     // jsfix.js (and the Unicode tables for \p{...}) from the app, once
     var unicodeLowering = function (tables) {
         var load = function (name) {
@@ -138,8 +157,10 @@
         }
         var unicode = function (q) {
             if (!(has('u') || has('v')) || !(NEEDS_UNICODE.test(q) || hasDot(q))) return q;
+            var hit = keptLowering(q);
+            if (hit !== undefined) return hit;
             if (!unicodeLowering(/\\[pP]\{/.test(q))) return null;
-            try { return G.JSFix.lowerUnicode(q); } catch (e) { return null; }
+            try { var out = G.JSFix.lowerUnicode(q); keepLowering(q, out); return out; } catch (e) { return null; }
         };
         if (has('s')) p = dotAll(p);
         if (/\(\?<[A-Za-z_$]/.test(p)) { var r = namedGroups(p); p = r.pattern; names = r.names; }

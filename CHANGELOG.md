@@ -12,7 +12,9 @@ The first build.
   A "suggest" key on the row above the keyboard shows suggestions and snippets where the caret is (Ctrl+Space).
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
-  now it is made of strings.
+  now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once
+  and kept (Surfari's regexp shim, for an app's page): the transpiler and its Unicode tables no longer load into the
+  workbench at every start (25 000 objects less in its heap).
 - Typing on the iPad 2 2.5 times quicker again (a key showed after 0.29-0.37 s with the IntelliSense of the last
   version, now 0.12-0.13 s), measured key by key with WebKit's profiler and the app's own sampler:
   - the engine's frame budget (meant for web pages that animate all the time) made every frame after one longer than
