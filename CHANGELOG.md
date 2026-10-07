@@ -30,8 +30,11 @@ The first build.
   - the engine's shims that look a web page over after every change (picture sizes, rows wider than the window, links
     to the page itself, :has() at every key) stay out of the workbench (window.__brLeanPage, Surfari's engine);
   - suggestions show once typing pauses for half a second (0.3 s brought them in the middle of words).
-- The command palette and other sorted lists sort faster (an ASCII string comparison in place of the engine's
-  localeCompare); VS Code's rules made at run time with nothing the engine lacks go into the page as they are, not
+- The command palette opens in 1.1-1.2 s once it was open (1.5 s before; the first time 3.7 s, from 5.1) and other
+  sorted lists sort faster: an ASCII string comparison in place of the engine's localeCompare, whose answers for
+  other strings (Czech labels) are kept; super.x of the lowered code reads the prototype chain with the engine's own
+  getOwnPropertyDescriptor, not core-js's (8000 times while the palette sorts). VS Code's rules made at run time
+  with nothing the engine lacks go into the page as they are, not
   through the stylesheet rewriter (a synchronous request to the app each); WebKit's free memory goes back to the system
   every 20 s while the app holds more than 200 MB. Developer commands: jsprofile (WebKit's JavaScript profiler on), mem
   with the page's layers and types=1; the lowered workbench comes in lines of 1000 characters, so that a profile or an

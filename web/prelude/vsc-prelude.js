@@ -46,9 +46,9 @@
     // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s, or when its own timeout is up.
     (function () {
         var last = 0, queue = [], timer = null, nextId = 1;
-        var mark = function () { last = Date.now(); };
+        var noteInput = function () { last = Date.now(); };
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
-        for (var i = 0; i < names.length; i++) document.addEventListener(names[i], mark, true);
+        for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);
         var schedule = function () {
             if (!timer) timer = setTimeout(run, Math.max(10, 200 - (Date.now() - last)));
         };
@@ -124,18 +124,29 @@
             if (c >= 48 && c <= 57) return 256 + c - 48;           // 0-9
             return c;                                              // the rest of ASCII, in its own order
         };
+        // (the engine's answers for the rest are kept: the same labels are sorted again every time the palette opens -
+        // in Czech, with their diacritics, 1500 of its 3800 comparisons)
+        var known = Object.create(null), knownCount = 0;
+        var slow = function (a, b, args) {
+            if (args.length > 1) return nativeCompare.apply(a, args);
+            var key = a + '\u0001' + b, r = known[key];
+            if (r !== undefined) return r;
+            if (knownCount > 30000) { known = Object.create(null); knownCount = 0; }
+            knownCount++;
+            return (known[key] = nativeCompare.call(a, b));
+        };
         String.prototype.localeCompare = function (that) {
             var a = String(this), b = String(that), n = Math.min(a.length, b.length), i, ca, cb, caseDiff = 0;
             for (i = 0; i < n; i++) {
                 ca = a.charCodeAt(i); cb = b.charCodeAt(i);
-                if (ca > 126 || cb > 126) return nativeCompare.apply(a, arguments);
+                if (ca > 126 || cb > 126) return slow(a, b, arguments);
                 if (ca === cb) continue;
                 var ra = rank(ca), rb = rank(cb);
                 if (ra !== rb) return ra < rb ? -1 : 1;
                 if (!caseDiff) caseDiff = ca > cb ? -1 : 1;        // (the same letter: lower case first)
             }
-            for (; i < a.length; i++) if (a.charCodeAt(i) > 126) return nativeCompare.apply(a, arguments);
-            for (; i < b.length; i++) if (b.charCodeAt(i) > 126) return nativeCompare.apply(a, arguments);
+            for (; i < a.length; i++) if (a.charCodeAt(i) > 126) return slow(a, b, arguments);
+            for (; i < b.length; i++) if (b.charCodeAt(i) > 126) return slow(a, b, arguments);
             if (a.length !== b.length) return a.length < b.length ? -1 : 1;
             return caseDiff;
         };
@@ -437,6 +448,21 @@
         };
         VInst.__vsc = true;
         G.__br_instanceof = VInst;
+    }
+    // super.x of the lowered code (__br_superGet) walks the prototype chain with Object.getOwnPropertyDescriptor -
+    // core-js's, with its checks for its symbols: 8000 times when the command palette sorts its commands. A string key
+    // takes the engine's own function (page-prelude.js keeps it as __brNative).
+    var OrigSuper = G.__br_superGet, nGOPD = G.__brNative && G.__brNative.getOwnPropertyDescriptor, protoOf = Object.getPrototypeOf;
+    if (typeof OrigSuper === 'function' && !OrigSuper.__vsc && typeof nGOPD === 'function') {
+        var VSuper = function (o, key, self) {
+            if (typeof key !== 'string') return OrigSuper(o, key, self);
+            for (var p = o; p; p = protoOf(p)) {
+                var d = nGOPD(p, key);
+                if (d) return d.get ? d.get.call(self) : d.value;
+            }
+        };
+        VSuper.__vsc = true;
+        G.__br_superGet = VSuper;
     }
     // the property names the bundle reads (G.__vsc_proxyNames, from <bundle>.names.js): accessors of the shared
     // prototype of get-only proxies, so a trap sees them
