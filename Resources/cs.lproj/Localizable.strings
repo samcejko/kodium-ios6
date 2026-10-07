@@ -5,6 +5,7 @@
 "OK" = "OK";
 /* the row of keys above the keyboard */
 "tab" = "tab";
+"suggest" = "návrhy";
 "undo" = "zpět";
 "redo" = "znovu";
 

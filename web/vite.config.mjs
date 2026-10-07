@@ -214,6 +214,20 @@ function smootherEditor() {
   ])
 }
 
+// The built-in language extensions bring their TextMate grammars, which Kodium never reads (no TextMate tokenizer here:
+// it needs WebAssembly; monaco's Monarch grammars colour the code): their files stay out of the app (1.6 MB), the
+// extensions' entries for them point at an empty document.
+function noGrammars() {
+  return {
+    name: 'kodium-no-grammars',
+    transform(code, id) {
+      if (!/\/@codingame\/monaco-vscode-[\w-]+-default-extension\/index\.js$/.test(id.replace(/\\/g, '/'))) return null
+      const out = code.replace(/new URL\('\.\/resources\/[^']+\.tmLanguage(?:\.json)?', import\.meta\.url\)\.toString\(\)/g, '"data:application/json,{}"')
+      return out === code ? null : { code: out, map: null }
+    }
+  }
+}
+
 // The extension host in the page starts only for an extension with code it can run: VS Code starts it at once
 // for any extension it hosts, the default themes and snippets included - 3.5 s and 14 MB more at every start on the
 // iPad 2, for nothing to run. Lazily, and counting only extensions with code, it starts when one is installed or
@@ -288,7 +302,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), noGrammars(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

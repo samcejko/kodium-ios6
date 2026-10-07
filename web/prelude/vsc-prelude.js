@@ -6,17 +6,35 @@
     G.__vsc_t0 = t0;
     var marks = G.__vsc_marks = G.__vsc_marks || [];
     var errors = G.__vsc_errors = [];
+    // (diagnosis: with localStorage 'kodium.profileStartup' = '1' and WebKit's profiler on - kodium:jsprofile, then
+    // kodium:reload - the start until the workbench is one profile, console.profiles)
+    var profiling = false;
+    try { profiling = !!G.localStorage && G.localStorage.getItem('kodium.profileStartup') === '1'; } catch (e0) {}
+    if (profiling) { try { console.profile('kd-startup'); } catch (e1) { profiling = false; } }
     var mark = G.__vsc_mark = function (name) {
         var line = name + ' @' + ((Date.now() - t0) / 1000).toFixed(1) + 's';
         marks.push(line);
         try { document.title = 'Kodium: ' + name; } catch (e) {}
         try { if (G.console && console.log) console.log('[vsc] ' + line); } catch (e2) {}
+        if (profiling && name === 'workbench') { profiling = false; try { console.profileEnd('kd-startup'); } catch (e3) {} }
     };
     G.addEventListener('error', function (e) {
         if (errors.length < 60) errors.push(String(e.message) + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')');
     }, false);
 
     if (typeof G.globalThis === 'undefined') G.globalThis = G;
+
+    // The address of a file next to the workbench's script (web/tools/lower.mjs puts this in place of Vite's two URL
+    // objects for each asset: the engine's URL takes 6 ms on the iPad 2). With href and toString, as the code reads it.
+    var assetBase = null;
+    G.__kdAsset = function (name) {
+        if (assetBase === null) {
+            var u = String((G.__vsc_meta && G.__vsc_meta.url) || G.location.href);
+            assetBase = u.slice(0, u.lastIndexOf('/') + 1);
+        }
+        var s = assetBase + name;
+        return { href: s, toString: function () { return s; } };
+    };
 
     // The engine's Number wrapper (Surfari's shims.js, the __brLean one) copies only the statics the iOS 6 engine lists
     // as own names, and that list lacks the ES1 constants: Number.POSITIVE_INFINITY was undefined, so the editor's

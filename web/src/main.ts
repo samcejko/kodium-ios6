@@ -37,6 +37,21 @@ import 'vscode/localExtensionHost'
 import '@codingame/monaco-vscode-theme-defaults-default-extension'
 // VS Code's file icons (Seti)
 import '@codingame/monaco-vscode-theme-seti-default-extension'
+// VS Code's built-in language extensions, for what they declare besides their TextMate grammars (Kodium colours with
+// monaco's Monarch grammars; the grammar files are left out of the build, see vite.config.mjs): the snippets (for,
+// foreach, log... in JavaScript and TypeScript, Markdown's, Java's, PHP's, Swift's, the shell's) and the full language
+// configurations (comments, brackets, indentation and Enter rules - a JSDoc comment goes on with the next line)
+import '@codingame/monaco-vscode-javascript-default-extension'
+import '@codingame/monaco-vscode-typescript-basics-default-extension'
+import '@codingame/monaco-vscode-markdown-basics-default-extension'
+import '@codingame/monaco-vscode-html-default-extension'
+import '@codingame/monaco-vscode-css-default-extension'
+import '@codingame/monaco-vscode-json-default-extension'
+import '@codingame/monaco-vscode-python-default-extension'
+import '@codingame/monaco-vscode-java-default-extension'
+import '@codingame/monaco-vscode-php-default-extension'
+import '@codingame/monaco-vscode-swift-default-extension'
+import '@codingame/monaco-vscode-shellscript-default-extension'
 // IntelliSense for JSON, CSS (SCSS, Less) and HTML: monaco's language services, each in a worker of its own that starts
 // when a file of its language is opened (they register for when the services run)
 import { jsonDefaults } from '@codingame/monaco-vscode-standalone-json-language-features'

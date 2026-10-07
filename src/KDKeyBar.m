@@ -66,7 +66,8 @@ static UIImage *KDKeyImage(BOOL pressed)
 // name, what the key shows (nil: the name itself)
 + (NSArray *)keys
 {
-    return @[ @[@"tab", L(@"tab")], @[@"left", @"←"], @[@"right", @"→"], @[@"up", @"↑"], @[@"down", @"↓"],
+    // (suggest: the editor's suggestions and snippets where the caret is, as Ctrl+Space - the on-screen keyboard has none)
+    return @[ @[@"tab", L(@"tab")], @[@"suggest", L(@"suggest")], @[@"left", @"←"], @[@"right", @"→"], @[@"up", @"↑"], @[@"down", @"↓"],
               @[@"{"], @[@"}"], @[@"("], @[@")"], @[@"["], @[@"]"], @[@"<"], @[@">"], @[@"="], @[@";"], @[@":"], @[@"\""], @[@"'"],
               @[@"/"], @[@"\\"], @[@"|"], @[@"&"], @[@"!"], @[@"?"], @[@"+"], @[@"-"], @[@"*"], @[@"_"], @[@"$"], @[@"#"],
               @[@"%"], @[@"`"], @[@"~"], @[@"^"], @[@"@"], @[@"undo", L(@"undo")], @[@"redo", L(@"redo")] ];

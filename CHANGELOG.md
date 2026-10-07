@@ -6,6 +6,13 @@ The changes of each Kodium version; the newest is at the top.
 
 The first build.
 
+- Snippets and full language configurations from VS Code's built-in language extensions: JavaScript, TypeScript,
+  Markdown, HTML, CSS, JSON, Python, Java, PHP, Swift and shell scripts (for, foreach, log...; a JSDoc comment closes
+  itself and goes on with " * " on Enter). Their TextMate grammars are left out of the app (Monarch colours the code).
+  A "suggest" key on the row above the keyboard shows suggestions and snippets where the caret is (Ctrl+Space).
+- The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
+  assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
+  now it is made of strings.
 - Typing on the iPad 2 2.5 times quicker again (a key showed after 0.29-0.37 s with the IntelliSense of the last
   version, now 0.12-0.13 s), measured key by key with WebKit's profiler and the app's own sampler:
   - the engine's frame budget (meant for web pages that animate all the time) made every frame after one longer than

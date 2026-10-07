@@ -94,8 +94,15 @@ function prepare(src) {
 // document's address: the page runs the bundle as an inline script (index.html), which has no src - those went to the
 // site's root. The bundle's address instead (window.__vsc_meta, set by the page).
 const VITE_ASSET_BASE = 'document.currentScript&&document.currentScript.tagName.toUpperCase()==="SCRIPT"&&document.currentScript.src||document.baseURI'
+// And each asset's address was two URL objects, new URL(""+new URL(file, base).href, <the script's src>): the engine's
+// URL (core-js's, in JavaScript) takes 6 ms a URL on the iPad 2, and the built-in extensions register their files when
+// the bundle starts - half a second of the start. The file's address made of strings instead (__kdAsset, vsc-prelude.js:
+// an object with href and toString, as the code reads them).
+const ASSET_URL = /new URL\(""\+new URL\("([^"]+)",__vsc_meta\.url\)\.href,([A-Za-z_$][\w$]*)&&\2\.tagName\.toUpperCase\(\)==="SCRIPT"&&\2\.src\|\|new URL\("assets\/workbench\.js",document\.baseURI\)\.href\)/g
+let assetURLs = 0
 const src = fs.readFileSync(input, 'utf8').split(VITE_ASSET_BASE).join('__vsc_meta.url')
-console.log('read', input, src.length, 'characters')
+  .replace(ASSET_URL, (_, file) => { assetURLs++; return '__kdAsset(' + JSON.stringify(file) + ')' })
+console.log('read', input, src.length, 'characters,', assetURLs, 'asset URLs made of strings')
 const text = prepare(src)
 acorn.parse(text, { ecmaVersion: 'latest', sourceType: 'script' })
 console.log('prepared text parses as a script', since())
