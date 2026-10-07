@@ -188,10 +188,9 @@ static void KDWriteResult(NSString *name, NSString *text)
     NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
     BRLog(@"Kodium %@ (%@) starting on %@ (iOS %@)", info[@"CFBundleShortVersionString"] ?: @"?", info[@"CFBundleVersion"] ?: @"?",
           [UIDevice currentDevice].model, [UIDevice currentDevice].systemVersion);
-    // The workbench's compiled code is kept until memory is tight: JavaScriptCore threw all of it away a minute after it
-    // last did, and the editor went back to the interpreter in the middle of typing (see BRJSEngine applyEngineTiers).
-    // (Compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2: more to compile again every minute.)
-    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ @"BRJSCKeepCode": @YES }];
+    // (the engine's own JIT thresholds: compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2. And
+    // JavaScriptCore's throwing all compiled code away every minute cannot be stopped safely: skipping
+    // FunctionExecutable::discardCode left stale code blocks behind, and the app crashed)
     [BRJSEngine applyEngineTiers];
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];

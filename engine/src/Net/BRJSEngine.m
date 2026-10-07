@@ -384,8 +384,6 @@ static void BRFindJSCSymbols(const char *const names[], void *found[], int count
     for (int k = 0; k < count; k++) if (!found[k]) found[k] = local[k];
 }
 
-static void BRKeepCompiledCode(void);
-
 + (void)applyEngineTiers
 {
     NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
@@ -414,48 +412,12 @@ static void BRKeepCompiledCode(void);
     if (mode >= 1) *candidates = 0;   // no function is small enough for the optimizing JIT
     if (mode >= 2) { *jitAfterWarmUp = INT32_MAX; *jitSoon = INT32_MAX; }   // (the maximum: never)
     // BRJSCWarmUp: the interpreter's count before the baseline JIT takes a function (an entry counts 15, a loop's
-    // round 1; JavaScriptCore's own 100). An app whose code mostly runs once or twice per touch or key - Kodium's
-    // workbench - otherwise stays interpreted for many of them.
+    // round 1; JavaScriptCore's own 100), for experiments. (Kodium's workbench typed slower with 30: JavaScriptCore
+    // throws compiled code away every minute, and there was more to compile again.)
     NSInteger warmUp = [d integerForKey:@"BRJSCWarmUp"];
     if (mode < 2 && warmUp > 0 && warmUp < 100000) { *jitAfterWarmUp = (int32_t)warmUp; if (*jitSoon > (int32_t)warmUp) *jitSoon = (int32_t)warmUp; }
     BRLog(@"JavaScriptCore tiers: mode %ld (optimizing JIT for functions up to %u -> %u instructions, baseline JIT after %d -> %d runs; %ld ms)",
           (long)mode, oldCandidates, *candidates, oldWarmUp, *jitAfterWarmUp, ms);
-    if (mode < 2 && [d boolForKey:@"BRJSCKeepCode"]) BRKeepCompiledCode();
-}
-
-// BRJSCKeepCode: JavaScriptCore throws all compiled code away at the first garbage collection a minute after it last
-// did (iOS 6's Heap::collect calls FunctionExecutable::discardCode for every function itself), and every function goes
-// back to the interpreter and is compiled again - a page that keeps running (an app's) pays for that every minute,
-// in the middle of whatever the user does. Kept while the iPad has memory to spare: the engine's function is replaced
-// (Cydia Substrate's MSHookFunction, when the app runs with it) by one that throws a function's code away only when
-// memory is tight - or in the first minutes after the launch, so that the code a page ran only to start goes.
-static void (*g_discardCode)(void *executable);
-static CFAbsoluteTime g_keepCodeFrom, g_discardCheckedAt;
-static BOOL g_discardAllowed = YES;
-static void BRDiscardCode(void *executable)
-{
-    // (called for every function at once: the level is looked at once a second)
-    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
-    if (now - g_discardCheckedAt > 1) {
-        g_discardCheckedAt = now;
-        g_discardAllowed = now < g_keepCodeFrom || [BRMemory level] >= BRMemoryLevelTight;
-    }
-    if (g_discardAllowed && g_discardCode) g_discardCode(executable);
-}
-
-static void BRKeepCompiledCode(void)
-{
-    void (*hook)(void *, void *, void **) = (void (*)(void *, void *, void **))dlsym(RTLD_DEFAULT, "MSHookFunction");
-    const char *names[] = { "__ZN3JSC18FunctionExecutable11discardCodeEv" };
-    void *found[1] = { NULL };
-    BRFindJSCSymbols(names, found, 1);
-    if (!hook || !found[0]) {
-        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no FunctionExecutable::discardCode" : @"no Cydia Substrate");
-        return;
-    }
-    g_keepCodeFrom = CFAbsoluteTimeGetCurrent() + 150;
-    hook(found[0], (void *)BRDiscardCode, (void **)&g_discardCode);
-    BRLog(@"JavaScriptCore: compiled code kept from 150 s after the launch until memory is tight");
 }
 
 // A bare JavaScriptCore context has no console, timers or globalThis; libraries expect them.
