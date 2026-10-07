@@ -6,8 +6,14 @@ The changes of each Kodium version; the newest is at the top.
 
 The first build.
 
-- Typing on the iPad 2 about 40 % quicker again (a key showed after 0.29-0.37 s with the IntelliSense of the last
-  version, now 0.15-0.22 s), measured key by key with WebKit's profiler and the app's own sampler:
+- Typing on the iPad 2 2.5 times quicker again (a key showed after 0.29-0.37 s with the IntelliSense of the last
+  version, now 0.12-0.13 s), measured key by key with WebKit's profiler and the app's own sampler:
+  - the engine's frame budget (meant for web pages that animate all the time) made every frame after one longer than
+    20 ms wait as long again - the editor's frames take 40-60 ms on the iPad 2; an app's page now draws at once;
+  - VS Code's background work (the rest of a file's tokens, values made when first wanted) runs once nothing was typed
+    or touched for 0.2 s, not 1 ms after every key with 50 ms to spend;
+  - the resize observer checks sizes in the page's frames: it found requestAnimationFrame only by the engine's prefixed
+    name and checked on a timer between frames, a layout of its own after every change;
   - positions in a line (the cursor, the scroll to it, indent guides) are computed, as VS Code does on other browsers,
     not measured in the page with a layout of it each time: VS Code does not trust its arithmetic on Safari, whose zoom
     changes the characters' widths (Kodium's page cannot be zoomed), and it took the font for proportional because

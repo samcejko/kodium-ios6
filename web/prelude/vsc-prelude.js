@@ -40,6 +40,43 @@
     // and the shims that look a web page over after every change for what it might need (picture sizes and sources,
     // rows wider than the window, links to the page itself, :has() at every keystroke): 15-20 ms after every key
     G.__brLeanPage = true;
+
+    // VS Code's background work (the rest of a file's tokens, values made when first wanted) asks for idle time. The
+    // engine gives it a timer 1 ms later and 50 ms to spend - right after every key, so the next key waited behind it
+    // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s, or when its own timeout is up.
+    (function () {
+        var last = 0, queue = [], timer = null, nextId = 1;
+        var mark = function () { last = Date.now(); };
+        var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
+        for (var i = 0; i < names.length; i++) document.addEventListener(names[i], mark, true);
+        var schedule = function () {
+            if (!timer) timer = setTimeout(run, Math.max(10, 200 - (Date.now() - last)));
+        };
+        var run = function () {
+            timer = null;
+            var now = Date.now(), quiet = now - last >= 200, list = queue, start = now;
+            queue = [];
+            var idle = { didTimeout: false, timeRemaining: function () { return Math.max(0, 50 - (Date.now() - start)); } };
+            var late = { didTimeout: true, timeRemaining: function () { return 0; } };
+            for (var k = 0; k < list.length; k++) {
+                var it = list[k];
+                if (it.off) continue;
+                var overdue = it.until && now >= it.until;
+                if (!quiet && !overdue) { queue.push(it); continue; }
+                try { it.cb(quiet ? idle : late); } catch (e) { setTimeout(function () { throw e; }, 0); }
+            }
+            if (queue.length) schedule();
+        };
+        G.requestIdleCallback = function (cb, opts) {
+            var id = nextId++;
+            queue.push({ id: id, cb: cb, until: opts && opts.timeout > 0 ? Date.now() + opts.timeout : 0 });
+            schedule();
+            return id;
+        };
+        G.cancelIdleCallback = function (id) {
+            for (var j = 0; j < queue.length; j++) if (queue[j].id === id) queue[j].off = true;
+        };
+    })();
     // and what the engine's rewriter finds in the styles VS Code inserts at run time (its theme, icons, token colours)
     // reaches the shims without the marker rules, variable users and deferred values, as for the stylesheet (see
     // web/tools/assemble-site.mjs): the variables pass went through them at every variable VS Code set. The variables

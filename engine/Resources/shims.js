@@ -74,7 +74,9 @@
         var schedule = function () {
             if (pending) return;
             pending = true;
-            var wait = lastCost > 20 ? lastEnd + lastCost - Date.now() : 0;
+            // (an app's page - window.__brLeanPage, see shims-extra.js - draws only in answer to the user: its next
+            // frame does not wait; Kodium's editor took 40-60 ms a frame, and the frame after it came that much later)
+            var wait = lastCost > 20 && window.__brLeanPage !== true ? lastEnd + lastCost - Date.now() : 0;
             if (wait > 0) window.setTimeout(function () { native.call(window, run); }, wait);
             else native.call(window, run);
         };

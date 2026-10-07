@@ -11,6 +11,13 @@
             keys: Object.keys, getOwnPropertyNames: Object.getOwnPropertyNames, stringify: window.JSON && JSON.stringify,
             propertyIsEnumerable: Object.prototype.propertyIsEnumerable }, writable: true, configurable: true });
     } catch (e) {}
+    // requestAnimationFrame by its standard name before the polyfills that take it when they load: the resize
+    // observer's found only the prefixed one and checked sizes on a 16 ms timer instead, between frames - a layout of
+    // its own after every change of the page. (shims.js puts its frame budget in front of it later.)
+    if (!window.requestAnimationFrame && window.webkitRequestAnimationFrame) {
+        window.requestAnimationFrame = window.webkitRequestAnimationFrame;
+        window.cancelAnimationFrame = window.webkitCancelAnimationFrame || window.webkitCancelRequestAnimationFrame;
+    }
 })();
 (function () {
     var releases = [], gone = false;
