@@ -55,6 +55,10 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- The workbench starts 0.8 s sooner (14.2 s on the iPad 2 instead of 15.0): the loops in the modules' top levels (the
+  key code tables first) made JavaScriptCore compile the whole bundle's top level with its JIT - code that runs once.
+  Each loop now runs in a little function of its own (tools/lower.mjs), and the bundle's top level stays interpreted,
+  no slower. (Found with a build that times every module's top level: KODIUM_MODTIMES=1.)
 - The workbench's script is 1 MB smaller (13.4 MB, 216 modules fewer to parse and run at every start and keep in
   memory): VS Code's modules came in for a constant or for what the iPad never gets to - Copilot's inline completions'
   views and models, the comment editor, dictation and chat's speech-to-text (all for the diff editor's accessibility

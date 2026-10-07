@@ -88,6 +88,26 @@ function bundleReport() {
   }
 }
 
+// A build for measuring the start only (KODIUM_MODTIMES=1 .\web\build.ps1): each module's code begins with __kdT(n), so
+// window.__kdTimes has when each module's top level began to run (pairs of n and Date.now()); dist/modtimes.json names
+// the modules. The time of a module is the gap to the next one.
+function moduleTimes() {
+  if (!process.env.KODIUM_MODTIMES) return null
+  const ids = []
+  return {
+    name: 'kodium-module-times',
+    transform(code, id) {
+      if (id.startsWith('\0') || !/\.(m?js|ts)$/.test(id.split('?')[0])) return null
+      ids.push(id.replace(/\\/g, '/'))
+      return { code: '__kdT(' + (ids.length - 1) + ');\n' + code, map: null }
+    },
+    renderChunk(code) {
+      return { code: 'var __kdTimes = window.__kdTimes = [], __kdT = function (i) { __kdTimes.push(i, Date.now()); };\n' + code, map: null }
+    },
+    generateBundle() { this.emitFile({ type: 'asset', fileName: 'modtimes.json', source: JSON.stringify(ids) }) }
+  }
+}
+
 // VS Code's delayed services are Proxies, which the iOS 6 engine lacks: the stand-in (vsc-prelude.js) needed an accessor
 // for every name the bundle reads (36,000 of them, two closures each) and one for every method of each such service. They
 // are created at once instead - which is what happens anyway on an engine without requestIdleCallback, where the
@@ -555,7 +575,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

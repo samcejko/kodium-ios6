@@ -90,6 +90,65 @@ function prepare(src) {
   return parts.reverse().join('')
 }
 
+// The loops of the bundle's biggest function - the IIFE in which every module's top level runs - each in a little
+// function of its own. JSC counts a function's loop iterations towards compiling it with its baseline JIT: about a
+// hundred of them in the modules' top levels (keyCodes' tables were the first) and it compiled the whole bundle's top
+// level, run once - 0.8 s of the start on the iPad 2, gone (the rest ran no slower without the JIT). The loop's own
+// declarations stay in the big function, where later code reads them. (After the minifier, which merges declarations
+// into a loop's head.)
+function loopsOutOfTheBigFunction(src) {
+  const ast = acorn.parse(src, { ecmaVersion: 5 })
+  const isFn = (n) => n && (n.type === 'FunctionExpression' || n.type === 'FunctionDeclaration')
+  const children = (n, f) => { for (const k in n) { const v = n[k]; if (Array.isArray(v)) v.forEach((c) => c && typeof c.type === 'string' && f(c)); else if (v && typeof v.type === 'string') f(v) } }
+  let big = null
+  const findBig = (n) => { if (isFn(n)) { if (!big || n.end - n.start > big.end - big.start) big = n; return } children(n, findBig) }
+  findBig(ast)
+  if (!big) return src
+  const LOOPS = new Set(['ForStatement', 'ForInStatement', 'WhileStatement', 'DoWhileStatement'])
+  const found = []
+  const findLoops = (n, parent) => {
+    if (n !== big && isFn(n)) return
+    if (LOOPS.has(n.type)) { found.push({ loop: n, target: parent && parent.type === 'LabeledStatement' ? parent : n }); return }
+    children(n, (c) => findLoops(c, n))
+  }
+  findLoops(big.body, null)
+  // (a loop stays where its body returns, reads arguments, or breaks to a label outside it)
+  const movable = (target) => {
+    let ok = true
+    const labels = new Set()
+    const check = (n) => {
+      if (!ok || isFn(n)) return
+      if (n.type === 'ReturnStatement' || (n.type === 'Identifier' && n.name === 'arguments')) ok = false
+      if (n.type === 'LabeledStatement') labels.add(n.label.name)
+      if ((n.type === 'BreakStatement' || n.type === 'ContinueStatement') && n.label && !labels.has(n.label.name)) ok = false
+      children(n, check)
+    }
+    check(target)
+    return ok
+  }
+  const edits = []
+  for (const { loop, target } of found) {
+    if (!movable(target)) continue
+    let before = '', text = src.slice(target.start, target.end)
+    const decl = loop.type === 'ForStatement' ? loop.init : loop.type === 'ForInStatement' ? loop.left : null
+    if (decl && decl.type === 'VariableDeclaration') {
+      if (loop.type === 'ForStatement') {
+        before = 'var ' + decl.declarations.map((d) => src.slice(d.start, d.end)).join(',') + ';'
+        text = src.slice(target.start, decl.start) + src.slice(decl.end, target.end)
+      } else {
+        before = 'var ' + decl.declarations[0].id.name + ';'
+        text = src.slice(target.start, decl.start) + decl.declarations[0].id.name + src.slice(decl.end, target.end)
+      }
+    }
+    edits.push([target.start, target.end, '{' + before + '(function(){' + text + '}).call(this);}'])
+  }
+  edits.sort((a, b) => b[0] - a[0])
+  let out = src
+  for (const [s, e, t] of edits) out = out.slice(0, s) + t + out.slice(e)
+  console.log('loops out of the big function:', edits.length, 'of', found.length, since())
+  return out
+}
+
 // Vite's IIFE output resolves its assets (the default themes' files, icons) against the running script's src, or the
 // document's address: the page runs the bundle as an inline script (index.html), which has no src - those went to the
 // site's root. The bundle's address instead (window.__vsc_meta, set by the page).
@@ -129,6 +188,8 @@ try {
   out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, minifySyntax: true, target: 'es5', charset: 'ascii', legalComments: 'none', lineLimit: 1000 }).code
   acorn.parse(out, { ecmaVersion: 5 })
   console.log('minified:', (before / 1048576).toFixed(1), 'MB ->', (out.length / 1048576).toFixed(1), 'MB, still ES5', since())
+  out = loopsOutOfTheBigFunction(out)
+  acorn.parse(out, { ecmaVersion: 5 })
 } catch (e) {
   console.log('ES5 check FAILED:', e.message, e.pos !== undefined ? JSON.stringify(out.substr(Math.max(0, e.pos - 160), 320)) : '')
   process.exitCode = 1
