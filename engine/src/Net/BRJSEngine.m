@@ -424,30 +424,38 @@ static void BRKeepCompiledCode(void);
 }
 
 // BRJSCKeepCode: JavaScriptCore throws all compiled code away at the first garbage collection a minute after it last
-// did (Heap::collect -> discardAllCompiledCode, iOS 6's name; deleteAllCompiledCode later), and every function goes
-// back to the interpreter and is compiled again -
-// a page that keeps running (an app's) pays for that every minute. Kept while the iPad has memory to spare: the
-// engine's function is replaced (Cydia Substrate's MSHookFunction, when the app runs with it) by one that throws the
-// code away only when memory is tight. (The function itself keeps the minute: it is called no more often.)
-static void (*g_deleteAllCompiledCode)(void *heap);
-static void BRDeleteAllCompiledCode(void *heap)
+// did (iOS 6's Heap::collect calls FunctionExecutable::discardCode for every function itself), and every function goes
+// back to the interpreter and is compiled again - a page that keeps running (an app's) pays for that every minute,
+// in the middle of whatever the user does. Kept while the iPad has memory to spare: the engine's function is replaced
+// (Cydia Substrate's MSHookFunction, when the app runs with it) by one that throws a function's code away only when
+// memory is tight - or in the first minutes after the launch, so that the code a page ran only to start goes.
+static void (*g_discardCode)(void *executable);
+static CFAbsoluteTime g_keepCodeFrom, g_discardCheckedAt;
+static BOOL g_discardAllowed = YES;
+static void BRDiscardCode(void *executable)
 {
-    if ([BRMemory level] >= BRMemoryLevelTight && g_deleteAllCompiledCode) g_deleteAllCompiledCode(heap);
+    // (called for every function at once: the level is looked at once a second)
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (now - g_discardCheckedAt > 1) {
+        g_discardCheckedAt = now;
+        g_discardAllowed = now < g_keepCodeFrom || [BRMemory level] >= BRMemoryLevelTight;
+    }
+    if (g_discardAllowed && g_discardCode) g_discardCode(executable);
 }
 
 static void BRKeepCompiledCode(void)
 {
     void (*hook)(void *, void *, void **) = (void (*)(void *, void *, void **))dlsym(RTLD_DEFAULT, "MSHookFunction");
-    const char *names[] = { "__ZN3JSC4Heap22discardAllCompiledCodeEv", "__ZN3JSC4Heap21deleteAllCompiledCodeEv" };
-    void *found[2] = { NULL, NULL };
-    BRFindJSCSymbols(names, found, 2);
-    void *target = found[0] ?: found[1];
-    if (!hook || !target) {
-        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no discardAllCompiledCode" : @"no Cydia Substrate");
+    const char *names[] = { "__ZN3JSC18FunctionExecutable11discardCodeEv" };
+    void *found[1] = { NULL };
+    BRFindJSCSymbols(names, found, 1);
+    if (!hook || !found[0]) {
+        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no FunctionExecutable::discardCode" : @"no Cydia Substrate");
         return;
     }
-    hook(target, (void *)BRDeleteAllCompiledCode, (void **)&g_deleteAllCompiledCode);
-    BRLog(@"JavaScriptCore: compiled code kept until memory is tight");
+    g_keepCodeFrom = CFAbsoluteTimeGetCurrent() + 150;
+    hook(found[0], (void *)BRDiscardCode, (void **)&g_discardCode);
+    BRLog(@"JavaScriptCore: compiled code kept from 150 s after the launch until memory is tight");
 }
 
 // A bare JavaScriptCore context has no console, timers or globalThis; libraries expect them.
