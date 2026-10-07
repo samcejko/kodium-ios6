@@ -571,20 +571,79 @@ function quickerStart() {
     // nothing the rewriter changes (it compacts the white space, and makes Seti's "unset" "initial"): marked as
     // rewritten (/*br*/), which the engine's shim leaves alone; another icon theme still goes through it)
     // (and a stylesheet given the text it already has is not given it again: the old WebKit made a new one of it all the
-    // same, with its rule sets rebuilt - the color theme's after every start, the restored one being the same)
+    // same, with its rule sets rebuilt; the text given last is kept, as the engine's rewriter may have changed the one
+    // in the page)
+    // (the color theme: restored at the start from the last one's storage, it was taken up again once its extension
+    // was registered - the same theme, read from its files - and put in place as a new one: its 100 KB of rules made
+    // again from the 300 theming participants and every listener told (Kodium's token colours, its theme variables,
+    // the colours' schema, the status bar...): 1.4 s of a profiled start. Now when what it would store is what the
+    // restored one was stored as, the loaded theme only takes the restored one's place)
     ['/vs/workbench/services/themes/browser/workbenchThemeService.js', [
       ['            codiconStyleSheet.textContent = iconsStyleSheet.getCSS();',
        '            const css = iconsStyleSheet.getCSS();\n' +
        '            const text = css.indexOf("@font-face") < 0 && css.indexOf("var(") < 0 ? "/*br*/" + css : css;\n' +
-       '            if (codiconStyleSheet.textContent !== text) codiconStyleSheet.textContent = text;'],
+       '            if (codiconStyleSheet.kdText !== text) {\n' +
+       '                codiconStyleSheet.kdText = text;\n' +
+       '                codiconStyleSheet.textContent = text;\n' +
+       '            }'],
       ['function _applyRules(styleSheetContent, rulesClassName) {\n',
+       'const kdAppliedRules = {};\n' +
        'function _applyRules(styleSheetContent, rulesClassName) {\n' +
        '    if (rulesClassName === "contributedFileIconTheme" && styleSheetContent.indexOf("seti") >= 0 &&\n' +
        '        !/var\\(|calc\\(|@supports|@container|:has\\(|:is\\(|:where\\(|display\\s*:\\s*(inline-)?(flex|grid)|clamp\\(|color-mix\\(/.test(styleSheetContent)) {\n' +
        '        styleSheetContent = "/*br*/" + styleSheetContent.replace(/:\\s*unset\\b/g, ": initial");\n' +
        '    }\n'],
-      ['    } else {\n        themeStyles[0].textContent = styleSheetContent;\n    }\n',
-       '    } else if (themeStyles[0].textContent !== styleSheetContent) {\n        themeStyles[0].textContent = styleSheetContent;\n    }\n'],
+      ['        elStyle.textContent = styleSheetContent;\n    } else {\n        themeStyles[0].textContent = styleSheetContent;\n    }\n',
+       '        elStyle.textContent = styleSheetContent;\n        kdAppliedRules[rulesClassName] = styleSheetContent;\n' +
+       '    } else if (kdAppliedRules[rulesClassName] !== styleSheetContent) {\n' +
+       '        themeStyles[0].textContent = styleSheetContent;\n        kdAppliedRules[rulesClassName] = styleSheetContent;\n    }\n'],
+      ['        let themeData = ColorThemeData.fromStorageData(this.storageService);\n',
+       '        let themeData = ColorThemeData.fromStorageData(this.storageService);\n        const kdStored = themeData;\n'],
+      ['        themeData.setCustomizations(this.settings);\n        this.applyTheme(themeData, undefined, true);\n',
+       '        themeData.setCustomizations(this.settings);\n        this.applyTheme(themeData, undefined, true);\n' +
+       '        if (themeData === kdStored) {\n' +
+       '            this.kdRestoredColorTheme = themeData;\n' +
+       '            this.kdRestoredColorThemeJSON = this.storageService.get(ColorThemeData.STORAGE_KEY, StorageScope.PROFILE);\n' +
+       '        }\n'],
+      ['    async internalSetColorTheme(themeIdOrTheme, settingsTarget) {\n',
+       '    kdSwapIfSameAsRestored(themeData) {\n' +
+       '        const restored = this.kdRestoredColorTheme;\n' +
+       '        if (!restored || this.currentColorTheme !== restored || themeData === restored || themeData.id !== restored.id) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        this.kdRestoredColorTheme = undefined;\n' +
+       '        let json;\n' +
+       '        try {\n' +
+       '            themeData.toStorage({ store: (key, value) => { json = value; } });\n' +
+       '        } catch (e) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        if (json === undefined || json !== this.kdRestoredColorThemeJSON) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        this.currentColorTheme = themeData;\n' +
+       '        this.colorThemeWatcher.update(themeData);\n' +
+       '        getColorRegistry().notifyThemeUpdate(themeData);\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    async internalSetColorTheme(themeIdOrTheme, settingsTarget) {\n'],
+      ['            await themeData.ensureLoaded(this.extensionResourceLoaderService);\n' +
+       '            themeData.setCustomizations(this.settings);\n' +
+       '            return this.applyTheme(themeData, settingsTarget);\n',
+       '            await themeData.ensureLoaded(this.extensionResourceLoaderService);\n' +
+       '            themeData.setCustomizations(this.settings);\n' +
+       '            if (this.kdSwapIfSameAsRestored(themeData)) {\n' +
+       '                return this.settings.setColorTheme(this.currentColorTheme, settingsTarget);\n' +
+       '            }\n' +
+       '            return this.applyTheme(themeData, settingsTarget);\n'],
+      ['                    await theme.ensureLoaded(this.extensionResourceLoaderService);\n' +
+       '                    theme.setCustomizations(this.settings);\n' +
+       '                    await this.applyTheme(theme, undefined, true);\n',
+       '                    await theme.ensureLoaded(this.extensionResourceLoaderService);\n' +
+       '                    theme.setCustomizations(this.settings);\n' +
+       '                    if (!this.kdSwapIfSameAsRestored(theme)) {\n' +
+       '                        await this.applyTheme(theme, undefined, true);\n' +
+       '                    }\n'],
       // (the file icon theme: VS Code took it up again at every change of the languages - Kodium's, then the extensions' -
       // and when the theme's extension was registered, though it had just taken it up: read again, all of Seti's
       // 1500 selectors made again, the stylesheet given its same text and every view told to draw its icons again.
@@ -658,6 +717,75 @@ function quickerStart() {
       ['        this._parts.push(...parts);', '        for (let i = 0; i < parts.length; i++) this._parts.push(parts[i]);']]],
     ['/vs/workbench/contrib/dropOrPasteInto/browser/dropOrPasteInto.contribution.js', [
       ['registerWorkbenchContribution2(\n    DropOrPasteSchemaContribution.ID,\n    DropOrPasteSchemaContribution,\n    WorkbenchPhase.Eventually\n);', '']]],
+    // (the schema of keybindings.json - every command's id, title and arguments, 2600 commands: made again at every
+    // start, at each contribution to it and once the extensions were registered, 0.7 s each in a profile, for a file
+    // hardly ever opened. Marked out of date instead, and made when something reads it)
+    ['/vs/workbench/services/keybinding/browser/keybindingService.js', [
+      ['        this.kbsJsonSchema.updateSchema(this._contributions.flatMap(x => x.contribution.getSchemaAdditions()));',
+       '        this.kbsJsonSchema.updateSchema(() => this._contributions.flatMap(x => x.contribution.getSchemaAdditions()));'],
+      ['        this.schemaRegistry = ( Registry.as(Extensions.JSONContribution));\n' +
+       '        this.schemaRegistry.registerSchema(KeybindingsJsonSchema.schemaId, this.schema);\n' +
+       '    }\n' +
+       '    updateSchema(additionalContributions) {\n',
+       '        const kdDefinitions = this.schema.definitions;\n' +
+       '        Object.defineProperty(this.schema, "definitions", {\n' +
+       '            enumerable: true,\n' +
+       '            configurable: true,\n' +
+       '            get: () => {\n' +
+       '                if (this.kdStale) {\n' +
+       '                    this.kdStale = false;\n' +
+       '                    const additions = this.kdAdditions;\n' +
+       '                    this.kdUpdateSchema(typeof additions === "function" ? additions() : additions || []);\n' +
+       '                }\n' +
+       '                return kdDefinitions;\n' +
+       '            }\n' +
+       '        });\n' +
+       '        this.schemaRegistry = ( Registry.as(Extensions.JSONContribution));\n' +
+       '        this.schemaRegistry.registerSchema(KeybindingsJsonSchema.schemaId, this.schema);\n' +
+       '    }\n' +
+       '    updateSchema(additionalContributions) {\n' +
+       '        this.kdAdditions = additionalContributions;\n' +
+       '        if (!this.kdStale) {\n' +
+       '            this.kdStale = true;\n' +
+       '            this.schemaRegistry.notifySchemaChanged(KeybindingsJsonSchema.schemaId);\n' +
+       '        }\n' +
+       '    }\n' +
+       '    kdUpdateSchema(additionalContributions) {\n'],
+      ['        this.commandsSchemas.push(...additionalContributions);\n' +
+       '        this.schemaRegistry.notifySchemaChanged(KeybindingsJsonSchema.schemaId);\n',
+       '        this.commandsSchemas.push(...additionalContributions);\n']]],
+    // (a context key per extension, "extensionEnabled:<id>", made one by one once the extensions were registered: each
+    // a change of the context every menu and view checked its conditions against - together now, as one change)
+    ['/vs/workbench/contrib/extensions/browser/extensionEnablementContext.js', [
+      ['    _reconcile() {\n',
+       '    _reconcile() {\n        this.contextKeyService.bufferChangeEvents(() => this.kdReconcile());\n    }\n    kdReconcile() {\n']]],
+    // (the default settings were made again from all 1400 settings once the extensions were registered, and compared
+    // with the ones before, key by key - to drop what the last start had cached of the defaults' overrides (Kodium's
+    // own defaults, extensions'); when each of those is what the registry has now, that changes nothing: the cache is
+    // dropped without the rest)
+    ['/vs/workbench/services/configuration/browser/configurationService.js', [
+      ['        case ConfigurationTarget.DEFAULT:\n            this.reloadDefaultConfiguration();\n            return;\n',
+       '        case ConfigurationTarget.DEFAULT:\n' +
+       '            if (this.defaultConfiguration.kdReloadChangesNothing && this.defaultConfiguration.kdReloadChangesNothing()) {\n' +
+       '                return;\n' +
+       '            }\n' +
+       '            this.reloadDefaultConfiguration();\n            return;\n']]],
+    ['/vs/workbench/services/configuration/browser/configuration.js', [
+      ['    hasCachedConfigurationDefaultsOverrides() {\n',
+       '    kdReloadChangesNothing() {\n' +
+       '        const cached = this.cachedConfigurationDefaultsOverrides;\n' +
+       '        const properties = this.configurationRegistry.getConfigurationProperties();\n' +
+       '        for (const key of Object.keys(cached)) {\n' +
+       '            const property = properties[key];\n' +
+       '            if (!property || !equals(property.default, cached[key])) {\n' +
+       '                return false;\n' +
+       '            }\n' +
+       '        }\n' +
+       '        this.cachedConfigurationDefaultsOverrides = {};\n' +
+       '        this.updateCachedConfigurationDefaultsOverrides();\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    hasCachedConfigurationDefaultsOverrides() {\n']]],
     ['/vs/editor/common/languages/modesRegistry.js', [
       ['        this._languages.push(def);\n        this._onDidChangeLanguages.fire(undefined);',
        '        this._languages.push(def);\n        if (!this.kdBatch) this._onDidChangeLanguages.fire(undefined);'],

@@ -71,6 +71,12 @@ The first build.
   rebuilds its rule sets from) and every view told to draw its icons again. It is made again only when a language
   brings an icon of its own, and a stylesheet given the text it already has is left alone (the color theme's after
   every start, too): 0.9 s less work after a start on the iPad 2 (7.2 s instead of 8.1).
+- The workbench appears 0.4 s sooner and the seconds after it are busy 1.5 s less (5.8 s of work instead of 7.3 on
+  the iPad 2): keybindings.json's schema (2600 commands with their titles and arguments) is made when something reads
+  it - opening that file - not at the start, at each contribution to it and once more after the extensions; the
+  color theme restored from the last start is not put in place a second time when the one loaded from its extension
+  is the same (all of its rules made again and every listener told); the default settings are not made again from all
+  1400 settings when nothing the start had cached of them differs; the extensions' context keys come as one change.
 - Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
   with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
   made again at every opening of the panel.

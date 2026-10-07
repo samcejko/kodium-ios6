@@ -78,6 +78,7 @@ import { DOCUMENTS, registerAppFolders } from './files'
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 import { Registry } from '@codingame/monaco-vscode-api/vscode/vs/platform/registry/common/platform'
 import { Extensions as WorkbenchExtensions } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/contributions'
+import { Extensions as JSONExtensions } from '@codingame/monaco-vscode-api/vscode/vs/platform/jsonschemas/common/jsonContributionRegistry'
 
 declare global {
   interface Window {
@@ -244,6 +245,9 @@ async function start() {
     timings.forEach((list, phase) => { out[phase] = list.slice() })
     return out
   }
+  // (and a JSON schema's text as the JSON language service gets it, e.g. 'vscode://schemas/keybindings')
+  ;(window as { __kd_schemaContent?: unknown }).__kd_schemaContent = (uri: string) =>
+    (Registry.as(JSONExtensions.JSONContribution) as { getSchemaContent(uri: string): string | undefined }).getSchemaContent(uri)
 }
 
 start().catch((e) => {
