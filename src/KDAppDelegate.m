@@ -188,10 +188,10 @@ static void KDWriteResult(NSString *name, NSString *text)
     NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
     BRLog(@"Kodium %@ (%@) starting on %@ (iOS %@)", info[@"CFBundleShortVersionString"] ?: @"?", info[@"CFBundleVersion"] ?: @"?",
           [UIDevice currentDevice].model, [UIDevice currentDevice].systemVersion);
-    // The workbench's code mostly runs once or twice per key or touch: compiled after two entries (the engine waits for
-    // seven), and kept until memory is tight - JavaScriptCore threw all of it away a minute after it last did, and
-    // the editor went back to the interpreter in the middle of typing (see BRJSEngine applyEngineTiers)
-    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ @"BRJSCWarmUp": @30, @"BRJSCKeepCode": @YES }];
+    // The workbench's compiled code is kept until memory is tight: JavaScriptCore threw all of it away a minute after it
+    // last did, and the editor went back to the interpreter in the middle of typing (see BRJSEngine applyEngineTiers).
+    // (Compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2: more to compile again every minute.)
+    [[NSUserDefaults standardUserDefaults] registerDefaults:@{ @"BRJSCKeepCode": @YES }];
     [BRJSEngine applyEngineTiers];
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];

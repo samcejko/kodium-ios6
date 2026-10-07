@@ -24,7 +24,7 @@ The first build.
   - the engine's shims that look a web page over after every change (picture sizes, rows wider than the window, links
     to the page itself, :has() at every key) stay out of the workbench (window.__brLeanPage, Surfari's engine);
   - compiled JavaScript is kept until memory runs short (the engine threw it all away a minute after it last did, and
-    the editor went back to the interpreter in the middle of typing), and the JIT takes a function after two entries;
+    the editor went back to the interpreter in the middle of typing);
   - suggestions show once typing pauses for half a second (0.3 s brought them in the middle of words).
 - The command palette and other sorted lists sort faster (an ASCII string comparison in place of the engine's
   localeCompare); VS Code's rules made at run time with nothing the engine lacks go into the page as they are, not

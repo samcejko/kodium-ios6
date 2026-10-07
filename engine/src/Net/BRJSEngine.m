@@ -424,7 +424,8 @@ static void BRKeepCompiledCode(void);
 }
 
 // BRJSCKeepCode: JavaScriptCore throws all compiled code away at the first garbage collection a minute after it last
-// did (Heap::collect -> deleteAllCompiledCode), and every function goes back to the interpreter and is compiled again -
+// did (Heap::collect -> discardAllCompiledCode, iOS 6's name; deleteAllCompiledCode later), and every function goes
+// back to the interpreter and is compiled again -
 // a page that keeps running (an app's) pays for that every minute. Kept while the iPad has memory to spare: the
 // engine's function is replaced (Cydia Substrate's MSHookFunction, when the app runs with it) by one that throws the
 // code away only when memory is tight. (The function itself keeps the minute: it is called no more often.)
@@ -437,14 +438,15 @@ static void BRDeleteAllCompiledCode(void *heap)
 static void BRKeepCompiledCode(void)
 {
     void (*hook)(void *, void *, void **) = (void (*)(void *, void *, void **))dlsym(RTLD_DEFAULT, "MSHookFunction");
-    const char *names[] = { "__ZN3JSC4Heap21deleteAllCompiledCodeEv" };
-    void *found[1] = { NULL };
-    BRFindJSCSymbols(names, found, 1);
-    if (!hook || !found[0]) {
-        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no deleteAllCompiledCode" : @"no Cydia Substrate");
+    const char *names[] = { "__ZN3JSC4Heap22discardAllCompiledCodeEv", "__ZN3JSC4Heap21deleteAllCompiledCodeEv" };
+    void *found[2] = { NULL, NULL };
+    BRFindJSCSymbols(names, found, 2);
+    void *target = found[0] ?: found[1];
+    if (!hook || !target) {
+        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no discardAllCompiledCode" : @"no Cydia Substrate");
         return;
     }
-    hook(found[0], (void *)BRDeleteAllCompiledCode, (void **)&g_deleteAllCompiledCode);
+    hook(target, (void *)BRDeleteAllCompiledCode, (void **)&g_deleteAllCompiledCode);
     BRLog(@"JavaScriptCore: compiled code kept until memory is tight");
 }
 
