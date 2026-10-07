@@ -19,8 +19,9 @@ The first build.
 - Emmet in HTML, PHP, CSS, SCSS and Less: an abbreviation (ul>li*3, div.box>p, a:link, m10, d:f) expands from the
   suggestions, as in VS Code.
 - The Outline and Timeline views in the Explorer, as in VS Code: the symbols of the file in the editor (JavaScript's,
-  JSON's, CSS's, HTML's, Markdown's headings), and its local history - the version kept at every save, to compare with
-  or restore (Local History: Find Entry to Restore...). The breadcrumbs name the file's folders, not the symbol at the
+  JSON's, CSS's, HTML's, Markdown's headings - these read by Kodium itself: VS Code's Markdown extension has code, and
+  its host is not started for them; # and underlined headings, nested by level, code blocks skipped), and its local
+  history - the version kept at every save, to compare with or restore (Local History: Find Entry to Restore...). The breadcrumbs name the file's folders, not the symbol at the
   cursor (breadcrumbs.symbolPath: it worked the outline out again at every pause in typing).
 - The first action after a pause is no longer slower: JavaScriptCore threw all the workbench's compiled code away a
   minute after it last did, and the next action compiled again whatever it ran (a switch of editors took 1.8 s instead
