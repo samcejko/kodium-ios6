@@ -64,19 +64,24 @@
     // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s, or when its own timeout is up.
     // The engine's garbage collection while the user pauses, too: JavaScriptCore collects on a timer some seconds after
     // a few megabytes were allocated (11 s after 5 MB), and at once when the allocations reach the heap's size - in
-    // the middle of the next action as often as not, 0.3-0.6 s in the workbench. 1.5 s after the last input the app is
-    // asked to collect now (Surfari's engine, KDSiteProtocol /__kd/app/idle; only on the iOS 6 engine).
+    // the middle of the next action as often as not, 0.3-0.6 s in the workbench. Once nothing was typed or touched for
+    // 1.5 s and the page itself is idle too (two timers of 100 ms in a row came on time: the Settings editor, say, takes
+    // longer than 1.5 s to open), the app is asked to collect now (Surfari's engine, KDSiteProtocol /__kd/app/idle;
+    // only on the iOS 6 engine).
     (function () {
-        var last = 0, queue = [], timer = null, nextId = 1, pause = null;
+        var last = 0, queue = [], timer = null, nextId = 1, pause = null, due = 0, onTime = false;
+        var arm = function (ms) { due = Date.now() + ms; pause = setTimeout(paused, ms); };
         var paused = function () {
             pause = null;
-            var quiet = Date.now() - last;
-            if (quiet < 1500) { pause = setTimeout(paused, 1500 - quiet); return; }
+            var now = Date.now(), quiet = now - last, late = now - due;
+            if (quiet < 1500) { onTime = false; arm(1500 - quiet); return; }
+            if (late > 50 || !onTime) { onTime = late <= 50; arm(100); return; }
+            onTime = false;
             try { var x = new XMLHttpRequest(); x.open('GET', '/__kd/app/idle', true); x.send(null); } catch (e) {}
         };
         var noteInput = function () {
             last = Date.now();
-            if (!pause && G.__brNative) pause = setTimeout(paused, 1500);
+            if (!pause && G.__brNative) { onTime = false; arm(1500); }
         };
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
         for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);

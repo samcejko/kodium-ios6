@@ -29,6 +29,13 @@ The first build.
   when nothing is being typed or touched; the editor's settings for the file are worked out once. The glyph margin
   (breakpoints, the light bulb: neither is in Kodium) is off: 18 px more for the code.
 - The menu bar's menu (the button at the top of the activity bar) opened under the side bar.
+- JavaScript's garbage collection comes while the user pauses (1.5 s without input, and the page idle), not in the
+  middle of the next action: JavaScriptCore collected on its own timer some seconds after a few megabytes were
+  allocated - 0.3-0.6 s, inside every second or third switch of editors. Surfari's engine reads the heap's budget
+  (BRJSEngine collectPageGarbageIfAllocated:) and collects once 4 MB were allocated.
+- The Settings editor opens again without building its tree again (which of the ~1000 settings goes under which
+  heading: 40 000 tests of names against patterns), unless settings were registered or dropped meanwhile; values
+  changed while it was closed show as before.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once

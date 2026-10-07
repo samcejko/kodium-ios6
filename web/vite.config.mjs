@@ -290,6 +290,34 @@ function quickerSwitch() {
   ])
 }
 
+// The Settings editor opened in 7 s on the iPad 2 every time: VS Code builds its tree again at each opening - which
+// of the ~1000 settings goes under which of 60 headings (40 000 tests of their names against patterns, 2.3 s in the
+// profiler), the extensions' headings, then every element of the tree. Nothing of it changes while the editor is
+// closed, unless settings are registered or dropped (an extension, a different set of defaults: other groups then) -
+// a changed value reaches the closed editor's tree as before. Opened again with the same groups, it shows the tree it
+// has, its rows drawn again.
+function quickerSettings() {
+  return patchModules('kodium-quicker-settings', [
+    ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
+      ['        this._setOptions(options);\n        this.onConfigUpdate(undefined, true).then(() => {',
+       '        this._setOptions(options);\n        (this.kdSameTree(model) ? this.kdShowTree() : this.onConfigUpdate(undefined, true)).then(() => {'],
+      ['    async refreshInstalledExtensionsList() {',
+       '    kdSameTree(model) {\n' +
+       '        const groups = model.settingsGroups, last = this.kdTreeGroups;\n' +
+       '        return !!(this.settingsTreeModel.value && last && this.kdTreeAdvanced === this.canShowAdvancedSettings() && !this.viewState.query &&\n' +
+       '            !this.searchResultModel && groups.length === last.length && groups.every((group, i) => group === last[i]));\n' +
+       '    }\n' +
+       '    async kdShowTree() {\n' +
+       '        this.settingsTree.rerender();\n' +
+       '        this.tocTree.rerender();\n' +
+       '    }\n' +
+       '    async refreshInstalledExtensionsList() {'],
+      ['        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];',
+       '        this.kdTreeGroups = this.defaultSettingsEditorModel.settingsGroups;\n        this.kdTreeAdvanced = this.canShowAdvancedSettings();\n' +
+       '        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];']]]
+  ])
+}
+
 // The built-in language extensions bring their TextMate grammars, which Kodium never reads (no TextMate tokenizer here:
 // it needs WebAssembly; monaco's Monarch grammars colour the code): their files stay out of the app (1.6 MB), the
 // extensions' entries for them point at an empty document.
@@ -391,7 +419,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
