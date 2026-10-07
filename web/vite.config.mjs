@@ -327,6 +327,28 @@ function quickerMenus() {
   ])]
 }
 
+// The command palette at every opening (the profiler, after the menus' kept items above): each of the ~1000 commands
+// got a "Configure Keybinding" button of its own (an array, an object, a localize and a class name each), and with
+// nothing typed yet each was still tested against the empty filter (4000 calls of the filters, all matching).
+function quickerPalette() {
+  return patchModules('kodium-quicker-palette', [
+    ['/vs/workbench/contrib/quickaccess/browser/commandsQuickAccess.js', [
+      ['        return [...this.getCodeEditorCommandPicks(), ...this.getGlobalCommandPicks()].map(picks => ({\n            ...picks,\n            buttons: [{\n                iconClass: ThemeIcon.asClassName(Codicon.gear),\n                tooltip: ( localize(17512, "Configure Keybinding"))\n            }],',
+       '        const kdButtons = [{\n            iconClass: ThemeIcon.asClassName(Codicon.gear),\n            tooltip: ( localize(17512, "Configure Keybinding"))\n        }];\n' +
+       '        return [...this.getCodeEditorCommandPicks(), ...this.getGlobalCommandPicks()].map(picks => ({\n            ...picks,\n            buttons: kdButtons,']]],
+    ['/vs/platform/quickinput/browser/commandsQuickAccess.js', [
+      ['        const filteredCommandPicks = [];\n        for (const commandPick of allCommandPicks) {',
+       '        const filteredCommandPicks = [];\n' +
+       '        if (!filter) {\n' +
+       '            for (const commandPick of allCommandPicks) {\n' +
+       '                commandPick.highlights = { label: [], detail: this.options.showAlias && commandPick.commandAlias ? [] : undefined };\n' +
+       '                filteredCommandPicks.push(commandPick);\n' +
+       '            }\n' +
+       '        }\n' +
+       '        else for (const commandPick of allCommandPicks) {']]]
+  ])
+}
+
 // The Settings editor opened in 7 s on the iPad 2 every time: VS Code builds its tree again at each opening - which
 // of the ~1000 settings goes under which of 60 headings (40 000 tests of their names against patterns, 2.3 s in the
 // profiler), the extensions' headings, then every element of the tree. Nothing of it changes while the editor is
@@ -459,7 +481,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
