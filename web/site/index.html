@@ -61,23 +61,19 @@ if (/^cs\b/i.test(window.__kd_lang)) document.write('<script src="nls.cs.js"><\/
 // second of that). An inline script's text stays with its code. (__brClassic: the engine's shim would hand a big
 // inserted script to the app to be lowered, and it is ES5 already.)
 (function () {
-    // (in a function of its own, which has returned when the workbench's script runs: nothing on the stack still
-    // points at the response then, and it goes at the first garbage collection, with the request)
-    var load = function () {
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'assets/workbench.es5.js', false);
-        // (as UTF-8, the engine's default: read as Latin-1 the text came 8-bit, which JSC then copied to 16-bit for
-        // its parser - both kept, 14 MB more)
-        xhr.send(null);
-        if (xhr.status !== 200 && xhr.status !== 0) throw new Error('assets/workbench.es5.js: ' + xhr.status);
-        var s = document.createElement('script');
-        s.__brClassic = true;
-        // (+ ' ': a copy of the text's own size - the response's string keeps the capacity XHR's buffer grew to, the
-        // next power of two: 33.5 MB for 13.4 million characters instead of 26.8, kept as long as the workbench runs)
-        s.text = xhr.responseText + ' ';
-        return s;
-    };
-    document.body.appendChild(load());
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'assets/workbench.es5.js', false);
+    // (as UTF-8, the engine's default: read as Latin-1 the text came 8-bit, which JSC then copied to 16-bit for its
+    // parser - both kept, 14 MB more)
+    xhr.send(null);
+    if (xhr.status !== 200 && xhr.status !== 0) throw new Error('assets/workbench.es5.js: ' + xhr.status);
+    var s = document.createElement('script');
+    s.__brClassic = true;
+    // (the response's own string, not a copy of its exact size: the part of XHR's buffer past the text is never
+    // written, so not resident; a copy only added its 27 MB - 270 MB resident after the start instead of 253)
+    s.text = xhr.responseText;
+    xhr = null;
+    document.body.appendChild(s);
 })();
 </script>
 <script>__vsc_mark('workbenchScriptRan');</script>
