@@ -36,6 +36,9 @@ The first build.
 - The Settings editor opens again without building its tree again (which of the ~1000 settings goes under which
   heading: 40 000 tests of names against patterns), unless settings were registered or dropped meanwhile; values
   changed while it was closed show as before.
+- Menus are made once, not twice (VS Code's MenuInfo refreshed again what its base class had just refreshed: sorting
+  all items by title, collecting their conditions' keys), and a menu's sorted items are kept until the menu registry
+  changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once

@@ -290,22 +290,62 @@ function quickerSwitch() {
   ])
 }
 
+// Every menu VS Code makes - the editor's toolbar at every switch, a context menu, the command palette's thousand
+// commands at every opening - went through the menu registry's items twice (MenuInfo's constructor refreshes again
+// what its base class's constructor had just refreshed), each time sorting them (by group, order and title: 12 000
+// localeCompare calls for the palette) and collecting the context keys of their conditions. Once now, and the sorted
+// items of a menu are kept until the registry changes for it.
+function quickerMenus() {
+  // (the registry tells of its changes in a microtask: a version number counts them at once, and a menu's kept items
+  // are good for one version)
+  const registry = {
+    name: 'kodium-menu-registry-version',
+    transform(code, id) {
+      if (!id.replace(/\\/g, '/').endsWith('/vs/platform/actions/common/actions.js')) return null
+      const find = 'this._onDidChangeMenu.fire('
+      if (code.split(find).length !== 5) this.error('kodium-menu-registry-version: actions.js has another form')
+      return { code: code.split(find).join('(this.kdVersion = (this.kdVersion || 0) + 1), ' + find), map: null }
+    }
+  }
+  return [registry, patchModules('kodium-quicker-menus', [
+    ['/vs/platform/actions/common/menuService.js', [
+      ['        const menuItems = this._sort(MenuRegistry.getMenuItems(this._id));', '        const menuItems = this._kdItems();'],
+      ['    _sort(menuItems) {\n        return menuItems;\n    }',
+       '    _sort(menuItems) {\n        return menuItems;\n    }\n    _kdItems() {\n        return this._sort(MenuRegistry.getMenuItems(this._id));\n    }'],
+      ['        this._contextKeyService = _contextKeyService;\n        this.refresh();\n    }\n    createActionGroups(options) {',
+       '        this._contextKeyService = _contextKeyService;\n    }\n    _kdItems() {\n        return __kdSortedMenuItems(this._id, () => this._sort(MenuRegistry.getMenuItems(this._id)));\n    }\n    createActionGroups(options) {']],
+     'const __kdSorted = new Map();\n' +
+     'function __kdSortedMenuItems(id, make) {\n' +
+     '    const version = MenuRegistry.kdVersion || 0;\n' +
+     '    let kept = __kdSorted.get(id);\n' +
+     '    if (!kept || kept.version !== version) {\n' +
+     '        kept = { version, items: make() };\n' +
+     '        __kdSorted.set(id, kept);\n' +
+     '    }\n' +
+     '    return kept.items;\n' +
+     '}\n']
+  ])]
+}
+
 // The Settings editor opened in 7 s on the iPad 2 every time: VS Code builds its tree again at each opening - which
 // of the ~1000 settings goes under which of 60 headings (40 000 tests of their names against patterns, 2.3 s in the
 // profiler), the extensions' headings, then every element of the tree. Nothing of it changes while the editor is
 // closed, unless settings are registered or dropped (an extension, a different set of defaults: other groups then) -
-// a changed value reaches the closed editor's tree as before. Opened again with the same groups, it shows the tree it
-// has, its rows drawn again.
+// a changed value reaches the closed editor's tree as before. Opened again with the same groups (the same headings,
+// with as many settings each: VS Code makes the group objects again whenever its defaults change), it shows the tree
+// it has, its rows drawn again.
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
     ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
       ['        this._setOptions(options);\n        this.onConfigUpdate(undefined, true).then(() => {',
        '        this._setOptions(options);\n        (this.kdSameTree(model) ? this.kdShowTree() : this.onConfigUpdate(undefined, true)).then(() => {'],
       ['    async refreshInstalledExtensionsList() {',
+       '    kdTreeShape(groups) {\n' +
+       '        return groups.map(group => group.id + ":" + group.sections.reduce((n, section) => n + section.settings.length, 0)).join(",");\n' +
+       '    }\n' +
        '    kdSameTree(model) {\n' +
-       '        const groups = model.settingsGroups, last = this.kdTreeGroups;\n' +
-       '        return !!(this.settingsTreeModel.value && last && this.kdTreeAdvanced === this.canShowAdvancedSettings() && !this.viewState.query &&\n' +
-       '            !this.searchResultModel && groups.length === last.length && groups.every((group, i) => group === last[i]));\n' +
+       '        return !!(this.settingsTreeModel.value && this.kdTreeGroups && this.kdTreeAdvanced === this.canShowAdvancedSettings() &&\n' +
+       '            !this.viewState.query && !this.searchResultModel && this.kdTreeShape(model.settingsGroups) === this.kdTreeGroups);\n' +
        '    }\n' +
        '    async kdShowTree() {\n' +
        '        this.settingsTree.rerender();\n' +
@@ -313,7 +353,7 @@ function quickerSettings() {
        '    }\n' +
        '    async refreshInstalledExtensionsList() {'],
       ['        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];',
-       '        this.kdTreeGroups = this.defaultSettingsEditorModel.settingsGroups;\n        this.kdTreeAdvanced = this.canShowAdvancedSettings();\n' +
+       '        this.kdTreeGroups = this.kdTreeShape(this.defaultSettingsEditorModel.settingsGroups);\n        this.kdTreeAdvanced = this.canShowAdvancedSettings();\n' +
        '        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];']]]
   ])
 }
@@ -419,7 +459,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
