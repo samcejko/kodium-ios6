@@ -71,6 +71,7 @@ import { receiveKeys } from './keybar'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
 import { registerMarkdown } from './markdown'
+import { registerPython } from './python'
 import { DOCUMENTS, registerAppFolders } from './files'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
 // service with it, a seventh of the bundle, for one Uri.file)
@@ -227,6 +228,7 @@ async function start() {
   receiveKeys()
   registerJavaScript()
   registerMarkdown()
+  registerPython()
   registerEmmet()
   void followTheme()
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
