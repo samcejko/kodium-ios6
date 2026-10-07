@@ -523,7 +523,7 @@ static BOOL g_keepCode, g_ownGarbageTimer;
 static const double BRQuietCollectionLength = 30;
 // (what runs once at the start - every module's top level, the workbench's construction - was compiled too, 30 MB of
 // bytecode and 7 MB of JIT code in Kodium: that is let go first, by JavaScriptCore itself at its first collection a
-// minute after the start - or thrown away at 3 minutes if none came - and only the code used after it is kept)
+// minute after the start - or thrown away at 75 s if none came - and only the code used after it is kept)
 static BOOL g_startupCodeGone;
 static double g_startClock;
 static CFAbsoluteTime g_keepSince;
@@ -636,7 +636,7 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
             if (*g_lastCodeDiscard != g_startClock) {
                 g_startupCodeGone = YES;
                 BRLog(@"JavaScriptCore code kept: the start's code was let go, what runs from now on is kept");
-            } else if (CFAbsoluteTimeGetCurrent() - g_keepSince > 180) {
+            } else if (CFAbsoluteTimeGetCurrent() - g_keepSince > 75) {
                 g_startupCodeGone = YES;
                 g_discardAllCompiledCode(g_codeHeap);
                 *g_lastCodeDiscard = g_currentTime();

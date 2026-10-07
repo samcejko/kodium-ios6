@@ -17,6 +17,7 @@
         try { document.title = 'Kodium: ' + name; } catch (e) {}
         try { if (G.console && console.log) console.log('[vsc] ' + line); } catch (e2) {}
         if (profiling && name === 'workbench') { profiling = false; try { console.profileEnd('kd-startup'); } catch (e3) {} }
+        if (name === 'workbench' && typeof G.__kd_afterStart === 'function') G.__kd_afterStart();
     };
     G.addEventListener('error', function (e) {
         if (errors.length < 60) errors.push(String(e.message) + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')');
@@ -83,6 +84,9 @@
             last = Date.now();
             if (!pause && G.__brNative) { onTime = false; arm(1500); }
         };
+        // (and once the workbench has started, as after an input: the start's garbage - JavaScriptCore's own timer,
+        // which would have collected it, is kept quiet - is collected as soon as the page is idle)
+        G.__kd_afterStart = noteInput;
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
         for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);
         var schedule = function () {
