@@ -468,6 +468,9 @@ const LEFT_OUT = [
   // (the integrated browser's editor input: imported for nothing it registers; the GPU renderer's debugging commands)
   'vs/workbench/contrib/browserView/common/browserEditorInput.js',
   'vs/editor/contrib/gpu/browser/gpuActions.js',
+  // (the stylesheet of the floating panels - an experimental setting, off: 81 rules under .floating-panels, which the
+  // old WebKit still tried at every style recalculation of the elements their last part names, 38 KB)
+  'vs/workbench/browser/media/floatingPanels.css',
   ...['EditorTabs', 'Comments', 'Testing', 'Task', 'TerminalService', 'TerminalShellIntegration', 'DebugService', 'SCM',
       'CLICommands', 'TunnelService', 'Speech', 'ManagedSockets', 'DataChannels', 'Browsers']
     .map((name) => 'vs/workbench/api/browser/mainThread' + name + '.js')
@@ -477,7 +480,7 @@ function leaveOut() {
     name: 'kodium-leave-out',
     load(id) {
       const p = id.replace(/\\/g, '/')
-      return LEFT_OUT.some((suffix) => p.endsWith('/' + suffix)) ? 'export {}' : null
+      return LEFT_OUT.some((suffix) => p.endsWith('/' + suffix)) ? (p.endsWith('.css') ? '' : 'export {}') : null
     }
   }
 }

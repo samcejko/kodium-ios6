@@ -61,7 +61,8 @@ The first build.
   help), the remote explorer's port forwarding (for the remote view's id), MCP's and chat's services, the editor's GPU
   renderer, tree-sitter, the WebAssembly diff, the multi-file diff editor, the Windows and macOS keyboard layouts.
   The four web workers (the editor's, JSON's, CSS's, HTML's) are 380 KB smaller each: every one of them carried the
-  WebAssembly diff's binary, which nothing runs.
+  WebAssembly diff's binary, which nothing runs. The stylesheet lost the floating panels' rules (an experimental
+  setting, off), which the old WebKit still tried on the elements they end with at every insertion.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once
