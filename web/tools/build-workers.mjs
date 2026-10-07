@@ -19,6 +19,17 @@ fs.rmSync(tmp, { recursive: true, force: true })
 fs.mkdirSync(tmp, { recursive: true })
 fs.mkdirSync(out, { recursive: true })
 const prelude = fs.readFileSync(path.join(web, 'prelude', 'worker-prelude.js'), 'utf8')
+// (the editor's worker without the WebAssembly and native diff computers - other settings, the default one stays: as
+// in the workbench, see leanerBundle in vite.config.mjs)
+const leanerWorker = {
+  name: 'kodium-leaner-worker',
+  transform(code, id) {
+    if (!id.replace(/\\/g, '/').endsWith('/vs/editor/common/diff/linesDiffComputers.js')) return null
+    const find = "import { getExternalLinesDiffComputer } from './externalLinesDiffComputer.js';"
+    if (code.split(find).length !== 2) this.error('kodium-leaner-worker: linesDiffComputers.js has another form')
+    return { code: code.replace(find, 'const getExternalLinesDiffComputer = async () => new DefaultLinesDiffComputer();'), map: null }
+  }
+}
 
 for (const name of NAMES) {
   const t0 = Date.now()
@@ -26,6 +37,7 @@ for (const name of NAMES) {
     configFile: false,
     root: web,
     logLevel: 'warn',
+    plugins: [leanerWorker],
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     build: {
       target: 'es2022',

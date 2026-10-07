@@ -465,6 +465,9 @@ const LEFT_OUT = [
   'vs/workbench/contrib/searchEditor/browser/searchEditor.contribution.js',
   'vs/workbench/contrib/splash/browser/splash.contribution.js',
   'vs/workbench/contrib/modernUI/browser/modernUI.contribution.js',
+  // (the integrated browser's editor input: imported for nothing it registers; the GPU renderer's debugging commands)
+  'vs/workbench/contrib/browserView/common/browserEditorInput.js',
+  'vs/editor/contrib/gpu/browser/gpuActions.js',
   ...['EditorTabs', 'Comments', 'Testing', 'Task', 'TerminalService', 'TerminalShellIntegration', 'DebugService', 'SCM',
       'CLICommands', 'TunnelService', 'Speech', 'ManagedSockets', 'DataChannels', 'Browsers']
     .map((name) => 'vs/workbench/api/browser/mainThread' + name + '.js')
@@ -479,9 +482,77 @@ function leaveOut() {
   }
 }
 
+// Modules that came into the bundle for a constant, or for something the iPad never gets to (scratchpad graph analysis,
+// what each module alone brings in): every one of them is parsed and run at each start, and kept in memory.
+// - the diff editor's accessibility help asked the editor's (which nothing registers) whether comments are there: it
+//   brought the comment editor, dictation, chat's speech-to-text and the inline completions' controller, views and
+//   models (Copilot's ghost text, left out above) - 670 KB
+// - the remote explorer and its port forwarding (120 KB) for the remote view's id, the ports' model for a three-value
+//   enum; MCP's management service and configuration for "ws", "mcp" and another key; chat's language models for
+//   "copilot" and an enum, chat hooks' schema for a converter of them; tasks for "settings"; chat's view model and
+//   outline for Go to Symbol in a chat (there is none); the agents' Codex account menu
+// - the editor's GPU rendering (an experimental setting; WebGPU), tree-sitter tokens (WebAssembly), the WebAssembly
+//   and native diff computers (other settings; the default one stays), the multi-file diff editor of monaco's own API
+// - the Windows and macOS keyboard layouts: on the iPad VS Code takes the platform for Linux, the only set it loads
+// 1.8 MB of 24 MB before minifying, 216 modules; the lowered script 1 MB smaller (14.4 -> 13.4 MB).
+function leanerBundle() {
+  return patchModules('kodium-leaner-bundle', [
+    ['/vs/workbench/contrib/codeEditor/browser/diffEditorAccessibilityHelp.js', [
+      ["import { getCommentCommandInfo } from '../../accessibility/browser/editorAccessibilityHelp.js';",
+       'const getCommentCommandInfo = () => undefined;']]],
+    ['/vs/workbench/api/browser/viewsExtensionPoint.js', [
+      ["import { VIEWLET_ID } from '@codingame/monaco-vscode-api/vscode/vs/workbench/contrib/remote/browser/remoteExplorer';",
+       'const VIEWLET_ID = "workbench.view.remote";']]],
+    ['/vs/workbench/contrib/mcp/common/mcpTypes.js', [
+      ["import { WORKSPACE_FOLDER_CONFIG_ID_PREFIX } from '../../../services/mcp/common/mcpWorkbenchManagementService.js';",
+       'const WORKSPACE_FOLDER_CONFIG_ID_PREFIX = "ws";']]],
+    ['/vs/workbench/api/common/extHostLanguageModels.js', [
+      ["import { COPILOT_VENDOR_ID } from '../../contrib/chat/common/languageModels.js';", 'const COPILOT_VENDOR_ID = "copilot";']]],
+    ['/vs/workbench/api/common/extHostTypeConverters.js', [
+      ["import { ChatMessageRole } from '../../contrib/chat/common/languageModels.js';",
+       'const ChatMessageRole = { System: 0, User: 1, Assistant: 2 };'],
+      ["import { resolveEffectiveCommand } from '../../contrib/chat/common/promptSyntax/hookSchema.js';",
+       'const resolveEffectiveCommand = () => undefined;']]],
+    ['/@codingame/monaco-vscode-api/missing-services.js', [
+      ["import { PortsEnablement } from './vscode/src/vs/workbench/services/remote/common/remoteExplorerService.js';",
+       'const PortsEnablement = { Disabled: 0, ViewOnly: 1, AdditionalFeatures: 2 };']]],
+    ['/vs/workbench/api/common/extHostTask.js', [
+      ["import { USER_TASKS_GROUP_KEY } from '../../contrib/tasks/common/tasks.js';", 'const USER_TASKS_GROUP_KEY = "settings";']]],
+    ['/vs/workbench/api/browser/mainThreadAuthentication.js', [
+      ["import { mcpEnterpriseManagedAuthIdpSection } from '@codingame/monaco-vscode-api/vscode/vs/workbench/contrib/mcp/common/mcpConfiguration';",
+       'const mcpEnterpriseManagedAuthIdpSection = "mcp.enterpriseManagedAuth.idp";']]],
+    ['/vs/workbench/contrib/preferences/browser/preferencesRenderers.js', [
+      ["import { mcpConfigurationSection } from '@codingame/monaco-vscode-api/vscode/vs/workbench/contrib/mcp/common/mcpConfiguration';",
+       'const mcpConfigurationSection = "mcp";']]],
+    ['/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoSymbolQuickAccess.js', [
+      ["import '../../../chat/browser/chat.js';", ''],
+      ["import { isRequestVM } from '../../../chat/common/model/chatViewModel.js';", 'const isRequestVM = () => false;'],
+      ["import { ChatOutline } from '../../../chat/browser/chatOutline.js';", 'const ChatOutline = undefined;']]],
+    ['/vs/workbench/browser/parts/globalCompositeBar.js', [
+      ["import { createCodexAccountMenuActions, shouldShowCodexAccount } from '../../services/agentHost/browser/codexAccountService.js';",
+       'const createCodexAccountMenuActions = () => [], shouldShowCodexAccount = () => false;']]],
+    ['/vs/editor/browser/view.js', [
+      ["import { ViewGpuContext } from './gpu/viewGpuContext.js';", 'const ViewGpuContext = undefined;'],
+      ["import { ViewLinesGpu } from './viewParts/viewLinesGpu/viewLinesGpu.js';", 'const ViewLinesGpu = undefined;'],
+      ['if (this._context.configuration.options.get(EditorOption.experimentalGpuAcceleration) === "on") {', 'if (false) {']]],
+    ['/vs/editor/common/model/tokens/tokenizationTextModelPart.js', [
+      ["import { TreeSitterSyntaxTokenBackend } from './treeSitter/treeSitterSyntaxTokenBackend.js';", 'const TreeSitterSyntaxTokenBackend = undefined;'],
+      ['if (this._useTreeSitter.read(reader)) {', 'if (this._useTreeSitter.read(reader) && TreeSitterSyntaxTokenBackend) {']]],
+    ['/vs/editor/common/diff/linesDiffComputers.js', [
+      ["import { getExternalLinesDiffComputer } from './externalLinesDiffComputer.js';",
+       'const getExternalLinesDiffComputer = async () => new DefaultLinesDiffComputer();']]],
+    ['/vs/editor/standalone/browser/standaloneEditor.js', [
+      ["import { MultiDiffEditorWidget } from '@codingame/monaco-vscode-api/vscode/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget';",
+       "class MultiDiffEditorWidget { constructor() { throw new Error('Kodium: no multi-file diff editor'); } }"]]],
+    ['/vs/workbench/services/keybinding/browser/keyboardLayoutService.js', [
+      ["return import('./keyboardLayouts/layout.contribution.darwin.js');", "return import('./keyboardLayouts/layout.contribution.linux.js');"],
+      ["return import('./keyboardLayouts/layout.contribution.win.js');", "return import('./keyboardLayouts/layout.contribution.linux.js');"]]]
+  ])
+}
+
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

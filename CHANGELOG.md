@@ -55,6 +55,13 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- The workbench's script is 1 MB smaller (13.4 MB, 216 modules fewer to parse and run at every start and keep in
+  memory): VS Code's modules came in for a constant or for what the iPad never gets to - Copilot's inline completions'
+  views and models, the comment editor, dictation and chat's speech-to-text (all for the diff editor's accessibility
+  help), the remote explorer's port forwarding (for the remote view's id), MCP's and chat's services, the editor's GPU
+  renderer, tree-sitter, the WebAssembly diff, the multi-file diff editor, the Windows and macOS keyboard layouts.
+  The four web workers (the editor's, JSON's, CSS's, HTML's) are 380 KB smaller each: every one of them carried the
+  WebAssembly diff's binary, which nothing runs.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once
