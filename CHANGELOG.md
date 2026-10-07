@@ -10,6 +10,11 @@ The first build.
   Markdown, HTML, CSS, JSON, Python, Java, PHP, Swift and shell scripts (for, foreach, log...; a JSDoc comment closes
   itself and goes on with " * " on Enter). Their TextMate grammars are left out of the app (Monarch colours the code).
   A "suggest" key on the row above the keyboard shows suggestions and snippets where the caret is (Ctrl+Space).
+- JavaScript: syntax errors in the Problems panel and under the code (also in Czech), an outline of the file (Go to
+  Symbol, Ctrl+Shift+O: functions, classes with their methods, objects, exports) and Format Document. The page's own
+  parser (acorn) reads the file once typing pauses; VS Code's TypeScript service, a worker of 10 MB, stays out.
+- Emmet in HTML, PHP, CSS, SCSS and Less: an abbreviation (ul>li*3, div.box>p, a:link, m10, d:f) expands from the
+  suggestions, as in VS Code.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once

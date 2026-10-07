@@ -228,6 +228,19 @@ function noGrammars() {
   }
 }
 
+// Emmet's suggestions say what they are in English only (emmet-monaco-es): in Czech as VS Code's language pack says it
+function emmetInCzech() {
+  return {
+    name: 'kodium-emmet-czech',
+    transform(code, id) {
+      if (!id.replace(/\\/g, '/').endsWith('/emmet-monaco-es/dist/emmet-monaco.esm.js')) return null
+      const out = code.replace(/'Emmet [aA]bbreviation'/g, '__kdEmmetDetail')
+      if (out === code) this.error('kodium-emmet-czech: emmet-monaco-es has another form')
+      return { code: 'const __kdEmmetDetail = /^cs/i.test((typeof window !== "undefined" && window.__kd_lang) || "") ? "Zkratka Emmet" : "Emmet Abbreviation";\n' + out, map: null }
+    }
+  }
+}
+
 // The extension host in the page starts only for an extension with code it can run: VS Code starts it at once
 // for any extension it hosts, the default themes and snippets included - 3.5 s and 14 MB more at every start on the
 // iPad 2, for nothing to run. Lazily, and counting only extensions with code, it starts when one is installed or
@@ -302,7 +315,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), noGrammars(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

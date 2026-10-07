@@ -8,8 +8,10 @@ import { ExtHostCustomersRegistry, extHostNamedCustomer } from '@codingame/monac
 import { MainContext } from '@codingame/monaco-vscode-api/vscode/vs/workbench/api/common/extHost.protocol'
 
 const nothing = (): undefined => undefined
+// What the host goes through at its start: Copilot's tools (none) - "undefined is not iterable" in the log otherwise
+const answers: Record<string, () => unknown> = { $getTools: () => [] }
 const takesAnything: ProxyHandler<object> = {
-  get: (_target, name) => (typeof name === 'string' && (name.charAt(0) === '$' || name === 'dispose') ? nothing : undefined)
+  get: (_target, name) => (typeof name === 'string' && (name.charAt(0) === '$' || name === 'dispose') ? answers[name] || nothing : undefined)
 }
 
 class StandIn {

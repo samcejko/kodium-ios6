@@ -54,6 +54,9 @@
     "@codingame/monaco-vscode-view-status-bar-service-override": "37.3.3",
     "@codingame/monaco-vscode-workbench-service-override": "37.3.3",
     "@codingame/monaco-vscode-working-copy-service-override": "37.3.3",
+    "acorn": "8.19.0",
+    "emmet-monaco-es": "5.7.0",
+    "js-beautify": "2.0.3",
     "monaco-editor": "npm:@codingame/monaco-vscode-editor-api@37.3.3",
     "vscode": "npm:@codingame/monaco-vscode-extension-api@37.3.3"
   },

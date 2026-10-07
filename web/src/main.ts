@@ -64,6 +64,8 @@ import { followTheme } from './theme'
 import { standInForLeftOutParts } from './exthost'
 import { receiveFiles } from './share'
 import { receiveKeys } from './keybar'
+import { registerJavaScript } from './javascript'
+import { registerEmmet } from './emmet'
 import { DOCUMENTS, registerAppFolders } from './files'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
 // service with it, a seventh of the bundle, for one Uri.file)
@@ -207,6 +209,8 @@ async function start() {
   mark('workbench')
   receiveFiles()
   receiveKeys()
+  registerJavaScript()
+  registerEmmet()
   void followTheme()
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
   const commands = await getService(ICommandService)
