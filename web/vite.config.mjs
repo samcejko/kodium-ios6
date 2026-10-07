@@ -570,16 +570,70 @@ function quickerStart() {
     // app - the icons' 50 KB and the file icons' 95 KB after every start. Kodium's own icons and Seti's file icons have
     // nothing the rewriter changes (it compacts the white space, and makes Seti's "unset" "initial"): marked as
     // rewritten (/*br*/), which the engine's shim leaves alone; another icon theme still goes through it)
+    // (and a stylesheet given the text it already has is not given it again: the old WebKit made a new one of it all the
+    // same, with its rule sets rebuilt - the color theme's after every start, the restored one being the same)
     ['/vs/workbench/services/themes/browser/workbenchThemeService.js', [
       ['            codiconStyleSheet.textContent = iconsStyleSheet.getCSS();',
        '            const css = iconsStyleSheet.getCSS();\n' +
-       '            codiconStyleSheet.textContent = css.indexOf("@font-face") < 0 && css.indexOf("var(") < 0 ? "/*br*/" + css : css;'],
+       '            const text = css.indexOf("@font-face") < 0 && css.indexOf("var(") < 0 ? "/*br*/" + css : css;\n' +
+       '            if (codiconStyleSheet.textContent !== text) codiconStyleSheet.textContent = text;'],
       ['function _applyRules(styleSheetContent, rulesClassName) {\n',
        'function _applyRules(styleSheetContent, rulesClassName) {\n' +
        '    if (rulesClassName === "contributedFileIconTheme" && styleSheetContent.indexOf("seti") >= 0 &&\n' +
        '        !/var\\(|calc\\(|@supports|@container|:has\\(|:is\\(|:where\\(|display\\s*:\\s*(inline-)?(flex|grid)|clamp\\(|color-mix\\(/.test(styleSheetContent)) {\n' +
        '        styleSheetContent = "/*br*/" + styleSheetContent.replace(/:\\s*unset\\b/g, ": initial");\n' +
-       '    }\n']]],
+       '    }\n'],
+      ['    } else {\n        themeStyles[0].textContent = styleSheetContent;\n    }\n',
+       '    } else if (themeStyles[0].textContent !== styleSheetContent) {\n        themeStyles[0].textContent = styleSheetContent;\n    }\n'],
+      // (the file icon theme: VS Code took it up again at every change of the languages - Kodium's, then the extensions' -
+      // and when the theme's extension was registered, though it had just taken it up: read again, all of Seti's
+      // 1500 selectors made again, the stylesheet given its same text and every view told to draw its icons again.
+      // The loader keeps what it made of a theme for as long as the languages' own icons stay the same; a reload that
+      // changes nothing changes nothing, and the restored theme (the last start's) changed for the same one is no news)
+      ['            await this.currentFileIconTheme.reload(this.fileIconThemeLoader);\n' +
+       '            this.applyAndSetFileIconTheme(this.currentFileIconTheme);\n',
+       '            const kdTheme = this.currentFileIconTheme;\n' +
+       '            const kdWas = kdTheme.isLoaded ? [kdTheme.styleSheetContent, kdTheme.hasFileIcons, kdTheme.hasFolderIcons, kdTheme.hidesExplorerArrows] : undefined;\n' +
+       '            await this.currentFileIconTheme.reload(this.fileIconThemeLoader);\n' +
+       '            if (kdWas && kdTheme === this.currentFileIconTheme && kdWas[0] === kdTheme.styleSheetContent && kdWas[1] === kdTheme.hasFileIcons &&\n' +
+       '                kdWas[2] === kdTheme.hasFolderIcons && kdWas[3] === kdTheme.hidesExplorerArrows) {\n' +
+       '                return;\n' +
+       '            }\n' +
+       '            this.applyAndSetFileIconTheme(this.currentFileIconTheme);\n'],
+      ['    applyAndSetFileIconTheme(iconThemeData, silent = false) {\n        this.currentFileIconTheme = iconThemeData;\n',
+       '    applyAndSetFileIconTheme(iconThemeData, silent = false) {\n' +
+       '        const kdPrev = this.currentFileIconTheme;\n' +
+       '        if (kdPrev && kdPrev !== iconThemeData && kdPrev.id === iconThemeData.id && kdPrev.styleSheetContent === iconThemeData.styleSheetContent &&\n' +
+       '            kdPrev.hasFileIcons === iconThemeData.hasFileIcons && kdPrev.hasFolderIcons === iconThemeData.hasFolderIcons &&\n' +
+       '            kdPrev.hidesExplorerArrows === iconThemeData.hidesExplorerArrows) {\n' +
+       '            silent = true;\n' +
+       '        }\n' +
+       '        this.currentFileIconTheme = iconThemeData;\n']]],
+    ['/vs/workbench/services/themes/browser/fileIconThemeData.js', [
+      ['    load(data) {\n        if (!data.location) {\n            return Promise.resolve(data.styleSheetContent);\n        }\n' +
+       '        return this.loadIconThemeDocument(data.location).then(iconThemeDocument => {\n' +
+       '            const result = this.processIconThemeDocument(data.id, data.location, iconThemeDocument);\n',
+       '    kdLanguageIcons() {\n' +
+       '        let icons = "";\n' +
+       '        for (const languageId of this.languageService.getRegisteredLanguageIds()) {\n' +
+       '            const icon = this.languageService.getIcon(languageId);\n' +
+       '            if (icon) icons += languageId + " " + icon.dark + " " + icon.light + "\\n";\n' +
+       '        }\n' +
+       '        return icons;\n' +
+       '    }\n' +
+       '    load(data) {\n        if (!data.location) {\n            return Promise.resolve(data.styleSheetContent);\n        }\n' +
+       '        const kdDone = !data.watch && this.kdLast && this.kdLast.key === data.location.toString() + "\\n" + this.kdLanguageIcons() ? this.kdLast.result : undefined;\n' +
+       '        if (kdDone) {\n' +
+       '            data.styleSheetContent = kdDone.content;\n' +
+       '            data.hasFileIcons = kdDone.hasFileIcons;\n' +
+       '            data.hasFolderIcons = kdDone.hasFolderIcons;\n' +
+       '            data.hidesExplorerArrows = kdDone.hidesExplorerArrows;\n' +
+       '            data.isLoaded = true;\n' +
+       '            return Promise.resolve(data.styleSheetContent);\n' +
+       '        }\n' +
+       '        return this.loadIconThemeDocument(data.location).then(iconThemeDocument => {\n' +
+       '            const result = this.processIconThemeDocument(data.id, data.location, iconThemeDocument);\n' +
+       '            if (!data.watch) this.kdLast = { key: data.location.toString() + "\\n" + this.kdLanguageIcons(), result };\n']]],
     // (JSON with comments - themes, the Seti icon theme's 70 KB, the languages' configurations: 16 documents after every
     // start - went through VS Code's own scanner, character by character: the comments and trailing commas out by
     // regular expression and the engine's JSON.parse instead; whatever that cannot read, the scanner as before)

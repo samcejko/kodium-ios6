@@ -65,6 +65,12 @@ The first build.
   engine's JSON.parse once comments and trailing commas are taken out, instead of VS Code's scanner character by
   character: 0.4 s less work after every start on the iPad 2 (16 documents). What JSON.parse cannot read still goes
   to the scanner.
+- The file icons' theme is made once after a start, not three times: VS Code took it up again at every change of the
+  languages and when its extension was registered, though it had just made it - read and parsed again, Seti's 1500
+  selectors put together again, its 95 KB stylesheet given the same text again (which the old WebKit parses anew and
+  rebuilds its rule sets from) and every view told to draw its icons again. It is made again only when a language
+  brings an icon of its own, and a stylesheet given the text it already has is left alone (the color theme's after
+  every start, too): 0.9 s less work after a start on the iPad 2 (7.2 s instead of 8.1).
 - Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
   with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
   made again at every opening of the panel.
