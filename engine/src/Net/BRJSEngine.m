@@ -582,7 +582,11 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
 {
     BRWebThreadRunFn run = BRWebThreadRunner();
     if (!run) { [g_codeKeeper invalidate]; return; }
-    BOOL critical = [BRMemory level] >= BRMemoryLevelCritical;
+    // (the kept code is no small thing - 25 MB of bytecode and 3 MB of JIT code in Kodium after a few minutes' use: it
+    // is kept while memory is plentiful only; when it gets tight JavaScriptCore throws it away at its own pace again,
+    // when critical at once)
+    BRMemoryLevel level = [BRMemory level];
+    BOOL critical = level >= BRMemoryLevelCritical, plenty = level < BRMemoryLevelTight;
     run(^{
         if (!BRFindCodeClock()) {
             dispatch_async(dispatch_get_main_queue(), ^{ [g_codeKeeper invalidate]; });
@@ -598,7 +602,7 @@ static BOOL BRPageHeapBudget(size_t *allocated, size_t *limit, double *lastLengt
             return;
         }
         g_codeThrownForMemory = NO;
-        *g_lastCodeDiscard = g_currentTime();
+        if (plenty) *g_lastCodeDiscard = g_currentTime();
     });
 }
 
