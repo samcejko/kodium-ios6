@@ -365,7 +365,24 @@ function quickerPalette() {
        '                filteredCommandPicks.push(commandPick);\n' +
        '            }\n' +
        '        }\n' +
-       '        else for (const commandPick of allCommandPicks) {']]]
+       '        else for (const commandPick of allCommandPicks) {'],
+      // (the sort: each pick's count in the history and its label's place in alphabetical order worked out once per
+      // opening, not in each of its ~2600 comparisons - two lookups in the history and a localeCompare each; the
+      // labels' order is kept while the labels stay the same)
+      ['        filteredCommandPicks.sort((commandPickA, commandPickB) => {',
+       '        let kdRank = this.kdLabelRank;\n' +
+       '        if (!kdRank || filteredCommandPicks.some((p) => !kdRank.has(p.label))) {\n' +
+       '            const labels = [...new Set([...(kdRank ? kdRank.keys() : []), ...filteredCommandPicks.map((p) => p.label)])].sort((a, b) => a.localeCompare(b));\n' +
+       '            kdRank = this.kdLabelRank = new Map(labels.map((label, i) => [label, i]));\n' +
+       '        }\n' +
+       '        for (const p of filteredCommandPicks) { p.kdCounter = this.commandsHistory.peek(p.commandId); p.kdRank = kdRank.get(p.label); }\n' +
+       '        filteredCommandPicks.sort((commandPickA, commandPickB) => {'],
+      ['            const commandACounter = this.commandsHistory.peek(commandPickA.commandId);\n            const commandBCounter = this.commandsHistory.peek(commandPickB.commandId);',
+       '            const commandACounter = commandPickA.kdCounter;\n            const commandBCounter = commandPickB.kdCounter;'],
+      ['            return commandPickA.label.localeCompare(commandPickB.label);\n        });',
+       '            return commandPickA.kdRank - commandPickB.kdRank;\n        });'],
+      ['            const isInHistory = !!this.commandsHistory.peek(commandPick.commandId);',
+       '            const isInHistory = !!commandPick.kdCounter;']]]
   ])
 }
 

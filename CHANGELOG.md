@@ -55,6 +55,9 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- Object literals with computed keys, getters or setters, and every spread ({...options}), no longer go through core-js:
+  a spread asked its Object.getOwnPropertySymbols, which walks all of the object's names through closures. Only an
+  object with one of core-js's symbols still goes there (the command palette opens 2-3 % sooner, the start 0.1 s).
 - The workbench starts another 0.35 s sooner: Kodium's 31 Monarch languages are registered together. One by one,
   each made VS Code build its languages' registry again from all languages so far and tell the settings' schema of
   all of them again (651 language merges, 31 schema updates).

@@ -557,6 +557,50 @@
         VInherits.__vsc = true;
         G.__br_inherits = VInherits;
     }
+    // Object literals the same way: computed keys, getters and setters (__br_props) took core-js's
+    // getOwnPropertyDescriptor and defineProperty; and every spread {...x} (__br_assignOwn) asked core-js's
+    // Object.getOwnPropertySymbols, which walks all the object's names through closures (the palette builds hundreds
+    // of such objects at each opening). Its symbols are properties named "Symbol(...)": only an object that has one
+    // goes to core-js for them.
+    var nGOPN = G.__brNative && G.__brNative.getOwnPropertyNames, hasOwn3 = Object.prototype.hasOwnProperty;
+    var hasSymbolKey = function (o) {
+        var names = nGOPN(o);
+        for (var i = 0; i < names.length; i++) { var k = names[i]; if (k.charCodeAt(0) === 83 && k.slice(0, 7) === 'Symbol(') return true; }
+        return false;
+    };
+    var OrigAssign = G.__br_assignOwn;
+    if (typeof OrigAssign === 'function' && !OrigAssign.__vsc && typeof nDP === 'function' && typeof nGOPN === 'function') {
+        var VAssign = function (t, e) {
+            if (e == null) return t;
+            if (typeof e === 'object' && hasSymbolKey(e)) return OrigAssign(t, e);
+            for (var r in e) {
+                if (!hasOwn3.call(e, r)) continue;
+                if (r === '__proto__') nDP(t, r, { value: e[r], enumerable: true, writable: true, configurable: true });
+                else t[r] = e[r];
+            }
+            return t;
+        };
+        VAssign.__vsc = true;
+        G.__br_assignOwn = VAssign;
+    }
+    var OrigProps = G.__br_props;
+    if (typeof OrigProps === 'function' && !OrigProps.__vsc && typeof nDP === 'function' && typeof nGOPD === 'function') {
+        var VProps = function (t, e) {
+            for (var r = 0; r < e.length; r += 3) {
+                var k = e[r], v = e[r + 1], kind = e[r + 2];
+                if (kind === 3) { G.__br_assignOwn(t, v); continue; }
+                if (!plainKey(k)) { OrigProps(t, [k, v, kind]); continue; }
+                if (kind === 0) { nDP(t, k, { value: v, enumerable: true, writable: true, configurable: true }); continue; }
+                var c = nGOPD(t, k), d = { enumerable: true, configurable: true };
+                if (c && !('value' in c)) { d.get = c.get; d.set = c.set; }
+                if (kind === 1) d.get = v; else d.set = v;
+                nDP(t, k, d);
+            }
+            return t;
+        };
+        VProps.__vsc = true;
+        G.__br_props = VProps;
+    }
     // the property names the bundle reads (G.__vsc_proxyNames, from <bundle>.names.js): accessors of the shared
     // prototype of get-only proxies, so a trap sees them
     var P = G.__br_Proxy, f = P && P.factory, list = G.__vsc_proxyNames;
