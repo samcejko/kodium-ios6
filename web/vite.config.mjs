@@ -667,8 +667,42 @@ function quickerStart() {
        '            kdPrev.hidesExplorerArrows === iconThemeData.hidesExplorerArrows) {\n' +
        '            silent = true;\n' +
        '        }\n' +
-       '        this.currentFileIconTheme = iconThemeData;\n']]],
+       '        this.currentFileIconTheme = iconThemeData;\n'],
+      // (the product icon theme likewise: the default one restored from storage, then the default one again - news
+      // that had the icons' 50 KB stylesheet made again from the 950 icons)
+      ['    applyAndSetProductIconTheme(iconThemeData, silent = false) {\n        this.currentProductIconTheme = iconThemeData;\n',
+       '    kdSameStored(a, b) {\n' +
+       '        if (!a || !b || a === b || a.id !== b.id) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        let ja, jb;\n' +
+       '        try {\n' +
+       '            a.toStorage({ store: (key, value) => { ja = value; } });\n' +
+       '            b.toStorage({ store: (key, value) => { jb = value; } });\n' +
+       '        } catch (e) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        return ja !== undefined && ja === jb;\n' +
+       '    }\n' +
+       '    applyAndSetProductIconTheme(iconThemeData, silent = false) {\n' +
+       '        if (!silent && this.kdSameStored(this.currentProductIconTheme, iconThemeData)) {\n' +
+       '            silent = true;\n' +
+       '        }\n' +
+       '        this.currentProductIconTheme = iconThemeData;\n']]],
+    // (and what was made of the theme is stored with it, under a key of its file's place, its text's length and hash,
+    // the languages' icons and the processing code: the next start takes it from there when they are the same, instead
+    // of making Seti's 1500 selectors again - 0.65 s of a profile)
     ['/vs/workbench/services/themes/browser/fileIconThemeData.js', [
+      ['                case "watch":\n                    theme[key] = data[key];\n',
+       '                case "watch":\n                case "kdKey":\n                    theme[key] = data[key];\n'],
+      ['            return theme;\n        } catch (e) {\n            return undefined;\n        }\n    }\n    toStorage(storageService) {\n',
+       '            FileIconThemeData.kdStored = theme;\n' +
+       '            return theme;\n        } catch (e) {\n            return undefined;\n        }\n    }\n    toStorage(storageService) {\n'],
+      ['            watch: this.watch\n        });\n',
+       '            watch: this.watch,\n            kdKey: this.kdKey\n        });\n'],
+      ['    loadIconThemeDocument(location) {\n        return this.fileService.readExtensionResource(location).then(content => {\n',
+       '    loadIconThemeDocument(location, kdContent) {\n' +
+       '        return (kdContent !== undefined ? Promise.resolve(kdContent) : this.fileService.readExtensionResource(location)).then(content => {\n'],
       ['    load(data) {\n        if (!data.location) {\n            return Promise.resolve(data.styleSheetContent);\n        }\n' +
        '        return this.loadIconThemeDocument(data.location).then(iconThemeDocument => {\n' +
        '            const result = this.processIconThemeDocument(data.id, data.location, iconThemeDocument);\n',
@@ -680,6 +714,13 @@ function quickerStart() {
        '        }\n' +
        '        return icons;\n' +
        '    }\n' +
+       '    kdStoreKey(location, content) {\n' +
+       '        let h = 0;\n' +
+       '        for (let i = 0; i < content.length; i++) {\n' +
+       '            h = ((h << 5) - h + content.charCodeAt(i)) | 0;\n' +
+       '        }\n' +
+       '        return location.toString() + "\\n" + content.length + ":" + h + ":" + String(this.processIconThemeDocument).length + "\\n" + this.kdLanguageIcons();\n' +
+       '    }\n' +
        '    load(data) {\n        if (!data.location) {\n            return Promise.resolve(data.styleSheetContent);\n        }\n' +
        '        const kdDone = !data.watch && this.kdLast && this.kdLast.key === data.location.toString() + "\\n" + this.kdLanguageIcons() ? this.kdLast.result : undefined;\n' +
        '        if (kdDone) {\n' +
@@ -690,8 +731,17 @@ function quickerStart() {
        '            data.isLoaded = true;\n' +
        '            return Promise.resolve(data.styleSheetContent);\n' +
        '        }\n' +
-       '        return this.loadIconThemeDocument(data.location).then(iconThemeDocument => {\n' +
-       '            const result = this.processIconThemeDocument(data.id, data.location, iconThemeDocument);\n' +
+       '        let kdKey;\n' +
+       '        return this.fileService.readExtensionResource(data.location).then(content => {\n' +
+       '            kdKey = data.watch ? undefined : this.kdStoreKey(data.location, content);\n' +
+       '            const stored = FileIconThemeData.kdStored;\n' +
+       '            if (kdKey && stored && stored.id === data.id && stored.kdKey === kdKey && typeof stored.styleSheetContent === "string") {\n' +
+       '                return { kdStored: { content: stored.styleSheetContent, hasFileIcons: !!stored.hasFileIcons, hasFolderIcons: !!stored.hasFolderIcons, hidesExplorerArrows: !!stored.hidesExplorerArrows } };\n' +
+       '            }\n' +
+       '            return this.loadIconThemeDocument(data.location, content);\n' +
+       '        }).then(iconThemeDocument => {\n' +
+       '            const result = iconThemeDocument.kdStored || this.processIconThemeDocument(data.id, data.location, iconThemeDocument);\n' +
+       '            data.kdKey = kdKey;\n' +
        '            if (!data.watch) this.kdLast = { key: data.location.toString() + "\\n" + this.kdLanguageIcons(), result };\n']]],
     // (JSON with comments - themes, the Seti icon theme's 70 KB, the languages' configurations: 16 documents after every
     // start - went through VS Code's own scanner, character by character: the comments and trailing commas out by
@@ -761,15 +811,48 @@ function quickerStart() {
        '    _reconcile() {\n        this.contextKeyService.bufferChangeEvents(() => this.kdReconcile());\n    }\n    kdReconcile() {\n']]],
     // (the default settings were made again from all 1400 settings once the extensions were registered, and compared
     // with the ones before, key by key - to drop what the last start had cached of the defaults' overrides (Kodium's
-    // own defaults, extensions'); when each of those is what the registry has now, that changes nothing: the cache is
-    // dropped without the rest)
+    // own defaults, extensions'); when each of those is what the registry has now, or a setting it does not have (the
+    // defaults hold only the registry's settings), that changes nothing: the cache is dropped without the rest)
+    // (and the settings files' seven JSON schemas - each of the 1400 settings sorted into them by scope - were made after
+    // the extensions were registered and again at every change of the settings' registry: 0.4 s each in a profile, for
+    // settings.json's suggestions. Registered once as stand-ins whose fields make them all when first read)
     ['/vs/workbench/services/configuration/browser/configurationService.js', [
       ['        case ConfigurationTarget.DEFAULT:\n            this.reloadDefaultConfiguration();\n            return;\n',
        '        case ConfigurationTarget.DEFAULT:\n' +
        '            if (this.defaultConfiguration.kdReloadChangesNothing && this.defaultConfiguration.kdReloadChangesNothing()) {\n' +
        '                return;\n' +
        '            }\n' +
-       '            this.reloadDefaultConfiguration();\n            return;\n']]],
+       '            this.reloadDefaultConfiguration();\n            return;\n'],
+      ['    registerConfigurationSchemas() {\n        for (const key of ( Object.keys(allSettings.properties))) {\n',
+       '    registerConfigurationSchemas() {\n' +
+       '        this.kdBuilt = undefined;\n' +
+       '        if (!this.kdStandIns) {\n' +
+       '            this.kdStandIns = {};\n' +
+       '            for (const name of ["defaultSettingsSchema", "userSettingsSchema", "profileSettingsSchema", "machineSettingsSchema",\n' +
+       '                "workspaceSettingsSchema", "folderSettingsSchema", "configDefaultsSchema"]) {\n' +
+       '                const standIn = {};\n' +
+       '                for (const field of ["type", "description", "properties", "patternProperties", "additionalProperties",\n' +
+       '                    "allowTrailingCommas", "allowComments"]) {\n' +
+       '                    Object.defineProperty(standIn, field, {\n' +
+       '                        enumerable: true,\n' +
+       '                        configurable: true,\n' +
+       '                        get: () => {\n' +
+       '                            if (!this.kdBuilt) {\n' +
+       '                                this.kdBuilt = this.kdBuildConfigurationSchemas();\n' +
+       '                            }\n' +
+       '                            return this.kdBuilt[name][field];\n' +
+       '                        }\n' +
+       '                    });\n' +
+       '                }\n' +
+       '                this.kdStandIns[name] = standIn;\n' +
+       '            }\n' +
+       '        }\n' +
+       '        this.registerSchemas(this.kdStandIns);\n' +
+       '    }\n' +
+       '    kdBuildConfigurationSchemas() {\n' +
+       '        for (const key of ( Object.keys(allSettings.properties))) {\n'],
+      ['        this.registerSchemas({\n            defaultSettingsSchema,\n',
+       '        return ({\n            defaultSettingsSchema,\n']]],
     ['/vs/workbench/services/configuration/browser/configuration.js', [
       ['    hasCachedConfigurationDefaultsOverrides() {\n',
        '    kdReloadChangesNothing() {\n' +
@@ -777,7 +860,7 @@ function quickerStart() {
        '        const properties = this.configurationRegistry.getConfigurationProperties();\n' +
        '        for (const key of Object.keys(cached)) {\n' +
        '            const property = properties[key];\n' +
-       '            if (!property || !equals(property.default, cached[key])) {\n' +
+       '            if (property && !equals(property.default, cached[key])) {\n' +
        '                return false;\n' +
        '            }\n' +
        '        }\n' +

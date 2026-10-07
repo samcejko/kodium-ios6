@@ -77,6 +77,12 @@ The first build.
   color theme restored from the last start is not put in place a second time when the one loaded from its extension
   is the same (all of its rules made again and every listener told); the default settings are not made again from all
   1400 settings when nothing the start had cached of them differs; the extensions' context keys come as one change.
+- The seconds after the start are busy another 1.1 s less (4.7 s instead of 5.8 on the iPad 2): the settings files'
+  seven JSON schemas are made when first read, not after the extensions and at every change of the settings'
+  registry; the default product icon theme restored from storage, then set again, no longer has the icons' 50 KB
+  stylesheet made again; what was made of the file icon theme is stored with it and taken from there by the next start
+  while its file, the languages' icons and the code are the same; the default settings' reload is skipped also when
+  Kodium's defaults name a setting this VS Code does not have.
 - Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
   with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
   made again at every opening of the panel.
