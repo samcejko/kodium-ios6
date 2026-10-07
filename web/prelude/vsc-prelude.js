@@ -513,6 +513,50 @@
         VSuper.__vsc = true;
         G.__br_superGet = VSuper;
     }
+    // A class's methods (__br_defs: 40 000 of them at the start) and its prototype (__br_inherits: 2 500) went through
+    // core-js's Object.defineProperty and Object.create with a property map - its symbol polyfill's, which converts every
+    // key and lists the map's symbols (WebKit's profiler: 2.5 s of a profiled start for the prototypes, 1 s for the
+    // methods). A string key that is no core-js symbol ("Symbol(...)") takes the engine's own defineProperty; the
+    // prototype is made with Object.create(proto) and gets its constructor the same way.
+    var nDP = G.__brNative && G.__brNative.defineProperty;
+    var plainKey = function (k) { return typeof k === 'string' && k.slice(0, 7) !== 'Symbol('; };
+    var OrigDefs = G.__br_defs;
+    if (typeof OrigDefs === 'function' && !OrigDefs.__vsc && typeof nDP === 'function' && typeof nGOPD === 'function') {
+        var VDefs = function (t, e) {
+            for (var r = 0; r < e.length; r += 3) {
+                var o = e[r], fn = e[r + 1], kind = e[r + 2], d;
+                if (!plainKey(o)) { OrigDefs(t, [o, fn, kind]); continue; }
+                if (kind === 0) d = { value: fn, writable: true, configurable: true, enumerable: false };
+                else {
+                    var c = nGOPD(t, o);
+                    d = { configurable: true, enumerable: false };
+                    if (c && !('value' in c)) { d.get = c.get; d.set = c.set; }
+                    if (kind === 1) d.get = fn; else d.set = fn;
+                }
+                try { nDP(t, o, d); } catch (x) { if (kind === 0) t[o] = fn; }
+            }
+        };
+        VDefs.__vsc = true;
+        G.__br_defs = VDefs;
+    }
+    var OrigInherits = G.__br_inherits;
+    if (typeof OrigInherits === 'function' && !OrigInherits.__vsc && typeof nDP === 'function') {
+        var fp = Function.prototype;
+        var VInherits = function (t, e) {
+            if (e !== null && (!e || typeof e !== 'function' && typeof e !== 'object' || e.prototype === undefined)) {
+                throw new TypeError('Class extends value ' + e + ' is not a constructor or null');
+            }
+            var p = Object.create(e === null ? null : e.prototype);
+            nDP(p, 'constructor', { value: t, writable: true, configurable: true });
+            t.prototype = p;
+            if (e !== null) {
+                try { t.__proto__ = e; } catch (x) {}
+                if (typeof e !== 'function') { t.call = fp.call; t.apply = fp.apply; t.bind = fp.bind; }
+            }
+        };
+        VInherits.__vsc = true;
+        G.__br_inherits = VInherits;
+    }
     // the property names the bundle reads (G.__vsc_proxyNames, from <bundle>.names.js): accessors of the shared
     // prototype of get-only proxies, so a trap sees them
     var P = G.__br_Proxy, f = P && P.factory, list = G.__vsc_proxyNames;
