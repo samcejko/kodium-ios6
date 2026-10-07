@@ -6,6 +6,32 @@ The changes of each Kodium version; the newest is at the top.
 
 The first build.
 
+- Typing on the iPad 2 about 40 % quicker again (a key showed after 0.29-0.37 s with the IntelliSense of the last
+  version, now 0.15-0.22 s), measured key by key with WebKit's profiler and the app's own sampler:
+  - positions in a line (the cursor, the scroll to it, indent guides) are computed, as VS Code does on other browsers,
+    not measured in the page with a layout of it each time: VS Code does not trust its arithmetic on Safari, whose zoom
+    changes the characters' widths (Kodium's page cannot be zoomed), and it took the font for proportional because
+    iOS 6's Courier lacks the arrow VS Code draws tabs with;
+  - the dots of selected white space are not drawn (worked out again for every line on the screen at every frame), and
+    the editor's hidden text area for screen readers stays empty (500 characters around the cursor were written into
+    it with the selection at every key, each time a layout of the page);
+  - inline completions (ghost text, next edit suggestions: Copilot's) are left out - no extension that gives them runs
+    on the iPad, and their models followed every key and every move of the cursor in every editor;
+  - folding regions and the matching bracket are worked out once typing pauses (1 s, 0.3 s), not after every key;
+  - the parts that change while one works (the tabs, the editor, the status bar, the side bar, the panel) are
+    composited layers: after a layout the old engine maps every box it laid out through all of its ancestors up to
+    the nearest layer - the page's root, 30 levels up, before (a tab's label: 90 -> 42 ms);
+  - the engine's shims that look a web page over after every change (picture sizes, rows wider than the window, links
+    to the page itself, :has() at every key) stay out of the workbench (window.__brLeanPage, Surfari's engine);
+  - compiled JavaScript is kept until memory runs short (the engine threw it all away a minute after it last did, and
+    the editor went back to the interpreter in the middle of typing), and the JIT takes a function after two entries;
+  - suggestions show once typing pauses for half a second (0.3 s brought them in the middle of words).
+- The command palette and other sorted lists sort faster (an ASCII string comparison in place of the engine's
+  localeCompare); VS Code's rules made at run time with nothing the engine lacks go into the page as they are, not
+  through the stylesheet rewriter (a synchronous request to the app each); WebKit's free memory goes back to the system
+  every 20 s while the app holds more than 200 MB. Developer commands: jsprofile (WebKit's JavaScript profiler on), mem
+  with the page's layers and types=1; the lowered workbench comes in lines of 1000 characters, so that a profile or an
+  error names a line.
 - Extensions from Open VSX: the Extensions view (search, install, update, the "install from the publisher?" question).
   Web extensions run in an extension host in the page - their code lowered to ES5 by the engine as it comes from the
   network, or by the page's Function - and declarative ones (themes, snippets, keymaps, icon themes) need none. A
@@ -18,8 +44,8 @@ The first build.
 - IntelliSense for JSON, CSS (SCSS, Less) and HTML: completion, hover, problems, formatting, colours and symbols, from
   monaco's language services - each in a web worker of its own, built for iOS 6 (the engine's polyfills and the
   Proxy stand-in in front of it), that starts when a file of its language opens and stops 45 s after its last use.
-  Suggestions show as in VS Code once typing pauses for 0.3 s (the words of the file in a JavaScript file); CSS
-  colours as swatches.
+  Suggestions show as in VS Code once typing pauses (the words of the file in a JavaScript file); CSS colours as
+  swatches.
 - The editor's own worker (diffs, word suggestions) runs off the page's thread, which had it all. VS Code's file icons
   (Seti).
 - Smoother on the iPad 2: the engine's memory relief comes only when iOS is about to close the app - its full garbage

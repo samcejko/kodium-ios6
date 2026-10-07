@@ -165,6 +165,11 @@
     // callbacks that go through an element's whole subtree get only the topmost elements of a batch - one under an
     // element of the same batch was covered by that one's pass. (The parser reports every element it adds: each
     // subtree query ran for the parent, the child, the grandchild..., 0.1-0.2 ms an element, 800 on example.com.)
+    // A page of an app built on this engine (window.__brLeanPage = true, Kodium's workbench) has its stylesheet made for
+    // the engine beforehand and sizes its own pictures and canvases: the shims that look the page over after every change
+    // for what a web page might need (picture sizes and sources, rows wider than the window, links to the page itself)
+    // stay out of it - on the iPad 2 they took 15-20 ms after every keystroke in the editor.
+    function leanPage() { return window.__brLeanPage === true; }
     var addedCallbacks = [], treeCallbacks = [], settledCallbacks = [], settleTimer = null;
     function observeAdded(fn) { addedCallbacks.push(fn); }
     function observeAddedTree(fn) { treeCallbacks.push(fn); }
@@ -1425,6 +1430,7 @@
     // picture it knew at every settle of the page, each a change of the style attribute for every MutationObserver)
     var ofiStarted = false;
     function runResponsiveImages() {
+        if (leanPage()) return;
         try { if (window.picturefill) window.picturefill(); } catch (e) {}
         try {
             if (!window.objectFitImages) return;
@@ -3424,7 +3430,7 @@
     // (the scan reads the style of every element: on a big page that changes all the time it waits five times its cost)
     var aspectCost = 0, aspectEnd = 0;
     var scheduleAspect = function () {
-        if (aspectTimer) return;
+        if (aspectTimer || leanPage()) return;
         aspectTimer = setTimeout(function () {
             aspectTimer = null;
             var t0 = Date.now();
@@ -4166,7 +4172,7 @@
     };
     // (the scan reads every element: a page it ran long on waits five times its cost)
     var scheduleShrink = function () {
-        if (shrinkTimer) return;
+        if (shrinkTimer || leanPage()) return;
         shrinkTimer = setTimeout(function () { shrinkTimer = null; shrinkRows(); }, Math.max(200, shrinkEnd + shrinkCost * 5 - Date.now()));
     };
     onReady(scheduleShrink);
@@ -4428,6 +4434,7 @@
         onReady(updateTarget);
         // :local-link: links to the current site
         var markLocalLinks = function (root) {
+            if (leanPage()) return;
             try {
                 var links = (root && root.querySelectorAll ? root : document).querySelectorAll('a[href]');
                 for (var i = 0; i < links.length; i++) {
@@ -4924,7 +4931,8 @@
         window.addEventListener('resize', function () { if (manifest && (manifest.cq.length || manifest.dv.length || (manifest.gd && manifest.gd.length))) schedule(); }, false);
         var reevaluate = function () { if (manifest && manifest.has.length) schedule(); };
         observeAddedTree(function () { if (manifest && ((manifest.sc && manifest.sc.length) || manifest.has.length)) schedule(); });
-        document.addEventListener('input', reevaluate, true);
+        // (an app's page: not at every keystroke - its :has() rules are about its structure, which the DOM changes report)
+        document.addEventListener('input', function () { if (!leanPage()) reevaluate(); }, true);
         document.addEventListener('change', reevaluate, true);
         document.addEventListener('click', reevaluate, true);
         document.addEventListener('focus', reevaluate, true);

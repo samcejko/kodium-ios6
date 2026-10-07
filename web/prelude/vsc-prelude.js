@@ -37,6 +37,9 @@
     // right here
     G.__brNoFlexItems = true;
     G.__brNoAlignSelf = true;
+    // and the shims that look a web page over after every change for what it might need (picture sizes and sources,
+    // rows wider than the window, links to the page itself, :has() at every keystroke): 15-20 ms after every key
+    G.__brLeanPage = true;
     // and what the engine's rewriter finds in the styles VS Code inserts at run time (its theme, icons, token colours)
     // reaches the shims without the marker rules, variable users and deferred values, as for the stylesheet (see
     // web/tools/assemble-site.mjs): the variables pass went through them at every variable VS Code set. The variables
@@ -70,6 +73,36 @@
             } catch (e) { return null; }
         }
     };
+
+    // String.prototype.localeCompare: the engine makes a collator for every call (70 µs each on the iPad 2), and VS Code
+    // sorts with it - it has no Intl.Collator here: the command palette's thousand commands, the explorer's and quick
+    // open's files. Two strings of plain ASCII are compared the way the collator orders them (punctuation, then
+    // digits, then letters without regard to case; then lower case before upper); anything else goes to the engine's.
+    (function () {
+        var nativeCompare = String.prototype.localeCompare;
+        if (typeof nativeCompare !== 'function') return;
+        var rank = function (c) {
+            if (c >= 97 && c <= 122) return 512 + c - 97;          // a-z
+            if (c >= 65 && c <= 90) return 512 + c - 65;           // A-Z
+            if (c >= 48 && c <= 57) return 256 + c - 48;           // 0-9
+            return c;                                              // the rest of ASCII, in its own order
+        };
+        String.prototype.localeCompare = function (that) {
+            var a = String(this), b = String(that), n = Math.min(a.length, b.length), i, ca, cb, caseDiff = 0;
+            for (i = 0; i < n; i++) {
+                ca = a.charCodeAt(i); cb = b.charCodeAt(i);
+                if (ca > 126 || cb > 126) return nativeCompare.apply(a, arguments);
+                if (ca === cb) continue;
+                var ra = rank(ca), rb = rank(cb);
+                if (ra !== rb) return ra < rb ? -1 : 1;
+                if (!caseDiff) caseDiff = ca > cb ? -1 : 1;        // (the same letter: lower case first)
+            }
+            for (; i < a.length; i++) if (a.charCodeAt(i) > 126) return nativeCompare.apply(a, arguments);
+            for (; i < b.length; i++) if (b.charCodeAt(i) > 126) return nativeCompare.apply(a, arguments);
+            if (a.length !== b.length) return a.length < b.length ? -1 : 1;
+            return caseDiff;
+        };
+    })();
 
     // The engine's visualViewport (shims.js) is the window's size when the page started, and its addEventListener does
     // nothing - and on iOS VS Code takes its size from there and lays out again on its resize event alone: after the

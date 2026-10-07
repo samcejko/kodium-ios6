@@ -5,6 +5,7 @@
 #import "BRCSSRewriter.h"
 #import "BRURLProtocol.h"
 #import "BRCommon.h"
+#import "BRMemory.h"
 #import <objc/message.h>
 #include <dlfcn.h>
 
@@ -48,6 +49,8 @@ static NSString *KDShimArgument(NSURL *url)
     web.scrollView.bounces = NO;
     [root addSubview:web];
     self.webView = web;
+    // (the page's layers - document tiles and composited layers - in the memory numbers: kodium:mem)
+    [BRMemory watchLayer:web.layer];
 
     // (shown only when the workbench cannot load)
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectInset(root.bounds, 40, 40)];

@@ -96,3 +96,18 @@
   border: 0;
   background-color: #fff;
 }
+
+/* A composited layer for each part that changes while one works. After a change, the iOS 6 engine maps the repaint
+   rectangle of every box it laid out through all of its ancestors, up to the nearest composited layer - without
+   these the root of the page, 30 levels up in VS Code's DOM (and the old flexbox lays a row's children out more than
+   once). Measured on the iPad 2: a change of a tab's label was a 90 ms layout, a line of the editor 8 ms, its line
+   number 13; with these layers 42, 4.5 and 6, and a key typed 10-15 % sooner. */
+.monaco-workbench .part.editor > .content .editor-group-container > .title,
+.monaco-workbench .part.statusbar,
+.monaco-workbench .part.activitybar,
+.monaco-workbench .part.sidebar,
+.monaco-workbench .part.panel,
+.monaco-editor .overflow-guard {
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}

@@ -302,7 +302,7 @@ static void *BRFindLocalSymbol(const char *library, const char *name)
         for (uint32_t s = 0; s < symtab->nsyms; s++) {
             uint32_t at = syms[s].n_un.n_strx;
             if (!at || at >= symtab->strsize || (syms[s].n_type & N_STAB) || (syms[s].n_type & N_TYPE) != N_SECT) continue;
-            if (strcmp(strings + at, name) == 0) return (void *)(uintptr_t)(syms[s].n_value + slide);
+            if (strcmp(strings + at, name) == 0) return (void *)(uintptr_t)(syms[s].n_value + slide + ((syms[s].n_desc & N_ARM_THUMB_DEF) ? 1 : 0));
         }
         return NULL;
     }
@@ -356,7 +356,8 @@ static void BRFindCacheLocalSymbols(const char *library, const char *const names
             for (uint32_t s = 0; s < entries[e].nlistCount && entries[e].nlistStartIndex + s < info->nlistCount; s++) {
                 uint32_t at = syms[s].n_un.n_strx;
                 if (!at || at >= info->stringsSize || (syms[s].n_type & N_STAB) || (syms[s].n_type & N_TYPE) != N_SECT) continue;
-                for (int k = 0; k < count; k++) if (!found[k] && strcmp(strings + at, names[k]) == 0) found[k] = (void *)(uintptr_t)(syms[s].n_value + slide);
+                // (a Thumb function's address carries bit 0, as dlsym gives it: a data symbol's never does)
+                for (int k = 0; k < count; k++) if (!found[k] && strcmp(strings + at, names[k]) == 0) found[k] = (void *)(uintptr_t)(syms[s].n_value + slide + ((syms[s].n_desc & N_ARM_THUMB_DEF) ? 1 : 0));
             }
             break;
         }
@@ -382,6 +383,8 @@ static void BRFindJSCSymbols(const char *const names[], void *found[], int count
     BRFindCacheLocalSymbols(library, names, local, count);
     for (int k = 0; k < count; k++) if (!found[k]) found[k] = local[k];
 }
+
+static void BRKeepCompiledCode(void);
 
 + (void)applyEngineTiers
 {
@@ -410,8 +413,39 @@ static void BRFindJSCSymbols(const char *const names[], void *found[], int count
     }
     if (mode >= 1) *candidates = 0;   // no function is small enough for the optimizing JIT
     if (mode >= 2) { *jitAfterWarmUp = INT32_MAX; *jitSoon = INT32_MAX; }   // (the maximum: never)
+    // BRJSCWarmUp: the interpreter's count before the baseline JIT takes a function (an entry counts 15, a loop's
+    // round 1; JavaScriptCore's own 100). An app whose code mostly runs once or twice per touch or key - Kodium's
+    // workbench - otherwise stays interpreted for many of them.
+    NSInteger warmUp = [d integerForKey:@"BRJSCWarmUp"];
+    if (mode < 2 && warmUp > 0 && warmUp < 100000) { *jitAfterWarmUp = (int32_t)warmUp; if (*jitSoon > (int32_t)warmUp) *jitSoon = (int32_t)warmUp; }
     BRLog(@"JavaScriptCore tiers: mode %ld (optimizing JIT for functions up to %u -> %u instructions, baseline JIT after %d -> %d runs; %ld ms)",
           (long)mode, oldCandidates, *candidates, oldWarmUp, *jitAfterWarmUp, ms);
+    if (mode < 2 && [d boolForKey:@"BRJSCKeepCode"]) BRKeepCompiledCode();
+}
+
+// BRJSCKeepCode: JavaScriptCore throws all compiled code away at the first garbage collection a minute after it last
+// did (Heap::collect -> deleteAllCompiledCode), and every function goes back to the interpreter and is compiled again -
+// a page that keeps running (an app's) pays for that every minute. Kept while the iPad has memory to spare: the
+// engine's function is replaced (Cydia Substrate's MSHookFunction, when the app runs with it) by one that throws the
+// code away only when memory is tight. (The function itself keeps the minute: it is called no more often.)
+static void (*g_deleteAllCompiledCode)(void *heap);
+static void BRDeleteAllCompiledCode(void *heap)
+{
+    if ([BRMemory level] >= BRMemoryLevelTight && g_deleteAllCompiledCode) g_deleteAllCompiledCode(heap);
+}
+
+static void BRKeepCompiledCode(void)
+{
+    void (*hook)(void *, void *, void **) = (void (*)(void *, void *, void **))dlsym(RTLD_DEFAULT, "MSHookFunction");
+    const char *names[] = { "__ZN3JSC4Heap21deleteAllCompiledCodeEv" };
+    void *found[1] = { NULL };
+    BRFindJSCSymbols(names, found, 1);
+    if (!hook || !found[0]) {
+        BRLog(@"JavaScriptCore: compiled code is thrown away as usual (%@)", hook ? @"no deleteAllCompiledCode" : @"no Cydia Substrate");
+        return;
+    }
+    hook(found[0], (void *)BRDeleteAllCompiledCode, (void **)&g_deleteAllCompiledCode);
+    BRLog(@"JavaScriptCore: compiled code kept until memory is tight");
 }
 
 // A bare JavaScriptCore context has no console, timers or globalThis; libraries expect them.

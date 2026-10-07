@@ -96,11 +96,12 @@ async function start() {
       // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
       'files.autoSave': 'afterDelay',
       'files.autoSaveDelay': 2000,
-      // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for 0.3 s: worked out in the workers (the
-      // words of the file in the editor's, the rest in the language services'), the list drawn only then - not at
-      // every key while typing on
+      // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for half a second: worked out in the
+      // workers (the words of the file in the editor's, the rest in the language services'), the list drawn only then -
+      // not at every key while typing on (on the on-screen keyboard keys come 0.25-0.4 s apart: at 0.3 s the list came
+      // in the middle of words, and drawing it held the next key back)
       'editor.quickSuggestions': { other: 'on', comments: 'off', strings: 'off' },
-      'editor.quickSuggestionsDelay': 300,
+      'editor.quickSuggestionsDelay': 500,
       'editor.wordBasedSuggestions': 'currentDocument',
       // (CSS colours as swatches, from the language service)
       'editor.colorDecorators': true,
@@ -121,7 +122,14 @@ async function start() {
       'editor.cursorBlinking': 'solid',
       'editor.inlineSuggest.enabled': false,
       'editor.lightbulb.enabled': 'off',
-      'editor.disableLayerHinting': true
+      'editor.disableLayerHinting': true,
+      // (measured with WebKit's profiler while typing on the iPad 2) The dots of selected white space: worked out again
+      // for every line on the screen at every frame - a sixth of the time of a keystroke. And the text VS Code keeps in
+      // its hidden text area for screen readers - 500 characters around the cursor, written again with the selection
+      // at every keystroke, each time a layout of the page: empty, as VS Code has it on a desktop without a screen reader
+      // (keys still come as keys)
+      'editor.renderWhitespace': 'none',
+      'editor.accessibilitySupport': 'off'
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },

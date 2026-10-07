@@ -155,6 +155,27 @@ function inlineMarkdown() {
   ])
 }
 
+// VS Code's rules made at run time (decorations of the editor: every new one, as an extension or a find makes them)
+// went one by one through the engine's stylesheet rewriter - a synchronous request to the app each. A rule with
+// nothing the iOS 6 engine lacks goes in as it is; one with something modern (a variable, flex, transforms, newer
+// selectors and functions...) still goes through the rewriter.
+function plainRules() {
+  return patchModules('kodium-plain-rules', [
+    ['/vs/base/browser/domStylesheets.js', [
+      ['    style.sheet?.insertRule(`${selector} {${cssText}}`, 0);', '    __kdInsertRule(style.sheet, `${selector} {${cssText}}`);']],
+     'const __kdModernCSS = /var\\(|--[\\w-]+\\s*:|calc\\(|\\b(?:min|max|clamp)\\(|:(?:is|where|has|not)\\(|focus-(?:visible|within)|#[0-9a-f]{4}\\b|#[0-9a-f]{8}\\b|' +
+     'rgba?\\([^)]*\\/|display\\s*:\\s*(?:inline-)?flex|\\bflex(?:-[a-z]+)?\\s*:|\\b(?:align|justify|place)-[a-z]+\\s*:|\\bgap\\s*:|transform|transition|animation|keyframes|' +
+     'user-select|\\binset\\s*:|sticky|grid|\\bmask|\\bfilter\\s*:|appearance|object-fit|aspect-ratio|@supports|@container|@layer|color-mix|-content\\b|placeholder|backdrop|' +
+     'writing-mode|text-decoration-(?:color|style|thickness)/i;\n' +
+     'function __kdInsertRule(sheet, text) {\n' +
+     '    if (!sheet) return;\n' +
+     '    const native = typeof window !== "undefined" ? window.__brNativeInsertRule : undefined;\n' +
+     '    if (native && !__kdModernCSS.test(text)) native.call(sheet, text, 0);\n' +
+     '    else sheet.insertRule(text, 0);\n' +
+     '}\n']
+  ])
+}
+
 // Workers go sooner when nothing uses them (a worker is a script engine of its own on the iPad 2: about 8 MB each): the
 // language services' after 45 s instead of 2 minutes, the editor's after a minute instead of five
 function quickerWorkers() {
@@ -166,6 +187,30 @@ function quickerWorkers() {
     language('json'), language('css'), language('html'),
     ['/vs/editor/browser/services/editorWorkerService.js', [
       ['const STOP_WORKER_DELTA_TIME_MS = 5 * 60 * 1000;', 'const STOP_WORKER_DELTA_TIME_MS = 60 * 1000;']]]
+  ])
+}
+
+// The editor's work at every keystroke on the iPad 2 (WebKit's profiler while typing, line by line):
+// - a position in a line (the cursor, the scroll to it, indent guides) was measured in the page - getClientRects, a
+//   layout of the whole page each time - because VS Code does not trust its own arithmetic on Safari, whose zoom changes
+//   the width of the characters. Kodium's page cannot be zoomed, and the editor's font is monospaced: computed, as on
+//   other browsers (lines with other than ASCII are still measured). VS Code also took the font for proportional: its
+//   test of the font includes the arrow it draws tabs with when white space is shown, which iOS 6's Courier lacks
+//   (another font draws it, 14 px wide against 8.41) - left out of the test.
+// - the folding regions were worked out again 0.2 s after every change, and the matching bracket 0.05 s after every
+//   move of the cursor - each new set of decorations had the editor check every line on the screen again. Now once
+//   typing pauses (1 s, 0.3 s).
+function smootherEditor() {
+  return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/browser/viewParts/viewLines/viewLine.js', [
+      ['    if (isLinux || isFirefox || isSafari) {', '    if (isLinux || isFirefox) {']]],
+    ['/vs/editor/browser/config/fontMeasurements.js', [
+      ['const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, monospace);',
+       'const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, null);']]],
+    ['/vs/editor/contrib/folding/browser/folding.js', [
+      ['            min: 200\n', '            min: 1000\n']]],
+    ['/vs/editor/contrib/bracketMatching/browser/bracketMatching.js', [
+      ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'new RunOnceScheduler(() => this._updateBrackets(), 300)']]]
   ])
 }
 
@@ -214,7 +259,12 @@ function lazyExtensionHost() {
 // tests, tasks, terminals, debugging, source control, CLI commands, tunnels, speech, sockets - and the editor tabs API,
 // which brings every kind of editor there is (chat, notebooks, the merge editor...) to tell tabs apart: half a megabyte.
 // They get an empty stand-in (web/src/exthost.ts): an extension that calls one of them gets an error from that call.
+// And inline completions (ghost text, next edit suggestions - Copilot's): no extension that gives them runs on the iPad,
+// yet their models followed every keystroke and every move of the cursor in every editor (a third of the time of the
+// typing command in WebKit's profiler).
 const LEFT_OUT = [
+  'vs/editor/contrib/inlineCompletions/browser/inlineCompletions.contribution.js',
+  'vs/workbench/contrib/inlineCompletions/browser/inlineCompletions.contribution.js',
   'vs/workbench/contrib/mergeEditor/browser/mergeEditor.contribution.js',
   'vs/workbench/contrib/callHierarchy/browser/callHierarchy.contribution.js',
   'vs/workbench/contrib/typeHierarchy/browser/typeHierarchy.contribution.js',
@@ -238,7 +288,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

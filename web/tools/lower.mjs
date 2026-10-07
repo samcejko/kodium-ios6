@@ -117,7 +117,9 @@ try {
   const { transformSync } = await import('esbuild')
   const before = out.length
   // (minifySyntax too: the engine keeps the text as UTF-16 for as long as the page lives, two bytes a character)
-  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, minifySyntax: true, target: 'es5', charset: 'ascii', legalComments: 'none' }).code
+  // (lines of about 1000 characters, not one line: WebKit's profiler and error stacks name a function by its line, and
+  // the minified names say nothing - a line of the file points at the code)
+  out = transformSync(out, { minifyIdentifiers: true, minifyWhitespace: true, minifySyntax: true, target: 'es5', charset: 'ascii', legalComments: 'none', lineLimit: 1000 }).code
   acorn.parse(out, { ecmaVersion: 5 })
   console.log('minified:', (before / 1048576).toFixed(1), 'MB ->', (out.length / 1048576).toFixed(1), 'MB, still ES5', since())
 } catch (e) {
