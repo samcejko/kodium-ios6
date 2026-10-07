@@ -11,8 +11,11 @@ The first build.
   itself and goes on with " * " on Enter). Their TextMate grammars are left out of the app (Monarch colours the code).
   A "suggest" key on the row above the keyboard shows suggestions and snippets where the caret is (Ctrl+Space).
 - JavaScript: syntax errors in the Problems panel and under the code (also in Czech), an outline of the file (Go to
-  Symbol, Ctrl+Shift+O: functions, classes with their methods, objects, exports) and Format Document. The page's own
-  parser (acorn) reads the file once typing pauses; VS Code's TypeScript service, a worker of 10 MB, stays out.
+  Symbol, Ctrl+Shift+O: functions, classes with their methods, objects, exports), Format Document, and within the
+  file Go to Definition (F12), Find All References (Shift+F12) and Rename Symbol (F2) - which declaration a name means
+  is worked out from the file's scopes (var and functions hoisted, let/const/class per block, parameters, catch,
+  imports), and a rename keeps shorthands meaning the same ({a} becomes {a: b}, import {a} becomes import {a as b}).
+  The page's own parser (acorn) does it; VS Code's TypeScript service, a worker of 10 MB, stays out.
 - Emmet in HTML, PHP, CSS, SCSS and Less: an abbreviation (ul>li*3, div.box>p, a:link, m10, d:f) expands from the
   suggestions, as in VS Code.
 - The Outline and Timeline views in the Explorer, as in VS Code: the symbols of the file in the editor (JavaScript's,

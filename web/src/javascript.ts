@@ -4,7 +4,9 @@
 // - syntax errors as problems (squiggles, the Problems view), checked once typing pauses;
 // - the file's symbols - functions, classes and their members, variables - for the outline, the breadcrumbs and Go to
 //   Symbol in Editor (Ctrl+Shift+O);
-// - Format Document (Shift+Alt+F).
+// - Format Document (Shift+Alt+F);
+// - Go to Definition (F12), Find All References (Shift+F12) and Rename Symbol (F2), within the file: which declaration
+//   a name means is worked out from the file's scopes when one of them is asked for.
 // (a .jsx file is JavaScript to Kodium's grammar, but acorn does not read JSX: no syntax check there)
 import { editor, languages, MarkerSeverity, type IDisposable, type IRange } from 'monaco-editor'
 import { Parser, type Node } from 'acorn'
@@ -107,6 +109,7 @@ function watch(model: editor.ITextModel): void {
     if (timer !== undefined) clearTimeout(timer)
     listening?.dispose()
     parsed.delete(model.uri.toString())
+    analyses.delete(model.uri.toString())
     lastSymbols.delete(model.uri.toString())
     marked.delete(model.uri.toString())
   })
@@ -199,6 +202,302 @@ function symbols(model: editor.ITextModel): languages.DocumentSymbol[] {
   return out
 }
 
+// ---- definitions, references and renames, within the file: which declaration each name means (JavaScript's scopes:
+// var and function declarations hoisted to their function, let/const/class to their block, parameters, catch,
+// imports, a named function expression's own name). A name declared nowhere in the file is a global of the file.
+type Binding = { name: string, decls: AnyNode[], refs: AnyNode[] }
+type Scope = { parent: Scope | null, names: Map<string, Binding>, isFunction: boolean }
+// (shorthand: the occurrence is also a property's or a specifier's name - {a}, import {a}, export {a} - which a rename
+// must keep)
+type Occurrence = { node: AnyNode, binding: Binding, shorthand: 'property' | 'import' | 'export' | null }
+type Analysis = { version: number, occurrences: Occurrence[] }
+const analyses = new Map<string, Analysis>()
+
+function analyse(model: editor.ITextModel): Analysis | null {
+  const key = model.uri.toString(), version = model.getVersionId()
+  const known = analyses.get(key)
+  if (known && known.version === version) return known
+  if (model.getValueLength() > TOO_BIG || /\.jsx$/i.test(model.uri.path)) return null
+  const { program } = parse(model)
+  if (!program) return null
+  const occurrences: Occurrence[] = []
+  const root: Scope = { parent: null, names: new Map(), isFunction: true }
+  const shorthands = new Map<AnyNode, Occurrence['shorthand']>()
+
+  const binding = (scope: Scope, name: string): Binding => {
+    let b = scope.names.get(name)
+    if (!b) { b = { name, decls: [], refs: [] }; scope.names.set(name, b) }
+    return b
+  }
+  const functionScope = (scope: Scope): Scope => { let s = scope; while (!s.isFunction && s.parent) s = s.parent; return s }
+  const declare = (scope: Scope, id: AnyNode) => {
+    const b = binding(scope, id.name)
+    if (b.decls.indexOf(id) < 0) { b.decls.push(id); occurrences.push({ node: id, binding: b, shorthand: shorthands.get(id) || null }) }
+  }
+  const lookup = (scope: Scope, name: string): Binding => {
+    for (let s: Scope | null = scope; s; s = s.parent) { const b = s.names.get(name); if (b) return b }
+    return binding(root, name)   // (a global)
+  }
+  const reference = (scope: Scope, id: AnyNode) => {
+    const b = lookup(scope, id.name)
+    b.refs.push(id)
+    occurrences.push({ node: id, binding: b, shorthand: shorthands.get(id) || null })
+  }
+
+  // the names a pattern binds (and the expressions in it: defaults, computed keys)
+  const patternNames = (p: AnyNode | null, out: AnyNode[], exprs: AnyNode[]) => {
+    if (!p) return
+    switch (p.type) {
+      case 'Identifier': out.push(p); break
+      case 'ObjectPattern':
+        for (const prop of p.properties) {
+          if (prop.type === 'RestElement') { patternNames(prop.argument, out, exprs); continue }
+          if (prop.computed) exprs.push(prop.key)
+          if (prop.shorthand && prop.value.type === 'Identifier') shorthands.set(prop.value, 'property')
+          else if (prop.shorthand && prop.value.type === 'AssignmentPattern' && prop.value.left.type === 'Identifier') shorthands.set(prop.value.left, 'property')
+          patternNames(prop.value, out, exprs)
+        }
+        break
+      case 'ArrayPattern': for (const e of p.elements) patternNames(e, out, exprs); break
+      case 'RestElement': patternNames(p.argument, out, exprs); break
+      case 'AssignmentPattern': patternNames(p.left, out, exprs); exprs.push(p.right); break
+    }
+  }
+  const declarePattern = (scope: Scope, p: AnyNode, walkScope: Scope) => {
+    const names: AnyNode[] = [], exprs: AnyNode[] = []
+    patternNames(p, names, exprs)
+    for (const id of names) declare(scope, id)
+    for (const e of exprs) expression(e, walkScope)
+  }
+
+  // hoisting: the var and function declarations of a function's (or the program's) body, not inside nested functions
+  const hoistVars = (node: AnyNode | null, scope: Scope) => {
+    if (!node) return
+    switch (node.type) {
+      case 'VariableDeclaration':
+        if (node.kind === 'var') for (const d of node.declarations) { const names: AnyNode[] = []; patternNames(d.id, names, []); for (const id of names) declare(scope, id) }
+        return
+      case 'BlockStatement': case 'StaticBlock': for (const s of node.body) hoistVars(s, scope); return
+      case 'IfStatement': hoistVars(node.consequent, scope); hoistVars(node.alternate, scope); return
+      case 'ForStatement': hoistVars(node.init, scope); hoistVars(node.body, scope); return
+      case 'ForInStatement': case 'ForOfStatement': hoistVars(node.left, scope); hoistVars(node.body, scope); return
+      case 'WhileStatement': case 'DoWhileStatement': case 'LabeledStatement': case 'WithStatement': hoistVars(node.body, scope); return
+      case 'TryStatement': hoistVars(node.block, scope); if (node.handler) hoistVars(node.handler.body, scope); hoistVars(node.finalizer, scope); return
+      case 'SwitchStatement': for (const c of node.cases) for (const s of c.consequent) hoistVars(s, scope); return
+      case 'ExportNamedDeclaration': hoistVars(node.declaration, scope); return
+    }
+  }
+  // a block's own declarations: let, const, class, and functions (those of a function's body too)
+  const hoistLexical = (statements: AnyNode[], scope: Scope) => {
+    for (let s of statements) {
+      if (s.type === 'ExportNamedDeclaration' && s.declaration) s = s.declaration
+      else if (s.type === 'ExportDefaultDeclaration' && (s.declaration.type === 'FunctionDeclaration' || s.declaration.type === 'ClassDeclaration')) s = s.declaration
+      if (s.type === 'VariableDeclaration' && s.kind !== 'var') for (const d of s.declarations) { const names: AnyNode[] = []; patternNames(d.id, names, []); for (const id of names) declare(scope, id) }
+      else if ((s.type === 'FunctionDeclaration' || s.type === 'ClassDeclaration') && s.id) declare(scope, s.id)
+      else if (s.type === 'ImportDeclaration') {
+        for (const sp of s.specifiers) {
+          if (sp.type === 'ImportSpecifier' && sp.imported && sp.imported.type === 'Identifier' && sp.imported.name === sp.local.name && sp.imported.start === sp.local.start) shorthands.set(sp.local, 'import')
+          declare(scope, sp.local)
+        }
+      }
+    }
+  }
+
+  const functionNode = (fn: AnyNode, outer: Scope) => {
+    let scope = outer
+    if (fn.type === 'FunctionExpression' && fn.id) { scope = { parent: outer, names: new Map(), isFunction: false }; declare(scope, fn.id) }
+    const inner: Scope = { parent: scope, names: new Map(), isFunction: true }
+    for (const p of fn.params) declarePattern(inner, p, inner)
+    if (fn.body.type === 'BlockStatement') {
+      hoistVars(fn.body, inner)
+      hoistLexical(fn.body.body, inner)
+      for (const s of fn.body.body) statement(s, inner)
+    } else expression(fn.body, inner)
+  }
+  const classNode = (cls: AnyNode, outer: Scope) => {
+    let scope = outer
+    if (cls.type === 'ClassExpression' && cls.id) { scope = { parent: outer, names: new Map(), isFunction: false }; declare(scope, cls.id) }
+    if (cls.superClass) expression(cls.superClass, scope)
+    for (const m of cls.body.body) {
+      if (m.type === 'StaticBlock') { const b: Scope = { parent: scope, names: new Map(), isFunction: true }; hoistVars(m, b); hoistLexical(m.body, b); for (const s of m.body) statement(s, b); continue }
+      if (m.computed) expression(m.key, scope)
+      if (m.value) { if (m.type === 'MethodDefinition') functionNode(m.value, scope); else expression(m.value, scope) }
+    }
+  }
+  const block = (statements: AnyNode[], outer: Scope) => {
+    const scope: Scope = { parent: outer, names: new Map(), isFunction: false }
+    hoistLexical(statements, scope)
+    for (const s of statements) statement(s, scope)
+  }
+  const declaration = (d: AnyNode, scope: Scope) => {
+    // (its names were hoisted; the defaults and computed keys of its patterns are expressions, then its value)
+    const exprs: AnyNode[] = []
+    patternNames(d.id, [], exprs)
+    for (const e of exprs) expression(e, scope)
+    if (d.init) expression(d.init, scope)
+  }
+
+  const statement = (s: AnyNode | null, scope: Scope): void => {
+    if (!s) return
+    switch (s.type) {
+      case 'ExpressionStatement': expression(s.expression, scope); break
+      case 'BlockStatement': block(s.body, scope); break
+      case 'StaticBlock': block(s.body, scope); break
+      case 'VariableDeclaration': for (const d of s.declarations) declaration(d, scope); break
+      case 'FunctionDeclaration': functionNode(s, scope); break
+      case 'ClassDeclaration': classNode(s, scope); break
+      case 'ReturnStatement': case 'ThrowStatement': expression(s.argument, scope); break
+      case 'IfStatement': expression(s.test, scope); statement(s.consequent, scope); statement(s.alternate, scope); break
+      case 'LabeledStatement': statement(s.body, scope); break
+      case 'WithStatement': expression(s.object, scope); statement(s.body, scope); break
+      case 'WhileStatement': expression(s.test, scope); statement(s.body, scope); break
+      case 'DoWhileStatement': statement(s.body, scope); expression(s.test, scope); break
+      case 'ForStatement': {
+        const loop: Scope = { parent: scope, names: new Map(), isFunction: false }
+        if (s.init && s.init.type === 'VariableDeclaration') { hoistLexical([s.init], loop); statement(s.init, loop) } else expression(s.init, loop)
+        expression(s.test, loop); expression(s.update, loop); statement(s.body, loop)
+        break
+      }
+      case 'ForInStatement': case 'ForOfStatement': {
+        const loop: Scope = { parent: scope, names: new Map(), isFunction: false }
+        if (s.left.type === 'VariableDeclaration') { hoistLexical([s.left], loop); statement(s.left, loop) } else target(s.left, loop)
+        expression(s.right, loop); statement(s.body, loop)
+        break
+      }
+      case 'TryStatement':
+        statement(s.block, scope)
+        if (s.handler) {
+          const c: Scope = { parent: scope, names: new Map(), isFunction: false }
+          if (s.handler.param) declarePattern(c, s.handler.param, c)
+          statement(s.handler.body, c)
+        }
+        statement(s.finalizer, scope)
+        break
+      case 'SwitchStatement': {
+        expression(s.discriminant, scope)
+        const cases: Scope = { parent: scope, names: new Map(), isFunction: false }
+        const all: AnyNode[] = []
+        for (const c of s.cases) all.push(...c.consequent)
+        hoistLexical(all, cases)
+        for (const c of s.cases) { expression(c.test, cases); for (const x of c.consequent) statement(x, cases) }
+        break
+      }
+      case 'ExportNamedDeclaration':
+        if (s.declaration) statement(s.declaration, scope)
+        else if (!s.source) for (const sp of s.specifiers) {
+          if (sp.local.type !== 'Identifier') continue
+          if (sp.exported && sp.exported.type === 'Identifier' && sp.exported.start === sp.local.start) shorthands.set(sp.local, 'export')
+          reference(scope, sp.local)
+        }
+        break
+      case 'ExportDefaultDeclaration':
+        if (s.declaration.type === 'FunctionDeclaration') functionNode(s.declaration, scope)
+        else if (s.declaration.type === 'ClassDeclaration') classNode(s.declaration, scope)
+        else expression(s.declaration, scope)
+        break
+    }
+  }
+  // an assignment's target: names are references (written), patterns hold more of them
+  const target = (t: AnyNode | null, scope: Scope): void => {
+    if (!t) return
+    switch (t.type) {
+      case 'Identifier': reference(scope, t); break
+      case 'ObjectPattern':
+        for (const p of t.properties) {
+          if (p.type === 'RestElement') { target(p.argument, scope); continue }
+          if (p.computed) expression(p.key, scope)
+          if (p.shorthand && p.value.type === 'Identifier') shorthands.set(p.value, 'property')
+          target(p.value, scope)
+        }
+        break
+      case 'ArrayPattern': for (const e of t.elements) target(e, scope); break
+      case 'RestElement': target(t.argument, scope); break
+      case 'AssignmentPattern': target(t.left, scope); expression(t.right, scope); break
+      default: expression(t, scope)
+    }
+  }
+  const expression = (e: AnyNode | null, scope: Scope): void => {
+    if (!e) return
+    switch (e.type) {
+      case 'Identifier': reference(scope, e); break
+      case 'FunctionExpression': case 'ArrowFunctionExpression': functionNode(e, scope); break
+      case 'ClassExpression': classNode(e, scope); break
+      case 'MemberExpression': expression(e.object, scope); if (e.computed) expression(e.property, scope); break
+      case 'ObjectExpression':
+        for (const p of e.properties) {
+          if (p.type === 'SpreadElement') { expression(p.argument, scope); continue }
+          if (p.computed) expression(p.key, scope)
+          if (p.shorthand && p.value.type === 'Identifier') shorthands.set(p.value, 'property')
+          if (p.method || p.kind === 'get' || p.kind === 'set') functionNode(p.value, scope)
+          else expression(p.value, scope)
+        }
+        break
+      case 'AssignmentExpression': target(e.left, scope); expression(e.right, scope); break
+      case 'UpdateExpression': case 'UnaryExpression': case 'SpreadElement': case 'AwaitExpression': case 'YieldExpression': expression(e.argument, scope); break
+      case 'BinaryExpression': case 'LogicalExpression': expression(e.left, scope); expression(e.right, scope); break
+      case 'ConditionalExpression': expression(e.test, scope); expression(e.consequent, scope); expression(e.alternate, scope); break
+      case 'CallExpression': case 'NewExpression': expression(e.callee, scope); for (const a of e.arguments) expression(a, scope); break
+      case 'ArrayExpression': for (const x of e.elements) expression(x, scope); break
+      case 'SequenceExpression': for (const x of e.expressions) expression(x, scope); break
+      case 'TemplateLiteral': for (const x of e.expressions) expression(x, scope); break
+      case 'TaggedTemplateExpression': expression(e.tag, scope); expression(e.quasi, scope); break
+      case 'ChainExpression': case 'ParenthesizedExpression': expression(e.expression, scope); break
+      case 'ImportExpression': expression(e.source, scope); break
+    }
+  }
+
+  const body = (program as AnyNode).body as AnyNode[]
+  hoistVars({ type: 'BlockStatement', body } as AnyNode, root)
+  hoistLexical(body, root)
+  for (const s of body) statement(s, root)
+  occurrences.sort((a, b) => a.node.start - b.node.start)
+  const result = { version, occurrences }
+  analyses.set(key, result)
+  return result
+}
+
+function occurrenceAt(model: editor.ITextModel, position: { lineNumber: number, column: number }): Occurrence | null {
+  const analysis = analyse(model)
+  if (!analysis) return null
+  const offset = model.getOffsetAt(position)
+  for (const o of analysis.occurrences) {
+    if (o.node.start > offset) break
+    if (offset <= o.node.end) return o
+  }
+  return null
+}
+const where = (model: editor.ITextModel, node: AnyNode): languages.Location => ({ uri: model.uri, range: range(node) })
+
+const KEYWORDS = new Set(('break case catch class const continue debugger default delete do else export extends false finally for function if ' +
+  'import in instanceof new null return super switch this throw true try typeof var void while with yield let static enum await implements ' +
+  'package protected interface private public arguments eval').split(' '))
+const T = cs
+  ? { cannot: 'Tohle nelze přejmenovat (není to jméno deklarované v tomto souboru).', invalid: '„{0}“ není platný identifikátor JavaScriptu.' }
+  : { cannot: 'This cannot be renamed (it is not a name declared in this file).', invalid: '"{0}" is not a valid JavaScript identifier.' }
+
+function rename(model: editor.ITextModel, position: { lineNumber: number, column: number }, newName: string): languages.WorkspaceEdit & languages.Rejection {
+  const o = occurrenceAt(model, position)
+  if (!o || !o.binding.decls.length) return { edits: [], rejectReason: T.cannot }
+  if (!/^[A-Za-z_$À-￿][\w$À-￿]*$/.test(newName) || KEYWORDS.has(newName)) return { edits: [], rejectReason: T.invalid.replace('{0}', newName) }
+  const versionId = model.getVersionId()
+  const all = [...o.binding.decls, ...o.binding.refs]
+  const seen = new Set<AnyNode>()
+  const edits: languages.IWorkspaceTextEdit[] = []
+  const analysis = analyse(model)!
+  for (const node of all) {
+    if (seen.has(node)) continue
+    seen.add(node)
+    const occ = analysis.occurrences.find((x) => x.node === node)
+    const old = node.name as string
+    // (a shorthand keeps the property's or the specifier's name)
+    const text = occ && occ.shorthand === 'property' ? old + ': ' + newName
+      : occ && occ.shorthand === 'import' ? old + ' as ' + newName
+        : occ && occ.shorthand === 'export' ? newName + ' as ' + old : newName
+    edits.push({ resource: model.uri, versionId, textEdit: { range: range(node), text } })
+  }
+  return { edits }
+}
+
 // ---- formatting
 function format(model: editor.ITextModel, options: languages.FormattingOptions): languages.TextEdit[] {
   const text = model.getValue()
@@ -212,6 +511,32 @@ function format(model: editor.ITextModel, options: languages.FormattingOptions):
 export function registerJavaScript(): void {
   languages.registerDocumentSymbolProvider(LANGUAGE, { displayName: 'Kodium', provideDocumentSymbols: (model) => symbols(model) })
   languages.registerDocumentFormattingEditProvider(LANGUAGE, { displayName: 'Kodium (js-beautify)', provideDocumentFormattingEdits: (model, options) => format(model, options) })
+  languages.registerDefinitionProvider(LANGUAGE, {
+    provideDefinition: (model, position) => {
+      const o = occurrenceAt(model, position)
+      return o ? o.binding.decls.map((d) => where(model, d)) : []
+    }
+  })
+  languages.registerReferenceProvider(LANGUAGE, {
+    provideReferences: (model, position, context) => {
+      const o = occurrenceAt(model, position)
+      if (!o) return []
+      const nodes = context.includeDeclaration ? [...o.binding.decls, ...o.binding.refs] : [...o.binding.refs]
+      return nodes.sort((a, b) => a.start - b.start).map((n) => where(model, n))
+    }
+  })
+  languages.registerRenameProvider(LANGUAGE, {
+    provideRenameEdits: (model, position, newName) => rename(model, position, newName),
+    resolveRenameLocation: (model, position) => {
+      const o = occurrenceAt(model, position)
+      if (!o || !o.binding.decls.length) {
+        const word = model.getWordAtPosition(position)
+        const at = { startLineNumber: position.lineNumber, startColumn: word ? word.startColumn : position.column, endLineNumber: position.lineNumber, endColumn: word ? word.endColumn : position.column }
+        return { range: at, text: word ? word.word : '', rejectReason: T.cannot }
+      }
+      return { range: range(o.node), text: o.node.name as string }
+    }
+  })
   for (const model of editor.getModels()) watch(model)
   editor.onDidCreateModel(watch)
 }
