@@ -155,7 +155,11 @@ async function start() {
       'editor.glyphMargin': false,
       // The breadcrumbs name the file's folders; the symbol where the cursor is would need the file's outline worked out
       // again at every pause in typing (the Outline view and Go to Symbol have them)
-      'breadcrumbs.symbolPath': 'off'
+      'breadcrumbs.symbolPath': 'off',
+      // Settings, Keyboard Shortcuts and an extension's page open as tabs, not over the workbench: the overlay is an
+      // editor area of its own, made at every opening and thrown away at closing with the editor in it - the Settings
+      // editor took 7 s every time on the iPad 2; in a tab it stays made
+      'workbench.editor.useModal': 'off'
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },

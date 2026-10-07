@@ -33,9 +33,11 @@ The first build.
   middle of the next action: JavaScriptCore collected on its own timer some seconds after a few megabytes were
   allocated - 0.3-0.6 s, inside every second or third switch of editors. Surfari's engine reads the heap's budget
   (BRJSEngine collectPageGarbageIfAllocated:) and collects once 4 MB were allocated.
-- The Settings editor opens again without building its tree again (which of the ~1000 settings goes under which
-  heading: 40 000 tests of names against patterns), unless settings were registered or dropped meanwhile; values
-  changed while it was closed show as before.
+- Settings, Keyboard Shortcuts and an extension's page open as tabs again, not in VS Code's new overlay
+  (workbench.editor.useModal: off): the overlay is an editor area of its own, made at every opening and thrown away
+  with the editor in it at closing - the Settings editor took 7 s every time. In a tab it stays made, and opens again
+  without building its tree again (which of the ~1000 settings goes under which heading: 40 000 tests of names against
+  patterns), unless settings were registered or dropped meanwhile; values changed while it was closed show as before.
 - Menus are made once, not twice (VS Code's MenuInfo refreshed again what its base class had just refreshed: sorting
   all items by title, collecting their conditions' keys), and a menu's sorted items are kept until the menu registry
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus.
