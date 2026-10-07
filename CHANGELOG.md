@@ -55,6 +55,9 @@ The first build.
   changes: the command palette's thousand commands, the editor's toolbar at every switch, context menus. The palette
   also shares one "Configure Keybinding" button among its commands, and with nothing typed yet no longer tests each
   command against the empty filter.
+- The command palette opens 50 ms sooner (0.70 s on the iPad 2 instead of 0.75, warm): its sort of the commands looked
+  each one up in the history twice and compared labels with localeCompare in every one of its ~2600 comparisons; the
+  history once per command now, and the labels' alphabetical order is kept while they stay the same.
 - Object literals with computed keys, getters or setters, and every spread ({...options}), no longer go through core-js:
   a spread asked its Object.getOwnPropertySymbols, which walks all of the object's names through closures. Only an
   object with one of core-js's symbols still goes there (the command palette opens 2-3 % sooner, the start 0.1 s).
