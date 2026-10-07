@@ -101,10 +101,10 @@
    rectangle of every box it laid out through all of its ancestors, up to the nearest composited layer - without
    these the root of the page, 30 levels up in VS Code's DOM (and the old flexbox lays a row's children out more than
    once). Measured on the iPad 2: a change of a tab's label was a 90 ms layout, a line of the editor 8 ms, its line
-   number 13; with these layers 42, 4.5 and 6, and a key typed 10-15 % sooner. */
+   number 13; with these layers 42, 4.5 and 6, and a key typed 10-15 % sooner. (Not the activity bar: the menu of its
+   menu button opens inside it, and a layer of its own kept the menu under the side bar's.) */
 .monaco-workbench .part.editor > .content .editor-group-container > .title,
 .monaco-workbench .part.statusbar,
-.monaco-workbench .part.activitybar,
 .monaco-workbench .part.sidebar,
 .monaco-workbench .part.panel,
 .monaco-editor .overflow-guard {

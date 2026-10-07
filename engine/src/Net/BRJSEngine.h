@@ -40,6 +40,9 @@ extern NSString * const BRJSEngineDidResetNotification;
 // Main thread, at launch before any script runs: which of the engine's compilers pages and engines use (BRJSCMode),
 // and how soon the baseline JIT takes a function (BRJSCWarmUp).
 + (void)applyEngineTiers;
+// Main thread: keeps the compiled code of the pages' scripts while memory allows, if BRJSCKeepCode is set (JavaScriptCore
+// throws it away a minute after it last did, and the next action compiles everything again; see BRJSEngine.m).
++ (void)keepPageCode;
 // Engine thread: the same once the engine has not been used for `seconds` and the process is above `minimumMB`
 // resident (0 = always). Heavy work leaves the heap large, which the other engines and the pages then lack.
 - (void)releaseWhenIdleFor:(NSTimeInterval)seconds aboveMB:(long)minimumMB;

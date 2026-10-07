@@ -1,7 +1,7 @@
 // Kodium's workbench: the VS Code workbench assembled from monaco-vscode-api's parts - what coding needs on the iPad 2
-// (editor, files, search, problems, output, settings, keybindings, themes and file icons, extensions from Open VSX,
-// IntelliSense for JSON, CSS and HTML, running JavaScript, the preview of HTML and Markdown, files from and to other
-// apps). Left out for memory (the iPad 2 has
+// (editor, files, search, problems, output, outline, local history, settings, keybindings, themes and file icons,
+// extensions from Open VSX, IntelliSense for JSON, CSS and HTML, JavaScript's problems and outline, Emmet, running
+// JavaScript, the preview of HTML and Markdown, files from and to other apps). Left out for memory (the iPad 2 has
 // 512 MB): Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
@@ -29,6 +29,10 @@ import getWorkingCopyServiceOverride from '@codingame/monaco-vscode-working-copy
 import getStatusBarServiceOverride from '@codingame/monaco-vscode-view-status-bar-service-override'
 import getMonarchServiceOverride from '@codingame/monaco-vscode-monarch-service-override'
 import getExtensionGalleryServiceOverride from '@codingame/monaco-vscode-extension-gallery-service-override'
+// The Outline and Timeline views of the Explorer: a file's symbols, and its local history - the versions VS Code keeps
+// at every save (working copy service), to compare or restore
+import getOutlineServiceOverride from '@codingame/monaco-vscode-outline-service-override'
+import getTimelineServiceOverride from '@codingame/monaco-vscode-timeline-service-override'
 // Extensions: Open VSX's gallery, and an extension host in the page (LocalProcess). Web extensions run there - the
 // worker host would be an iframe and a worker, each with a copy of the engine's shims, on 512 MB - and their code is
 // ES5 by the time it runs: the engine lowers JavaScript it fetches over the network, and the page's Function whatever
@@ -146,7 +150,12 @@ async function start() {
       // at every keystroke, each time a layout of the page: empty, as VS Code has it on a desktop without a screen reader
       // (keys still come as keys)
       'editor.renderWhitespace': 'none',
-      'editor.accessibilitySupport': 'off'
+      'editor.accessibilitySupport': 'off',
+      // (the glyph margin holds breakpoints and the light bulb, neither of which Kodium has: 18 px more for the code)
+      'editor.glyphMargin': false,
+      // The breadcrumbs name the file's folders; the symbol where the cursor is would need the file's outline worked out
+      // again at every pause in typing (the Outline view and Go to Symbol have them)
+      'breadcrumbs.symbolPath': 'off'
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
@@ -194,6 +203,8 @@ async function start() {
       ...getPreferencesServiceOverride(),
       ...getSnippetServiceOverride(),
       ...getWorkingCopyServiceOverride(),
+      ...getOutlineServiceOverride(),
+      ...getTimelineServiceOverride(),
       ...getStatusBarServiceOverride(),
       ...getExtensionGalleryServiceOverride({ webOnly: true }),
       ...getWorkbenchServiceOverride(),

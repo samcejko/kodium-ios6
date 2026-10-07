@@ -188,9 +188,7 @@ static void KDWriteResult(NSString *name, NSString *text)
     NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
     BRLog(@"Kodium %@ (%@) starting on %@ (iOS %@)", info[@"CFBundleShortVersionString"] ?: @"?", info[@"CFBundleVersion"] ?: @"?",
           [UIDevice currentDevice].model, [UIDevice currentDevice].systemVersion);
-    // (the engine's own JIT thresholds: compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2. And
-    // JavaScriptCore's throwing all compiled code away every minute cannot be stopped safely: skipping
-    // FunctionExecutable::discardCode left stale code blocks behind, and the app crashed)
+    // (the engine's own JIT thresholds: compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2)
     [BRJSEngine applyEngineTiers];
 
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -216,7 +214,7 @@ static void KDWriteResult(NSString *name, NSString *text)
     [defaults registerDefaults:@{ @"UserAgent": [BRSettings userAgentOverride] ?: [BRHTTPRequest defaultUserAgent],
                                   @"BRAdBlock": @NO, @"BRHideCookieBanners": @NO, @"BRMemoryReliefMB": @0,
                                   @"BRMemoryTightMB": @60, @"BRMemoryCriticalMB": @40, @"BRMemoryEmergencyMB": @30,
-                                  @"BRMemoryReportSeconds": @120 }];
+                                  @"BRMemoryReportSeconds": @120, @"BRJSCKeepCode": @YES }];
 
     // Every http/https load goes through the engine's TLS stack and rewriters; the app's own site
     // (https://kodium.invalid/) through KDSiteProtocol, registered last so that it is asked first.
@@ -229,6 +227,10 @@ static void KDWriteResult(NSString *name, NSString *text)
     // it once the workbench had worked a while) goes back to the system - no garbage collection, which the engine's
     // relief does (it throws away the compiled code with it), so the iPad keeps room before the engine or iOS act
     [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(returnFreeMemory) userInfo:nil repeats:YES];
+    // The workbench's compiled code stays while memory allows: JavaScriptCore throws all of it away a minute after it
+    // last did, and the first action after a pause compiled again whatever it ran (a switch of editors 1.8 s instead
+    // of 1.3). Surfari's engine keeps it (BRJSCKeepCode) and throws it away itself when memory gets critical (40 MB).
+    [BRJSEngine keepPageCode];
     [BRTLSSocket warmUp];
     [BRCSSRewriter warmUp];
 

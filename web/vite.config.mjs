@@ -210,7 +210,83 @@ function smootherEditor() {
     ['/vs/editor/contrib/folding/browser/folding.js', [
       ['            min: 200\n', '            min: 1000\n']]],
     ['/vs/editor/contrib/bracketMatching/browser/bracketMatching.js', [
-      ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'new RunOnceScheduler(() => this._updateBrackets(), 300)']]]
+      ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'new RunOnceScheduler(() => this._updateBrackets(), 300)']]],
+    // The symbols in the breadcrumbs (off by Kodium's default, main.ts): with them off, no outline of the file is kept for
+    // the breadcrumbs - it was worked out again at every pause in typing (0.35 s) and followed every move of the cursor
+    ['/vs/workbench/browser/parts/editor/breadcrumbsModel.js', [
+      ['        this._disposables.add(this._cfgSymbolPath.onDidChange(_ => this._onDidUpdate.fire(this)));',
+       '        this._disposables.add(this._cfgSymbolPath.onDidChange(_ => { if (editor) this._bindToEditor(editor); this._onDidUpdate.fire(this); }));'],
+      ['        this._outlineDisposables.add(toDisposable(() => newCts.dispose(true)));\n        this._outlineService.createOutline(',
+       '        this._outlineDisposables.add(toDisposable(() => newCts.dispose(true)));\n        if (this._cfgSymbolPath.getValue() === "off") return;\n        this._outlineService.createOutline(']]]
+  ])
+}
+
+// Switching between editors on the iPad 2 (1.3-1.8 s, WebKit's profiler: VS Code's reactions to the new editor, each
+// a little - but some of them done for nothing):
+// - the menus of the menu bar (File, Edit, Selection, View, Go...) were all made again whenever a context they depend on
+//   changed - at every switch, and at the start; Kodium's menu bar is the compact one (the button at the top of the
+//   activity bar), whose menus are only seen when it opens: they are made then, if something changed since
+// - the editor's toolbar (run, preview, split, more...) was made twice per switch: once for the editor that was going
+//   (VS Code redraws the tabs before the new editor has its model) and again when its contexts changed: now once, as
+//   the switch is done
+// - the window's title (which iOS does not show) is put together when nothing is being typed or touched (it was at
+//   every switch, and twice per autosave while typing: "dirty")
+// - the editor's settings for the file were worked out twice per switch (the model, then the input): once
+function quickerSwitch() {
+  return patchModules('kodium-quicker-switch', [
+    ['/vs/workbench/browser/parts/titlebar/menubarControl.js', [
+      ['        };\n        for (const title of ( Object.keys(this.topLevelTitles))) {\n            const menu = this.menus[title];',
+       '        };\n        this.kdUpdateActions = updateActions;\n        const kdLazy = this.currentCompactMenuMode !== undefined;\n' +
+       '        for (const title of ( Object.keys(this.topLevelTitles))) {\n            const menu = this.menus[title];'],
+      ['                this.reinstallDisposables.add(menu.onDidChange(() => {\n                    if (!this.focusInsideMenubar) {\n                        const actions = [];\n                        menuChangedDisposable.clear();',
+       '                this.reinstallDisposables.add(menu.onDidChange(() => {\n                    if (kdLazy) {\n                        (this.kdDirty || (this.kdDirty = new Set())).add(title);\n                        return;\n                    }\n' +
+       '                    if (!this.focusInsideMenubar) {\n                        const actions = [];\n                        menuChangedDisposable.clear();'],
+      ['            const actions = [];\n            if (menu) {\n                this.updateActionsDisposables.clear();',
+       '            const actions = [];\n            if (menu && kdLazy) {\n                (this.kdDirty || (this.kdDirty = new Set())).add(title);\n            } else if (menu) {\n                this.updateActionsDisposables.clear();'],
+      ['            getCompactMenuActions: () => {', '            kdBeforeShow: () => this.kdRefreshMenus(),\n            getCompactMenuActions: () => {'],
+      ['    getWebNavigationActions() {\n        if (!isWeb) {',
+       '    kdRefreshMenus() {\n' +
+       '        const dirty = this.kdDirty;\n' +
+       '        if (!dirty || !dirty.size || !this.kdUpdateActions) {\n            return false;\n        }\n' +
+       '        this.kdDirty = undefined;\n' +
+       '        const stores = this.kdStores || (this.kdStores = new Map());\n' +
+       '        for (const title of dirty) {\n' +
+       '            const menu = this.menus[title];\n' +
+       '            if (!menu) {\n                continue;\n            }\n' +
+       '            let store = stores.get(title);\n' +
+       '            if (!store) {\n                store = this._register(new DisposableStore());\n                stores.set(title, store);\n            }\n' +
+       '            store.clear();\n' +
+       '            const actions = [];\n' +
+       '            this.kdUpdateActions(this.toActionsArray(menu), actions, title, store);\n' +
+       '            this.menubar?.updateMenu({ actions, label: mnemonicMenuLabel(this.topLevelTitles[title]) });\n' +
+       '        }\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    getWebNavigationActions() {\n        if (!isWeb) {']]],
+    ['/vs/base/browser/ui/menu/menubar.js', [
+      ['    showCustomMenu(menuIndex, selectFirst = true) {\n',
+       '    showCustomMenu(menuIndex, selectFirst = true) {\n        if (this.options.kdBeforeShow?.()) {\n            this.updateOverflowAction();\n        }\n']]],
+    ['/vs/workbench/browser/parts/editor/multiEditorTabsControl.js', [
+      ['    updateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }',
+       '    updateEditorActionsToolbar() {\n' +
+       '        (this.kdToolbarUpdater || (this.kdToolbarUpdater = this._register(new RunOnceScheduler(() => this.kdUpdateEditorActionsToolbar(), 0)))).schedule();\n' +
+       '    }\n' +
+       '    kdUpdateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }']]],
+    ['/vs/workbench/browser/parts/titlebar/windowTitle.js', [
+      ['this.titleUpdater = this._register(( new RunOnceScheduler(() => this.doUpdateTitle(), 0)));',
+       'this.titleUpdater = this._register(( new RunOnceScheduler(() => {\n' +
+       '            if (this.kdTitleWaits) {\n                return;\n            }\n' +
+       '            this.kdTitleWaits = true;\n' +
+       '            const later = typeof requestIdleCallback === "function" ? requestIdleCallback : setTimeout;\n' +
+       '            later(() => {\n                this.kdTitleWaits = false;\n                this.doUpdateTitle();\n            }, { timeout: 5000 });\n' +
+       '        }, 0)));']]],
+    ['/vs/workbench/browser/parts/editor/textEditor.js', [
+      ['        if (!configuration) {\n            return;\n        }\n        const editorConfiguration = this.computeConfiguration(configuration);',
+       '        if (!configuration) {\n            return;\n        }\n' +
+       '        const kdKey = [configuration, this.input, this.input?.isReadonly(), this.group, this.editorGroupService.count];\n' +
+       '        if (this.lastAppliedEditorOptions && this.kdLastKey && kdKey.every((value, i) => value === this.kdLastKey[i])) {\n            return;\n        }\n' +
+       '        this.kdLastKey = kdKey;\n' +
+       '        const editorConfiguration = this.computeConfiguration(configuration);']]]
   ])
 }
 
@@ -315,7 +391,7 @@ function leaveOut() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), noGrammars(), emmetInCzech(), leaveOut(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

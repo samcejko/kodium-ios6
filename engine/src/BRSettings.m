@@ -233,7 +233,7 @@ static void BRRecoverCookieJar(void)
 static BOOL BRIsDeveloperKey(NSString *key)
 {
     return [key hasPrefix:@"BRDebug"] || [key hasPrefix:@"BRDump"] || [key hasPrefix:@"BRDev"]
-        || [key isEqualToString:@"BRJSCMode"] || [key isEqualToString:@"BRJSCWarmUp"]
+        || [key isEqualToString:@"BRJSCMode"] || [key isEqualToString:@"BRJSCWarmUp"] || [key isEqualToString:@"BRJSCKeepCode"]
         || [key isEqualToString:@"BRMemoryReliefMB"];
 }
 

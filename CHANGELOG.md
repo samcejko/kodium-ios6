@@ -15,6 +15,20 @@ The first build.
   parser (acorn) reads the file once typing pauses; VS Code's TypeScript service, a worker of 10 MB, stays out.
 - Emmet in HTML, PHP, CSS, SCSS and Less: an abbreviation (ul>li*3, div.box>p, a:link, m10, d:f) expands from the
   suggestions, as in VS Code.
+- The Outline and Timeline views in the Explorer, as in VS Code: the symbols of the file in the editor (JavaScript's,
+  JSON's, CSS's, HTML's, Markdown's headings), and its local history - the version kept at every save, to compare with
+  or restore (Local History: Find Entry to Restore...). The breadcrumbs name the file's folders, not the symbol at the
+  cursor (breadcrumbs.symbolPath: it worked the outline out again at every pause in typing).
+- The first action after a pause is no longer slower: JavaScriptCore threw all the workbench's compiled code away a
+  minute after it last did, and the next action compiled again whatever it ran (a switch of editors took 1.8 s instead
+  of 1.3). Surfari's engine keeps it while memory allows (BRJSCKeepCode) and throws it away itself when the iPad runs
+  short.
+- Switching between editors does less (0.68 s on the iPad 2 instead of 0.84, when no garbage collection falls in): the
+  menus of the menu bar are made when it opens, not again at every switch; the editor's toolbar is made once per
+  switch, not twice (once for the editor that was going); the window's title (which iOS does not show) is put together
+  when nothing is being typed or touched; the editor's settings for the file are worked out once. The glyph margin
+  (breakpoints, the light bulb: neither is in Kodium) is off: 18 px more for the code.
+- The menu bar's menu (the button at the top of the activity bar) opened under the side bar.
 - The workbench starts 0.7 s sooner (16 s on the iPad 2, with the extensions above): each file of the bundle's
   assets (themes, icons, the extensions' files) got its address from two URL objects, 6 ms each with the engine's URL;
   now it is made of strings. The Markdown renderer's regular expressions with \p{...} are lowered for the engine once

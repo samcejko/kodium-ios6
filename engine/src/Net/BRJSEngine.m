@@ -420,6 +420,130 @@ static void BRFindJSCSymbols(const char *const names[], void *found[], int count
           (long)mode, oldCandidates, *candidates, oldWarmUp, *jitAfterWarmUp, ms);
 }
 
+// The pages' compiled code kept (BRJSCKeepCode). JavaScriptCore throws the compiled code of every function away at a
+// garbage collection a minute after it last did (Heap::collect: now - m_lastCodeDiscardTime > 60 s), and each function
+// is parsed and compiled again when it next runs: Kodium's first action after a pause took 0.4-0.5 s longer (a switch
+// of editors 1.8 s instead of 1.3). The time of the last discard is a field of the heap of WebCore's JSGlobalData (the
+// pages'): it is moved forward every 20 s, on the WebThread between scripts, while memory is not short; when memory
+// gets critical the code is thrown away at once (Heap::discardAllCompiledCode, which waits for no script to run), as
+// JavaScriptCore would have. The offsets are read from the engine's own code - Heap::collect takes the address of the
+// time ("addw rX, r4, #offset") right before it calls WTF::currentTime, Heap::discardAllCompiledCode reads the
+// JSGlobalData from the heap first ("ldr.w rX, [r0, #offset]"), and the heap is the member of the JSGlobalData that
+// points back to it - so an engine whose code differs is left alone. (Hooking FunctionExecutable::discardCode instead
+// crashed: code blocks of the functions it skipped stayed referenced by stale ones.)
+typedef void (*BRWebThreadRunFn)(void (^block)(void));
+static double *g_lastCodeDiscard;
+static void *g_codeHeap;
+static void (*g_discardAllCompiledCode)(void *heap);
+static double (*g_currentTime)(void);
+static BOOL g_codeKeptFound, g_codeThrownForMemory;
+static NSTimer *g_codeKeeper;
+
+static const uint16_t *BRThumbCode(void *function)
+{
+    return (const uint16_t *)((uintptr_t)function & ~(uintptr_t)1);
+}
+
+// Heap::collect: "addw rX, r4, #imm" followed by "bl WTF::currentTime", in its first 64 halfword pairs -> imm
+static int BRDiscardTimeOffset(void *collect, void *currentTime)
+{
+    const uint16_t *code = BRThumbCode(collect);
+    uintptr_t target = (uintptr_t)currentTime & ~(uintptr_t)1;
+    for (int i = 0; i + 4 <= 128; i++) {
+        uint16_t hw1 = code[i], hw2 = code[i + 1];
+        if ((hw1 & 0xfbff) != 0xf204 || (hw2 & 0x8000)) continue;   // ADDW Rd, R4, #imm12
+        int imm = (((hw1 >> 10) & 1) << 11) | (((hw2 >> 12) & 7) << 8) | (hw2 & 0xff);
+        uint16_t b1 = code[i + 2], b2 = code[i + 3];
+        if ((b1 & 0xf800) != 0xf000 || (b2 & 0xd000) != 0xd000) continue;   // BL
+        int32_t S = (b1 >> 10) & 1, J1 = (b2 >> 13) & 1, J2 = (b2 >> 11) & 1;
+        int32_t I1 = !(J1 ^ S), I2 = !(J2 ^ S);
+        int32_t offset = (S << 24) | (I1 << 23) | (I2 << 22) | ((b1 & 0x3ff) << 12) | ((b2 & 0x7ff) << 1);
+        if (S) offset -= 1 << 25;
+        if ((uintptr_t)(code + i + 2) + 4 + offset == target) return imm;
+    }
+    return -1;
+}
+
+// Heap::discardAllCompiledCode: "ldr.w rX, [r0, #imm]" among its first instructions -> imm (the heap's JSGlobalData)
+static int BRHeapGlobalDataOffset(void *discardAll)
+{
+    const uint16_t *code = BRThumbCode(discardAll);
+    for (int i = 0; i + 2 <= 8; i++) if (code[i] == 0xf8d0) return code[i + 1] & 0xfff;
+    return -1;
+}
+
+// WebThread: finds the clock (once)
+static BOOL BRFindCodeClock(void)
+{
+    static BOOL tried;
+    if (tried) return g_codeKeptFound;
+    tried = YES;
+    void *(*commonGlobalData)(void) = (void *(*)(void))dlsym(RTLD_DEFAULT, "_ZN7WebCore15JSDOMWindowBase18commonJSGlobalDataEv");
+    g_currentTime = (double (*)(void))dlsym(RTLD_DEFAULT, "_ZN3WTF11currentTimeEv");
+    g_discardAllCompiledCode = (void (*)(void *))dlsym(RTLD_DEFAULT, "_ZN3JSC4Heap22discardAllCompiledCodeEv");
+    const char *names[] = { "__ZN3JSC4Heap7collectENS0_11SweepToggleE" };
+    void *collect[1];
+    BRFindJSCSymbols(names, collect, 1);
+    if (!commonGlobalData || !g_currentTime || !g_discardAllCompiledCode || !collect[0]) {
+        BRLog(@"JavaScriptCore code kept: the engine's functions were not found (%d%d%d%d)", !!commonGlobalData, !!g_currentTime, !!g_discardAllCompiledCode, !!collect[0]);
+        return NO;
+    }
+    int timeOffset = BRDiscardTimeOffset(collect[0], (void *)g_currentTime), dataOffset = BRHeapGlobalDataOffset((void *)g_discardAllCompiledCode);
+    char *globalData = (char *)commonGlobalData();
+    double now = g_currentTime();
+    int heapOffset = -1;
+    // (the heap's members that point back to the JSGlobalData too - its handle and weak sets - are told apart by the
+    // clock: a recent time where the heap's would be, set when the heap was made or code was last thrown away)
+    if (globalData && timeOffset > 0 && timeOffset < 8192 && dataOffset > 0 && dataOffset < 8192)
+        for (int x = 0; x < 1024; x += 4) {
+            if (*(char **)(globalData + x + dataOffset) != globalData) continue;
+            double t = *(double *)(globalData + x + timeOffset);
+            if (t > now - 7 * 86400 && t < now + 60) { heapOffset = x; break; }
+        }
+    if (heapOffset < 0) {
+        BRLog(@"JavaScriptCore code kept: the engine's code is not the expected one (time %d, data %d), left alone", timeOffset, dataOffset);
+        return NO;
+    }
+    double *discardClock = (double *)(globalData + heapOffset + timeOffset);
+    g_codeHeap = globalData + heapOffset;
+    g_lastCodeDiscard = discardClock;
+    g_codeKeptFound = YES;
+    BRLog(@"JavaScriptCore code kept: heap at +%d, clock at +%d (last discard %.0f s ago)", heapOffset, timeOffset, now - *discardClock);
+    return YES;
+}
+
++ (void)keepPageCode
+{
+    if (g_codeKeeper || ![[NSUserDefaults standardUserDefaults] boolForKey:@"BRJSCKeepCode"]) return;
+    g_codeKeeper = [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(keepPageCodeNow:) userInfo:nil repeats:YES];
+}
+
++ (void)keepPageCodeNow:(NSTimer *)timer
+{
+    static BRWebThreadRunFn run;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ run = (BRWebThreadRunFn)dlsym(RTLD_DEFAULT, "WebThreadRun"); });
+    if (!run) { [g_codeKeeper invalidate]; return; }
+    BOOL critical = [BRMemory level] >= BRMemoryLevelCritical;
+    run(^{
+        if (!BRFindCodeClock()) {
+            dispatch_async(dispatch_get_main_queue(), ^{ [g_codeKeeper invalidate]; });
+            return;
+        }
+        if (critical) {
+            if (!g_codeThrownForMemory) {
+                g_codeThrownForMemory = YES;
+                g_discardAllCompiledCode(g_codeHeap);
+                *g_lastCodeDiscard = g_currentTime();
+                BRLog(@"JavaScriptCore code kept: memory is short, the pages' compiled code thrown away");
+            }
+            return;
+        }
+        g_codeThrownForMemory = NO;
+        *g_lastCodeDiscard = g_currentTime();
+    });
+}
+
 // A bare JavaScriptCore context has no console, timers or globalThis; libraries expect them.
 static NSString * const BRContextPrelude =
 @"var globalThis = this; var self = this;"
