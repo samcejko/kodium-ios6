@@ -282,8 +282,27 @@ function plainFigures() {
 // - a line's height and the heights of the lines above it - asked ~365 times a frame while scrolling - were a binary
 //   search, with a closure, over the lines of special heights, which Kodium's editors have none of: with none, the
 //   default height (times the lines) at once, as the search ended anyway.
+// - the indent guides of every line on the screen, at every frame of a scroll, went through a queue of the line's
+//   bracket pair guides - which are off - with two spreads per guide (lowered to ES5: copies through slice) and the
+//   engine's push: without bracket pair guides, the indent guides alone (an eighth of a scroll frame in the profiler).
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/browser/viewParts/indentGuides/indentGuides.js', [
+      ['        const result = [];\n        for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n            const lineGuides = ( new Array());',
+       '        const result = [];\n' +
+       '        if (!bracketGuides) {\n' +
+       '            for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n' +
+       '                const lineGuides = [];\n' +
+       '                result[result.length] = lineGuides;\n' +
+       '                const indentGuidesInLine = indentGuides ? indentGuides[lineNumber - visibleStartLineNumber] : 0;\n' +
+       '                for (let indentLvl = 1; indentLvl <= indentGuidesInLine; indentLvl++) {\n' +
+       '                    const isActive = activeIndentStartLineNumber <= lineNumber && lineNumber <= activeIndentEndLineNumber && indentLvl === activeIndentLevel;\n' +
+       '                    lineGuides[lineGuides.length] = new IndentGuide((indentLvl - 1) * indentSize + 1, -1, "core-guide-indent lvl-" + ((indentLvl - 1) % 30) + (isActive ? " indent-active" : ""), null, -1, -1);\n' +
+       '                }\n' +
+       '            }\n' +
+       '            return result;\n' +
+       '        }\n' +
+       '        for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n            const lineGuides = ( new Array());']]],
     ['/vs/editor/common/viewLayout/lineHeights.js', [
       ['    heightForLineNumber(lineNumber) {\n        this._commit();\n',
        '    heightForLineNumber(lineNumber) {\n        this._commit();\n        if (this._orderedCustomLines.length === 0) {\n            return this._defaultLineHeight;\n        }\n'],
@@ -323,6 +342,25 @@ function smootherEditor() {
        '        const inspectedEditorAssociations = this.configurationService.inspect(settingId) || {};\n' +
        '        return this.mergeEditorAssociationSettings(\n']]],
     ['/vs/editor/common/model/guidesTextModelPart.js', [
+      // (and each line's guides kept while the text and the options are the same: a scroll works out the lines it
+      // brings in, not all the lines on the screen at every frame)
+      ['    getLinesIndentGuides(startLineNumber, endLineNumber) {\n        this.assertNotDisposed();\n        const lineCount = this.textModel.getLineCount();',
+       '    getLinesIndentGuides(startLineNumber, endLineNumber) {\n' +
+       '        this.assertNotDisposed();\n' +
+       '        const kdKey = this.textModel.getVersionId() + ":" + this.textModel.getOptions().indentSize + ":" + this.textModel.getLanguageId();\n' +
+       '        let kd = this.kdGuides;\n' +
+       '        if (!kd || kd.key !== kdKey) {\n            kd = this.kdGuides = { key: kdKey, levels: [] };\n        }\n' +
+       '        for (let i = startLineNumber; i <= endLineNumber;) {\n' +
+       '            if (kd.levels[i] !== undefined) {\n                i++;\n                continue;\n            }\n' +
+       '            let j = i;\n' +
+       '            while (j < endLineNumber && kd.levels[j + 1] === undefined) {\n                j++;\n            }\n' +
+       '            const part = this.kdLinesIndentGuides(i, j);\n' +
+       '            for (let k = 0; k < part.length; k++) {\n                kd.levels[i + k] = part[k];\n            }\n' +
+       '            i = j + 1;\n' +
+       '        }\n' +
+       '        return kd.levels.slice(startLineNumber, endLineNumber + 1);\n' +
+       '    }\n' +
+       '    kdLinesIndentGuides(startLineNumber, endLineNumber) {\n        this.assertNotDisposed();\n        const lineCount = this.textModel.getLineCount();'],
       ['    _computeIndentLevel(lineIndex) {\n        return computeIndentLevel(\n            this.textModel.getLineContent(lineIndex + 1),\n            this.textModel.getOptions().tabSize\n        );\n    }',
        '    _computeIndentLevel(lineIndex) {\n' +
        '        const version = this.textModel.getVersionId();\n' +

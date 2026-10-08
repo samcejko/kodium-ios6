@@ -69,6 +69,10 @@ The first build.
   the context itself.
 - A line's height while scrolling (~365 times a frame) is the default at once when no line has a height of its own -
   in Kodium none has - instead of a binary search over those lines.
+- Scrolling ~5 % faster (79-80 ms a frame instead of 83 on the iPad 2): the indent guides cost 11 ms of each frame and
+  now 5. Each line's guides are kept while the text is the same (a scroll works out the lines it brings in, not all
+  the lines on the screen), and without bracket pair guides (off by default) the indent guides no longer go through
+  a queue of them with two array spreads per guide.
 - The first key after a save (auto save saves after 2 s of pause) and the first key into a file opened for a look come
   sooner (in the profiler 0.34 s instead of 0.56 inside the key): the Open Editors view redraws the row of the editor
   that changed, and the list told its focus anew twice - at each, the view reset the 13 context keys of the focused
