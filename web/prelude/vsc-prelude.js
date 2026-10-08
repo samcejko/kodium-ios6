@@ -342,6 +342,33 @@
         if (nativeVars || typeof text !== 'string' || text.indexOf('var(') < 0) return text;
         return resolveVars(text, 0);
     };
+    // The styles VS Code writes into <style> elements at run time (a list's colours, a tree's indent guides, a menu's,
+    // the quick input's): the engine's shim rewrote each new text, and the old WebKit made its rule sets again from all
+    // of the page's rules a second time for the changed text. When all such a style needs is the theme's variables, it
+    // gets their values here and the rewriter's mark (/*br*/), which the shim leaves alone; any other construct the
+    // engine lacks, or a variable without a value, and the text goes to the rewriter as before. (Called by the patched
+    // modules, vite.config.mjs plainStyles.)
+    // (what the engine lacks, as properties and selectors - not words in class names; :not() of one simple selector it
+    // has, from CSS 3)
+    var PLAIN_LACKS = new RegExp([
+        'var\\(', '--[\\w-]+\\s*:', 'calc\\(', '\\b(?:min|max|clamp)\\(', ':(?:is|where|has|not)\\(', ':focus-(?:visible|within)',
+        '#[0-9a-f]{4}\\b', '#[0-9a-f]{8}\\b', 'rgba?\\([^)]*\\/', 'display\\s*:\\s*(?:inline-)?(?:flex|grid)', '\\bflex(?:-[a-z]+)?\\s*:',
+        '\\b(?:align|justify|place)-[a-z]+\\s*:', '\\b(?:fit|max|min)-content\\b', '\\b(?:row-|column-)?gap\\s*:', '\\bgrid(?:-[a-z]+)*\\s*:',
+        '\\b(?:transform|transition|animation)(?:-[a-z]+)*\\s*:', '@(?:-webkit-)?keyframes', 'user-select\\s*:', '\\binset\\s*:',
+        'position\\s*:\\s*(?:-webkit-)?sticky', '\\bmask(?:-[a-z]+)*\\s*:', '\\bfilter\\s*:', 'appearance\\s*:', 'object-(?:fit|position)\\s*:',
+        'aspect-ratio\\s*:', '@supports', '@container', '@layer', '@font-face', 'color-mix\\(', 'placeholder', 'backdrop', 'writing-mode\\s*:',
+        'text-decoration-(?:color|style|thickness)\\s*:', 'gradient\\(', 'box-sizing\\s*:', '\\bcolumns?(?:-[a-z]+)*\\s*:', 'clip-path\\s*:',
+        'hyphens\\s*:', 'tab-size\\s*:', '\\dch\\b'
+    ].join('|'), 'i');
+    var SIMPLE_NOT = /:not\(\s*(?:[.#]?[\w-]+|\[[^\]()]+\]|::?[\w-]+)\s*\)/g;
+    // (a declaration with a variable the theme has no value for goes, as the engine's rewriter drops it)
+    var UNRESOLVED = /(^|[{;])\s*[\w-]+\s*:[^;{}]*var\([^;{}]*;?/g;
+    G.__kd_plainStyle = function (text) {
+        if (nativeVars || typeof text !== 'string' || text.slice(0, 6) === '/*br*/') return text;
+        var resolved = text.indexOf('var(') >= 0 ? resolveVars(text, 0) : text;
+        if (resolved.indexOf('var(') >= 0) resolved = resolved.replace(UNRESOLVED, '$1');
+        return PLAIN_LACKS.test(resolved.replace(SIMPLE_NOT, '')) ? text : '/*br*/' + resolved;
+    };
     // The theme VS Code applies: its <style class="contributedColorTheme"> with .monaco-workbench { --vscode-...: ...; }.
     // The engine rewrites that style as it goes in (custom properties out) and hands the values to its shims, where
     // __brManifestAdd below takes them; in a desktop browser (?novar) the text itself is read. A whole theme's worth of

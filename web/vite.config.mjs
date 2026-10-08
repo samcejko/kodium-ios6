@@ -196,6 +196,26 @@ function plainRules() {
   ])
 }
 
+// The styles VS Code writes into <style> elements at run time - a list's colours, a tree's indent guides, a menu's, the
+// quick input's, the breadcrumbs', the editor's decoration rules: through vsc-prelude's __kd_plainStyle, which gives a
+// style that only lacks the theme's variables their values and the rewriter's mark. The engine's shim rewrote every
+// such text once more, and the old WebKit made its rule sets again for the changed text (the first command palette of
+// a start, the first menu, the first suggestions).
+function plainStyles() {
+  const prefix = 'const __kdPlain = (text) => typeof window !== "undefined" && window.__kd_plainStyle ? window.__kd_plainStyle(text) : text;\n'
+  const wrap = (suffix, assignment, value) => [suffix, [[assignment + value + ';', assignment + '__kdPlain(' + value + ');']], prefix]
+  return patchModules('kodium-plain-styles', [
+    wrap('/vs/base/browser/ui/list/listWidget.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
+    wrap('/vs/base/browser/ui/tree/abstractTree.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
+    wrap('/vs/base/browser/ui/table/tableWidget.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
+    wrap('/vs/platform/quickinput/browser/quickInputController.js', '                this.ui.styleSheet.textContent = ', 'newStyles'),
+    wrap('/vs/base/browser/ui/menu/menu.js', '        this.styleSheet.textContent = ', 'getMenuWidgetCSS(style, isInShadowDOM(container))'),
+    wrap('/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js', '        styleElement.textContent = ', 'content'),
+    wrap('/vs/editor/browser/editorDom.js', '        this._styleElement.textContent = ', 'this.getCssText(this.className, this.properties)'),
+    wrap('/vs/base/browser/domStylesheets.js', '            this._styleSheet.textContent = ', 'cssStyle')
+  ])
+}
+
 // Workers go sooner when nothing uses them (a worker is a script engine of its own on the iPad 2: about 8 MB each): the
 // language services' after 45 s instead of 2 minutes, the editor's after a minute instead of five
 function quickerWorkers() {
@@ -1105,7 +1125,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
