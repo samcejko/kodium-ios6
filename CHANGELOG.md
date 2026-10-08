@@ -83,6 +83,12 @@ The first build.
   stylesheet made again; what was made of the file icon theme is stored with it and taken from there by the next start
   while its file, the languages' icons and the code are the same; the default settings' reload is skipped also when
   Kodium's defaults name a setting this VS Code does not have.
+- Typing and scrolling are a quarter faster (a key 92 ms to the screen on the iPad 2 instead of 118-138; scrolling a
+  long file 94 ms a frame instead of 131): ligatures off was the CSS font-feature-settings "liga" off, "calt" off on
+  the editor's lines, and any feature settings make the iOS 6 engine lay out and draw all their text through Core
+  Text's complex path (meant for scripts that need shaping). Off is no feature settings now; the engine's simple path
+  draws no ligatures either. And the editor no longer inspects the accessibility setting in every settings layer at
+  every frame (whether a screen reader is in use is kept until that setting changes).
 - Drop-downs (the Output's channels, the Settings editor's choices, the Search view's...) are the iPad's own <select>
   with the system's picker, as VS Code has them on a Mac: the drawn one was a list widget with a stylesheet of its own,
   made again at every opening of the panel.

@@ -220,8 +220,28 @@ function quickerWorkers() {
 // - the folding regions were worked out again 0.2 s after every change, and the matching bracket 0.05 s after every
 //   move of the cursor - each new set of decorations had the editor check every line on the screen again. Now once
 //   typing pauses (1 s, 0.3 s).
+// - ligatures off was the CSS font-feature-settings "liga" off, "calt" off on the editor's lines (and the suggestions'):
+//   any feature settings make the iOS 6 engine set every run of text through Core Text's complex path, which it
+//   otherwise takes only for scripts that need it - a sixth of the time of scrolling. Off is no feature settings now:
+//   the simple path has no ligatures (a scroll of 3 lines took 113 ms a frame instead of 138).
+// - the editor asked at every frame whether a screen reader is in use (to fill its hidden text area), which inspected
+//   the setting editor.accessibilitySupport in every settings layer (a merge of the configuration models each time):
+//   the answer is kept until that setting changes.
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/common/config/editorOptions.js', [
+      ['        this.OFF = "\\"liga\\" off, \\"calt\\" off";', '        this.OFF = "";']]],
+    ['/vs/platform/accessibility/browser/accessibilityService.js', [
+      ['            if (e.affectsConfiguration("editor.accessibilitySupport")) {\n                updateContextKey();',
+       '            if (e.affectsConfiguration("editor.accessibilitySupport")) {\n                this.kdSupportValue = undefined;\n                updateContextKey();'],
+      ['    getAccessibilitySupportConfigurationValue() {\n        const inspectedValue =',
+       '    getAccessibilitySupportConfigurationValue() {\n' +
+       '        if (this.kdSupportValue === undefined) {\n' +
+       '            this.kdSupportValue = this.kdSupportValueNow();\n' +
+       '        }\n' +
+       '        return this.kdSupportValue;\n' +
+       '    }\n' +
+       '    kdSupportValueNow() {\n        const inspectedValue =']]],
     ['/vs/editor/browser/viewParts/viewLines/viewLine.js', [
       ['    if (isLinux || isFirefox || isSafari) {', '    if (isLinux || isFirefox) {']]],
     ['/vs/editor/browser/config/fontMeasurements.js', [
