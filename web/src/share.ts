@@ -11,6 +11,7 @@ import { EditorResourceAccessor } from '@codingame/monaco-vscode-api/vscode/vs/w
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 import type { ServicesAccessor } from '@codingame/monaco-vscode-api/vscode/vs/platform/instantiation/common/instantiation'
 import { DOCUMENTS } from './files'
+import { filesChangedOutside } from './explorer'
 
 const cs = /^cs/i.test((window as { __kd_lang?: string }).__kd_lang || '')
 const T = cs
@@ -25,6 +26,7 @@ const API = location.href.replace(/[?#].*$/, '').replace(/\/[^/]*$/, '') + '/__k
 export function receiveFiles(): void {
   ;(window as { __kd_receive?: (path: string) => string }).__kd_receive = (path: string) => {
     if (typeof path !== 'string' || path.charAt(0) !== '/') return 'ok'
+    filesChangedOutside()
     void StandaloneServices.get(IEditorService).openEditor({ resource: URI.file(DOCUMENTS + path), options: { pinned: true } })
     StandaloneServices.get(INotificationService).info(fill(T.received, path.slice(1)))
     return 'ok'

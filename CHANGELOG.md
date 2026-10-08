@@ -94,6 +94,10 @@ The first build.
   every line number a scroll brings in; iOS 6's digits are of one width anyway. And the indent guides keep each line's
   indentation while the text is the same, instead of taking it from the text of every line on the screen at every
   frame.
+- The side bar shows in 0.7 s instead of 1, the Explorer after the Search view in 0.5 s instead of 0.8: the explorer
+  read all its folders again whenever it was shown, for file changes it might have missed. It does now when something
+  changed while it was hidden; what changes outside the workbench - a file from another app, what iTunes File Sharing
+  put into Documents while the app was in the background - refreshes it (on the return to the foreground).
 - The state VS Code stores every 5 s when the page is idle - between keys, too - is stored in half the time: the
   editor resolver kept inspecting two settings (the editor associations) in every settings layer for it; it keeps
   them until the configuration changes.

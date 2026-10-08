@@ -601,6 +601,31 @@ function leaveOut() {
   }
 }
 
+// The explorer read all its folders again whenever it was shown - the side bar shown again, the Explorer after the
+// Search view (0.3-0.5 s of the 1 s of each on the iPad 2) - "to compensate for missing file events". It does now only
+// when something changed while it was hidden (a refresh it skipped, the folders it was not given) or it has no folders
+// yet. What changes outside the workbench - files from another app, iTunes File Sharing while the app is in the
+// background - Kodium tells it (src/explorer.ts).
+function quickerViews() {
+  return patchModules('kodium-quicker-views', [
+    ['/vs/workbench/contrib/files/browser/views/explorerView.js', [
+      ['            if (visible) {\n                await this.setTreeInput();\n',
+       '            if (visible) {\n' +
+       '                if (!this.tree.getInput() || this.kdInputStale) {\n' +
+       '                    this.kdInputStale = false;\n' +
+       '                    await this.setTreeInput();\n' +
+       '                }\n'],
+      ['    refresh(recursive, item, cancelEditing = true) {\n        if (!this.tree || !this.isBodyVisible()',
+       '    refresh(recursive, item, cancelEditing = true) {\n' +
+       '        if (this.tree && !this.isBodyVisible()) {\n' +
+       '            this.kdInputStale = true;\n' +
+       '        }\n' +
+       '        if (!this.tree || !this.isBodyVisible()'],
+      ['    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n',
+       '    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n            this.kdInputStale = true;\n']]]
+  ])
+}
+
 // Drop-downs as the iPad's own <select>, as VS Code has them on a Mac (and in the Settings editor on an iPad with pointer
 // events): its drawn one is a List widget with a <style> element of its own, made again whenever a view's toolbar is -
 // the Output's channel picker at every opening of the panel - and every new <style> made the old WebKit rebuild its
@@ -1027,7 +1052,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

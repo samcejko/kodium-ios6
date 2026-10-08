@@ -67,6 +67,7 @@ import { registerLanguages } from './languages'
 import { followTheme } from './theme'
 import { standInForLeftOutParts } from './exthost'
 import { receiveFiles } from './share'
+import { watchForeground } from './explorer'
 import { receiveKeys } from './keybar'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
@@ -228,6 +229,7 @@ async function start() {
   await registerLanguages()
   mark('workbench')
   receiveFiles()
+  watchForeground()
   receiveKeys()
   registerJavaScript()
   registerMarkdown()
