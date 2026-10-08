@@ -279,8 +279,16 @@ function plainFigures() {
 //   number is noted for when it comes on (17 ms of an Enter's 70 in the profiler).
 // - the history of places (Go Back) replaces its last entry at every move of the cursor while typing, and with it took
 //   the entry's editor's dispose listener off and put it on again - the same editor (three times a key): it stays now.
+// - a line's height and the heights of the lines above it - asked ~365 times a frame while scrolling - were a binary
+//   search, with a closure, over the lines of special heights, which Kodium's editors have none of: with none, the
+//   default height (times the lines) at once, as the search ended anyway.
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/common/viewLayout/lineHeights.js', [
+      ['    heightForLineNumber(lineNumber) {\n        this._commit();\n',
+       '    heightForLineNumber(lineNumber) {\n        this._commit();\n        if (this._orderedCustomLines.length === 0) {\n            return this._defaultLineHeight;\n        }\n'],
+      ['    getAccumulatedLineHeightsIncludingLineNumber(lineNumber) {\n        this._commit();\n',
+       '    getAccumulatedLineHeightsIncludingLineNumber(lineNumber) {\n        this._commit();\n        if (this._orderedCustomLines.length === 0) {\n            return this._defaultLineHeight * lineNumber;\n        }\n']]],
     ['/vs/workbench/services/history/browser/historyService.js', [
       ['        for (const removedEntry of removedEntries) {\n            this.editorHelper.clearOnEditorDispose(removedEntry.editor, this.mapEditorToDisposable);\n        }\n' +
        '        if (isEditorInput(editor)) {\n            this.editorHelper.onEditorDispose(editor, () => this.remove(editor), this.mapEditorToDisposable);\n        }\n' +
@@ -438,6 +446,10 @@ function quickerSwitch() {
 // Every context menu also gave the menus' shared <style> its text again - the same text: the old WebKit then made its
 // rule sets anew from all of the page's rules, and the engine's shim looked the text over again (0.23 s of an editor
 // context menu's 0.87 in the profiler). The text is given when it is another.
+// And at every change of a context key (dozens when an editor opens or a tab is switched), every scoped context key
+// service below it - one per editor, view, list, widget: dozens - copied its whole context (a spread of all its keys)
+// and made a Set of the copy's keys, to ask whether the change touched only keys of its own: on iOS 6 Set is the
+// engine's shim, slow to fill. The keys are asked of the context itself now.
 function quickerMenus() {
   // (the registry tells of its changes in a microtask: a version number counts them at once, and a menu's kept items
   // are good for one version)
@@ -451,6 +463,12 @@ function quickerMenus() {
     }
   }
   return [registry, patchModules('kodium-quicker-menus', [
+    ['/vs/platform/contextkey/browser/contextKeyService.js', [
+      ['function allEventKeysInContext(event, context) {\n    return event.allKeysContainedIn(( new Set(( Object.keys(context)))));\n}',
+       'function allEventKeysInContext(event, context) {\n' +
+       '    return event.allKeysContainedIn({ has: key => Object.prototype.hasOwnProperty.call(context, key) });\n}'],
+      ['            const thisContextValues = thisContainer.value;\n            if (!allEventKeysInContext(e, thisContextValues)) {',
+       '            const thisContextValues = thisContainer._value || thisContainer.value;\n            if (!allEventKeysInContext(e, thisContextValues)) {']]],
     ['/vs/base/browser/ui/menu/menu.js', [
       ['        this.styleSheet.textContent = __kdPlain(getMenuWidgetCSS(style, isInShadowDOM(container)));',
        '        const kdCss = getMenuWidgetCSS(style, isInShadowDOM(container));\n' +

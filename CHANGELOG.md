@@ -62,6 +62,13 @@ The first build.
 - The history of places (Go Back, Go Forward) replaces its last entry at every move of the cursor while typing, and
   took the entry's editor's dispose listener off and put it on again each time - the same editor, three times a key.
   It stays on now.
+- Opening files, switching tabs, the Settings editor and menus do less with context keys (a switch of tabs 8 % less in
+  the profiler): at every change of a context key - dozens when an editor opens - every scoped context key service
+  (one per editor, view, list and widget) copied its whole context and made a Set of its keys to see whether the
+  change was only its own; iOS 6 has no Set of its own, the engine's stand-in is slow to fill. The keys are asked of
+  the context itself.
+- A line's height while scrolling (~365 times a frame) is the default at once when no line has a height of its own -
+  in Kodium none has - instead of a binary search over those lines.
 - The first key after a save (auto save saves after 2 s of pause) and the first key into a file opened for a look come
   sooner (in the profiler 0.34 s instead of 0.56 inside the key): the Open Editors view redraws the row of the editor
   that changed, and the list told its focus anew twice - at each, the view reset the 13 context keys of the focused
