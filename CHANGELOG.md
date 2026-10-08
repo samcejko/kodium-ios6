@@ -59,6 +59,9 @@ The first build.
 - Suggestions come once typing pauses for a second (was half a second): on the on-screen keyboard that was often in the
   middle of a word, and with the list open every further key took 0.25-0.65 s instead of 0.2 (the list filtered and
   drawn again). The key bar's suggest key shows them at once.
+- The history of places (Go Back, Go Forward) replaces its last entry at every move of the cursor while typing, and
+  took the entry's editor's dispose listener off and put it on again each time - the same editor, three times a key.
+  It stays on now.
 - The first key after a save (auto save saves after 2 s of pause) and the first key into a file opened for a look come
   sooner (in the profiler 0.34 s instead of 0.56 inside the key): the Open Editors view redraws the row of the editor
   that changed, and the list told its focus anew twice - at each, the view reset the 13 context keys of the focused

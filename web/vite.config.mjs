@@ -277,8 +277,20 @@ function plainFigures() {
 // - every Enter (and every line joined) worked all ~160 editor options out again and compared them with the old ones,
 //   for the new number of lines - which only the minimap's layout reads, and Kodium's minimap is off: with it off, the
 //   number is noted for when it comes on (17 ms of an Enter's 70 in the profiler).
+// - the history of places (Go Back) replaces its last entry at every move of the cursor while typing, and with it took
+//   the entry's editor's dispose listener off and put it on again - the same editor (three times a key): it stays now.
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/workbench/services/history/browser/historyService.js', [
+      ['        for (const removedEntry of removedEntries) {\n            this.editorHelper.clearOnEditorDispose(removedEntry.editor, this.mapEditorToDisposable);\n        }\n' +
+       '        if (isEditorInput(editor)) {\n            this.editorHelper.onEditorDispose(editor, () => this.remove(editor), this.mapEditorToDisposable);\n        }\n' +
+       '        this._onDidChange.fire();',
+       '        const kdSameEditor = replace && removedEntries.length === 1 && removedEntries[0].editor === editor && ( this.mapEditorToDisposable.has(editor));\n' +
+       '        if (!kdSameEditor) {\n' +
+       '        for (const removedEntry of removedEntries) {\n            this.editorHelper.clearOnEditorDispose(removedEntry.editor, this.mapEditorToDisposable);\n        }\n' +
+       '        if (isEditorInput(editor)) {\n            this.editorHelper.onEditorDispose(editor, () => this.remove(editor), this.mapEditorToDisposable);\n        }\n' +
+       '        }\n' +
+       '        this._onDidChange.fire();']]],
     ['/vs/editor/browser/config/editorConfiguration.js', [
       ['        this._viewLineCount = viewLineCount;\n        this._recomputeOptions();',
        '        this._viewLineCount = viewLineCount;\n' +
