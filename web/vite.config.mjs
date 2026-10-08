@@ -250,8 +250,29 @@ function plainFigures() {
 // - the indent guides took the indentation of every line on the screen at every frame of a scroll (each line's text
 //   made from the piece tree and scanned), and of the lines around the cursor for the active guide: kept per line
 //   while the text and the tab size stay the same.
+// - the state VS Code stores every 5 s when the page is idle (between keys, too) had the editor resolver inspect two
+//   settings (workbench.editorAssociations and the diff one) in every settings layer - half of the store's 0.12 s in
+//   a profile: the associations are kept until the configuration changes.
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/workbench/services/editor/browser/editorResolverService.js', [
+      ['    getAllUserAssociationsForSetting(settingId) {\n        const inspectedEditorAssociations = this.configurationService.inspect(settingId) || {};\n' +
+       '        return this.mergeEditorAssociationSettings(\n',
+       '    getAllUserAssociationsForSetting(settingId) {\n' +
+       '        if (!this.kdAssociations) {\n' +
+       '            this.kdAssociations = new Map();\n' +
+       '            this._register(this.configurationService.onDidChangeConfiguration(() => this.kdAssociations.clear()));\n' +
+       '        }\n' +
+       '        let kept = this.kdAssociations.get(settingId);\n' +
+       '        if (!kept) {\n' +
+       '            kept = this.kdAllUserAssociationsForSetting(settingId);\n' +
+       '            this.kdAssociations.set(settingId, kept);\n' +
+       '        }\n' +
+       '        return kept.slice();\n' +
+       '    }\n' +
+       '    kdAllUserAssociationsForSetting(settingId) {\n' +
+       '        const inspectedEditorAssociations = this.configurationService.inspect(settingId) || {};\n' +
+       '        return this.mergeEditorAssociationSettings(\n']]],
     ['/vs/editor/common/model/guidesTextModelPart.js', [
       ['    _computeIndentLevel(lineIndex) {\n        return computeIndentLevel(\n            this.textModel.getLineContent(lineIndex + 1),\n            this.textModel.getOptions().tabSize\n        );\n    }',
        '    _computeIndentLevel(lineIndex) {\n' +
