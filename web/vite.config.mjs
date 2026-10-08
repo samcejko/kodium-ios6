@@ -633,7 +633,13 @@ function quickerViews() {
        '    kdKnownInsights().set(body, insights);\n' +
        '    clearTimeout(kdInsightsTimer);\n' +
        '    kdInsightsTimer = setTimeout(() => {\n' +
-       '        try { localStorage.setItem(kdInsightsKey, JSON.stringify(Array.from(kdInsights))); } catch (e) {}\n' +
+       '        try {\n' +
+       '            for (let i = localStorage.length - 1; i >= 0; i--) {\n' +
+       '                const key = localStorage.key(i);\n' +
+       '                if (key && key !== kdInsightsKey && key.indexOf("kodium.snippetInsights.") === 0) localStorage.removeItem(key);\n' +
+       '            }\n' +
+       '            localStorage.setItem(kdInsightsKey, JSON.stringify(Array.from(kdInsights)));\n' +
+       '        } catch (e) {}\n' +
        '    }, 5000);\n' +
        '}\n' +
        'class SnippetBodyInsights {\n    constructor(body) {\n' +
