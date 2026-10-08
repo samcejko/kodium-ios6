@@ -496,8 +496,22 @@ function quickerPalette() {
 // (and the first opening: each heading's patterns - "editor.cursor*" and the like - were tried on every setting left,
 // a regular expression each; now only on the settings whose names begin with the pattern's part before its first *,
 // found in the names sorted once - the same settings come out, 0.8 s less on the iPad 2)
+// (and the default settings were written out twice as JSON text with their descriptions - with the "Commonly Used"
+// group and without it - whenever they were made, for the Settings editor too; only the second is ever read, by the
+// default settings' JSON view: the first is written when asked for)
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
+    ['/vs/workbench/services/preferences/common/preferencesModels.js', [
+      ['    getContent(forceUpdate = false) {\n        if (!this._content || forceUpdate) {\n            this.initialize();\n        }\n        return this._content;\n    }',
+       '    getContent(forceUpdate = false) {\n' +
+       '        if (!this._allSettingsGroups || forceUpdate) {\n            this.initialize();\n        }\n' +
+       '        if (this._content === undefined) {\n' +
+       '            this._content = this.toContent(this._allSettingsGroups, 0);\n' +
+       '            this._contentWithoutMostCommonlyUsed = this.toContent(this._allSettingsGroups, 1);\n' +
+       '        }\n' +
+       '        return this._content;\n    }'],
+      ['        this._allSettingsGroups = this.parse();\n        this._content = this.toContent(this._allSettingsGroups, 0);\n',
+       '        this._allSettingsGroups = this.parse();\n        this._content = undefined;\n']]],
     ['/vs/workbench/contrib/preferences/browser/settingsTree.js', [
       ['function getMatchingSettings(allSettings, filter) {\n    const result = [];\n',
        'function kdSettingsByPrefix(allSettings, patterns) {\n' +

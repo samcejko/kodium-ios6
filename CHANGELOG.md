@@ -98,10 +98,12 @@ The first build.
   read all its folders again whenever it was shown, for file changes it might have missed. It does now when something
   changed while it was hidden; what changes outside the workbench - a file from another app, what iTunes File Sharing
   put into Documents while the app was in the background - refreshes it (on the return to the foreground).
-- The Settings editor's first opening sorts the ~1000 settings under their headings without trying every heading's
-  patterns on every setting left (40 000 regular expression tests, 2.4 s in a profile of the iPad 2): a pattern is
-  tried only on the settings whose names begin with its part before the first *, found in the names sorted once. The
-  same settings come out under the same headings (checked against VS Code's way for all 177 headings).
+- The Settings editor's first opening takes 4.6 s instead of 5 on the iPad 2: the ~1000 settings are sorted under
+  their headings without trying every heading's patterns on every setting left (40 000 regular expression tests): a
+  pattern is tried only on the settings whose names begin with its part before the first *, found in the names
+  sorted once - the same settings come out under the same headings (checked against VS Code's way for all 177
+  headings); and the default settings are no longer written out as JSON text twice whenever they are made - the
+  version with the "Commonly Used" group, which nothing reads, is written only when asked for.
 - The first command palette of a start opens 0.6 s sooner (2.7 s instead of 3.3 on the iPad 2), and the first of a
   menu, a list or a tree likewise: the styles VS Code writes at run time (a list's colours, a tree's indent guides,
   a menu's, the quick input's, the breadcrumbs', the editor's decoration rules) get the theme's values from Kodium's
