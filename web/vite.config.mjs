@@ -606,8 +606,14 @@ function leaveOut() {
 // when something changed while it was hidden (a refresh it skipped, the folders it was not given) or it has no folders
 // yet. What changes outside the workbench - files from another app, iTunes File Sharing while the app is in the
 // background - Kodium tells it (src/explorer.ts).
+// And the Output view let go of its channel whenever the panel was hidden, and took it up again when shown: the
+// editor's whole view made anew (a quarter of the panel's 0.8-1 s). The channel stays now (a channel that changes
+// while hidden is shown as it is then).
 function quickerViews() {
   return patchModules('kodium-quicker-views', [
+    ['/vs/workbench/contrib/output/browser/outputView.js', [
+      ['        this.editor.setVisible(visible);\n        if (!visible) {\n            this.clearInput();\n        }\n',
+       '        this.editor.setVisible(visible);\n']]],
     ['/vs/workbench/contrib/files/browser/views/explorerView.js', [
       ['            if (visible) {\n                await this.setTreeInput();\n',
        '            if (visible) {\n' +

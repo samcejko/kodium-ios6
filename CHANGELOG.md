@@ -98,6 +98,8 @@ The first build.
   read all its folders again whenever it was shown, for file changes it might have missed. It does now when something
   changed while it was hidden; what changes outside the workbench - a file from another app, what iTunes File Sharing
   put into Documents while the app was in the background - refreshes it (on the return to the foreground).
+- The panel shows in 0.4-0.7 s instead of 0.6-1: the Output view let go of its channel whenever the panel was hidden
+  and took it up again when shown, its editor's whole view made anew; the channel stays now.
 - The state VS Code stores every 5 s when the page is idle - between keys, too - is stored in half the time: the
   editor resolver kept inspecting two settings (the editor associations) in every settings layer for it; it keeps
   them until the configuration changes.
