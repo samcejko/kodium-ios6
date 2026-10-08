@@ -695,8 +695,30 @@ function leaveOut() {
 // The first suggestions of a start in a language parsed the body of every snippet of that language (146 for
 // JavaScript: whether it is trivial, uses the clipboard...), half of the first list's 1.5 s on the iPad 2: what came
 // of each body is kept in localStorage, for the next starts (the same body gives the same answers).
+// The Open Editors view, at every change of an editor's row - the first key after a save makes the file dirty, the
+// first key in a file opened for a look pins it - redraws the row, which has the list tell its focus anew (twice): at
+// each, the view reset its 13 context keys (the focused file's name, folder, language...) and set them again, every
+// change told to every menu - 0.35 s of such a key's 0.55 in the profiler. The keys change now when what the focused
+// row stands for does, in one change.
 function quickerViews() {
   return patchModules('kodium-quicker-views', [
+    ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
+      ['        this._register(this.list.onDidChangeFocus(e => {\n            resourceContext.reset();\n' +
+       '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +
+       '            const element = e.elements.length ? e.elements[0] : undefined;\n',
+       '        let kdFocused;\n' +
+       '        this._register(this.list.onDidChangeFocus(e => {\n' +
+       '            const kdElement = e.elements.length ? e.elements[0] : undefined;\n' +
+       '            const kdNow = kdElement instanceof OpenEditor ? "e" + String(kdElement.getResource()) + "|" + (kdElement.editor.isDirty() && !kdElement.editor.isSaving()) + "|" + !!kdElement.editor.isReadonly()\n' +
+       '                : kdElement ? "g" + kdElement.id : "";\n' +
+       '            if (kdNow === kdFocused) {\n                return;\n            }\n' +
+       '            kdFocused = kdNow;\n' +
+       '            this.contextKeyService.bufferChangeEvents(() => {\n' +
+       '            resourceContext.reset();\n' +
+       '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +
+       '            const element = e.elements.length ? e.elements[0] : undefined;\n'],
+      ['            } else if (element) {\n                groupFocusedContext.set(true);\n            }\n        }));',
+       '            } else if (element) {\n                groupFocusedContext.set(true);\n            }\n            });\n        }));']]],
     ['/vs/workbench/contrib/snippets/browser/snippetsFile.js', [
       ['class SnippetBodyInsights {\n    constructor(body) {\n',
        'const kdInsightsKey = "kodium.snippetInsights." + (String(SnippetParser.prototype.parse) + String(SnippetParser.prototype._parse)).length;\n' +

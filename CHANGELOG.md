@@ -49,6 +49,11 @@ The first build.
   under the mouse, and taps come as touches it handles itself (no mouse events, no :active).
 - Enter (and joining lines) no longer works out all ~160 options of the editor again for the new number of lines,
   which only the minimap reads - and it is off.
+- The first key after a save (auto save saves after 2 s of pause) and the first key into a file opened for a look come
+  sooner (in the profiler 0.34 s instead of 0.56 inside the key): the Open Editors view redraws the row of the editor
+  that changed, and the list told its focus anew twice - at each, the view reset the 13 context keys of the focused
+  row (the file's name, folder, language...) and set them again, and every change went to every menu. They change now
+  when the focused row's file or state does, as one change.
 - The keys of the row above the keyboard come up again as soon as the finger lifts, not once the workbench has typed
   the key (the script runs on the main thread, which drew the key cap only afterwards).
 - Switching between editors does less (0.68 s on the iPad 2 instead of 0.84, when no garbage collection falls in): the
