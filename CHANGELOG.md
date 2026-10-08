@@ -32,17 +32,23 @@ The first build.
   workbench's construction: 30 MB of bytecode and 7 MB of JIT code) is let go first, a minute after the start.
 - A warm-up behind the splash: a longer start, then quicker first actions. The workbench does once, unseen, what one
   does first after a start - the command palette and Go to File (filtered too), the panel with its Problems view, the
-  side bar and the Search view, an editor of its own (an untitled JavaScript document, never saved: typed into as the
-  keyboard types, suggestions, find), the Settings editor - and puts everything back as it was (the side bar, the
-  panel, their views, the editors, the focus). The splash says how far it is ("Getting the editor ready… 3/7"); about
-  35 s on the iPad 2, where the first actions then take what the next ones take: the command palette 0.8-0.9 s
-  instead of 2.7-2.9, the panel 0.4-0.65 s instead of 1.2-2.4, the Search view 0.45 s instead of 1.25-1.75, the side bar
-  0.3 s instead of 0.75, Go to File 0.6 s instead of 0.9-1, the Settings editor 4.3-4.4 s instead of 5-5.2. For the
-  editor's first actions the compiled code has to stay: Surfari's engine keeps it once the start's code is gone, which
-  JavaScriptCore threw away a minute after the start (or the engine at 75 s) - the warm-up's with it. The app throws
-  the start's code away between two steps now, as soon as the engine can tell (22 s after launch), and the steps
-  before that run once more at the end. Files from other apps wait until the warm-up is done. (localStorage
-  kodium.noWarmUp = 1 leaves it out.)
+  side bar and the Search view - and puts everything back as it was (the side bar, the panel, their views, the
+  focus). The splash says how far it is ("Getting the editor ready… 2/5"); about 20 s on the iPad 2, where the first
+  actions then take nearly what the next ones take (measured with and without, interleaved): the command palette
+  0.75-1 s instead of 2.7, the panel 0.6-0.7 s instead of 2.3 and hiding it 0.4 s instead of 1.4, the Search view
+  0.45 s instead of 1.35, hiding the side bar 0.33 s instead of 0.76. (An editor of its own typed into made no first
+  action in an editor quicker, and the Settings editor opened beforehand saved 0.7 s of its 5 for 4.5 s at every
+  start: both are not part of it.) The compiled code has to stay for that: Surfari's engine keeps it once the start's
+  code is gone, which JavaScriptCore threw away a minute after the start (or the engine at 75 s) - the warm-up's with
+  it. The app throws the start's code away between two steps now, as soon as the engine can tell (22 s after
+  launch), and the steps before that run once more at the end. Files from other apps wait until the warm-up is done.
+  (localStorage kodium.noWarmUp = 1 leaves it out.)
+- What is pressed shows at once, while the finger is on it: a button of a toolbar or the activity bar, a tab, a row
+  of a list or tree (the explorer's, suggestions, the command palette's), a menu's item, a button, a status bar item,
+  a section's header. What a tap does takes the iPad 2 0.3-1 s, and nothing showed until then: VS Code marks what is
+  under the mouse, and taps come as touches it handles itself (no mouse events, no :active).
+- Enter (and joining lines) no longer works out all ~160 options of the editor again for the new number of lines,
+  which only the minimap reads - and it is off.
 - The keys of the row above the keyboard come up again as soon as the finger lifts, not once the workbench has typed
   the key (the script runs on the main thread, which drew the key cap only afterwards).
 - Switching between editors does less (0.68 s on the iPad 2 instead of 0.84, when no garbage collection falls in): the

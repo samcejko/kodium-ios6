@@ -70,6 +70,7 @@ import { receiveFiles } from './share'
 import { watchForeground } from './explorer'
 import { warmUp } from './warmup'
 import { receiveKeys } from './keybar'
+import { showPresses } from './presses'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
 import { registerMarkdown } from './markdown'
@@ -240,6 +241,7 @@ async function start() {
     else warm()
   }, 8000)
   receiveKeys()
+  showPresses()
   registerJavaScript()
   registerMarkdown()
   registerPython()

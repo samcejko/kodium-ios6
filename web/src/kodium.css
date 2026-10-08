@@ -97,6 +97,28 @@
   background-color: #fff;
 }
 
+/* What the finger is on (presses.ts): a toolbar's button as when held under the mouse, a row, a tab, a header as under
+   the mouse, a menu's item as chosen, a button a little lighter. (!important over the lists' own rules for selected
+   and focused rows, which name their list's id.) */
+.monaco-workbench .monaco-action-bar:not(.vertical) .action-item.kd-pressed .action-label,
+.monaco-workbench .activitybar .action-item.kd-pressed,
+.monaco-workbench .kd-pressed.button,
+.monaco-workbench .kd-pressed.monaco-custom-toggle {
+  background-color: var(--vscode-toolbar-activeBackground) !important;
+}
+.monaco-workbench .monaco-list-row.kd-pressed,
+.monaco-workbench .tab.kd-pressed,
+.monaco-workbench .pane-header.kd-pressed,
+.monaco-workbench .monaco-breadcrumb-item.kd-pressed {
+  background-color: var(--vscode-list-hoverBackground) !important;
+}
+.monaco-workbench .monaco-menu .action-item.kd-pressed > .action-menu-item {
+  background-color: var(--vscode-menu-selectionBackground) !important;
+  color: var(--vscode-menu-selectionForeground) !important;
+}
+.monaco-workbench .statusbar-item.kd-pressed { background-color: var(--vscode-statusBarItem-activeBackground) !important; }
+.monaco-workbench .monaco-button.kd-pressed, .monaco-workbench .monaco-text-button.kd-pressed { opacity: 0.8; }
+
 /* A composited layer for each part that changes while one works. After a change, the iOS 6 engine maps the repaint
    rectangle of every box it laid out through all of its ancestors, up to the nearest composited layer - without
    these the root of the page, 30 levels up in VS Code's DOM (and the old flexbox lays a row's children out more than

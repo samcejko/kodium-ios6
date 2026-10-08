@@ -1,18 +1,21 @@
 // The warm-up before the splash goes: a longer start, then quick answers (the user's wish). What the workbench does
 // for the first time takes two to four times as long on the iPad 2 as the next time - JavaScriptCore compiles the code
 // it runs for the first time (to machine code after some runs), VS Code makes the widgets, the engine's shims make
-// their indexes: the command palette 2.7 s the first time and 0.8 s the next, the panel 2 s and then 0.6, the first
-// suggestions 1.1 s and then 0.4, the first keys of a start slower than the next. So while the splash still shows,
-// the workbench does once or twice, unseen, what one does first: the command palette and Go to File (with a filter
-// too), the panel with the Problems view, the side bar and the Search view, an editor of its own (an untitled
-// JavaScript document, never saved) with typing as the keyboard types, suggestions and find, the Settings editor.
-// Then everything is as it was - the side bar, the panel, their views, the editors, the focus - the garbage is
-// collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it out: what the first time costs.)
+// their indexes: the command palette 2.7 s the first time and 0.8 s the next, the panel 2.3 s and then 0.6, the
+// Search view 1.3 s and then 0.45. So while the splash still shows, the workbench does once or twice, unseen, what one
+// does first: the command palette and Go to File (with a filter too), the panel with the Problems view, the side bar
+// and the Search view. Then everything is as it was - the side bar, the panel, their views, the focus - the garbage
+// is collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it out: what the first time costs.)
+// Measured on the iPad 2 (first actions after the splash, with and without, interleaved): an editor of its own typed
+// into (an untitled document: suggestions, find) made no first action in an editor quicker - opening a file, the first
+// keys, suggestions - and took 12.7 s; the Settings editor opened beforehand opened 0.7 s sooner (4.3 s instead of 5),
+// for 4.5 s more at every start. Both left out.
 // The compiled code has to stay for that: Surfari's engine keeps it once the start's code was thrown away - which
 // JavaScriptCore did a minute after the start, or the engine at 75 s, right when one had begun to work: the warm-up's
-// went with it, and the editor's first actions were as slow as without one. So the app throws the start's code away
-// between two steps (as soon as the engine can tell, 22 s after launch: src/KDSiteProtocol.m /__kd/app/keepcode), and
-// the steps before it run again at the end.
+// went with it. So the app throws the start's code away between two steps (as soon as the engine can tell, 22 s after
+// launch: src/KDSiteProtocol.m /__kd/app/keepcode), and the steps before it run again at the end. (When memory is
+// short - a big workbench and other apps - the engine lets JavaScriptCore throw the code away again: what was made
+// stays, widgets and lists, and that is most of what the warm-up saves.)
 import { getService } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import { IQuickInputService } from '@codingame/monaco-vscode-api/vscode/vs/platform/quickinput/common/quickInput.service'
@@ -21,7 +24,6 @@ import { Parts } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services
 import { IPaneCompositePartService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/panecomposite/browser/panecomposite.service'
 import { ViewContainerLocation } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/views'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
-import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 
 // (while it runs: files from other apps wait - share.ts - and the splash says how far it is)
 export let warming = false
@@ -135,45 +137,6 @@ export async function warmUp(): Promise<void> {
         await until(() => shown('.search-view'), 3000)
         await run('workbench.view.explorer')
         await until(() => shown('.explorer-folders-view'), 3000)
-      },
-      // an editor: typing (the iOS 6 keyboard's way, into the editor's text area), suggestions, find
-      async () => {
-        const pane = await editors.openEditor({ resource: URI.from({ scheme: 'untitled', path: 'kodium-warm-up.js' }), languageId: 'javascript', options: { pinned: false } })
-        const input = pane?.input
-        if (!pane || !input) return
-        try {
-          const control = pane.getControl() as { getDomNode?(): HTMLElement | null } | undefined
-          const root = () => control?.getDomNode?.() ?? null
-          const area = () => root()?.querySelector('textarea') as HTMLTextAreaElement | null
-          await until(() => !!area() && !!root()?.querySelector('.view-line'), 5000)
-          area()?.focus()
-          const text = 'const a = [1, 2];\na.map((x) => '
-          for (const ch of text) {
-            document.execCommand('insertText', false, ch)
-            await frames(1)
-          }
-          for (let k = 0; k < 2; k++) {
-            await run('editor.action.triggerSuggest')
-            await until(() => shown('.part.editor .suggest-widget.visible') && some('.part.editor .suggest-widget .monaco-list-row'), 4000)
-            await run('hideSuggestWidget')
-          }
-          await run('actions.find')
-          await until(() => shown('.part.editor .find-widget.visible'), 3000)
-          await run('closeFindWidget')
-          await run('editor.action.selectAll')
-          await run('deleteLeft')
-        } finally {
-          // gone again, never saved (its backup with it)
-          await input.revert(pane.group.id).catch(() => undefined)
-          await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
-        }
-      },
-      // the Settings editor
-      async () => {
-        await run('workbench.action.openSettings2')
-        await until(() => shown('.settings-editor') && some('.settings-editor .setting-item'), 15000)
-        const settings = editors.activeEditorPane
-        if (settings && settings.input && /settings/i.test(settings.input.typeId)) await settings.group.closeEditor(settings.input, { preserveFocus: true })
       }
     ]
     // (how long each step took: window.__kd_warmTimes, for the developer commands)

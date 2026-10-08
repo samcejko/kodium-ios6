@@ -274,8 +274,16 @@ function plainFigures() {
 // - the state VS Code stores every 5 s when the page is idle (between keys, too) had the editor resolver inspect two
 //   settings (workbench.editorAssociations and the diff one) in every settings layer - half of the store's 0.12 s in
 //   a profile: the associations are kept until the configuration changes.
+// - every Enter (and every line joined) worked all ~160 editor options out again and compared them with the old ones,
+//   for the new number of lines - which only the minimap's layout reads, and Kodium's minimap is off: with it off, the
+//   number is noted for when it comes on (17 ms of an Enter's 70 in the profiler).
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/browser/config/editorConfiguration.js', [
+      ['        this._viewLineCount = viewLineCount;\n        this._recomputeOptions();',
+       '        this._viewLineCount = viewLineCount;\n' +
+       '        if (!this.options.get(EditorOption.minimap).enabled) {\n            return;\n        }\n' +
+       '        this._recomputeOptions();']]],
     ['/vs/workbench/services/editor/browser/editorResolverService.js', [
       ['    getAllUserAssociationsForSetting(settingId) {\n        const inspectedEditorAssociations = this.configurationService.inspect(settingId) || {};\n' +
        '        return this.mergeEditorAssociationSettings(\n',
