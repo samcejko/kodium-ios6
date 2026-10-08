@@ -98,6 +98,10 @@ The first build.
   read all its folders again whenever it was shown, for file changes it might have missed. It does now when something
   changed while it was hidden; what changes outside the workbench - a file from another app, what iTunes File Sharing
   put into Documents while the app was in the background - refreshes it (on the return to the foreground).
+- The engine's style pass after a change of the page (after nearly every key) takes 5 ms instead of 9: it no longer
+  emulates VS Code's six :has() rules, which are all looks only (the code action menu's minimum width with a header,
+  Markdown's task items without bullets, the actions of extensions' trees scrolled sideways, a wider panel filter
+  while it has the focus, the compact command center).
 - The panel shows in 0.4-0.7 s instead of 0.6-1: the Output view let go of its channel whenever the panel was hidden
   and took it up again when shown, its editor's whole view made anew; the channel stays now.
 - The state VS Code stores every 5 s when the page is idle - between keys, too - is stored in half the time: the

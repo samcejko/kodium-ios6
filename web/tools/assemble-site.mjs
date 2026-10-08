@@ -173,14 +173,17 @@ const options = { pageURL: 'https://kodium.invalid/index.html', viewportWidth: 7
                   viewportPortrait: [768, 1004], viewportLandscape: [1024, 748], orientation: 'landscape' }
 const result = JSON.parse(ctx.CSSFix.run('css', css, JSON.stringify(theme.vars), JSON.stringify(options)))
 if (!result || typeof result.out !== 'string' || !result.out.length) throw new Error('assemble-site: the CSS rewriter gave nothing')
-// The manifest is what the engine's shims redo after every change of the page. Kept: :has(), container queries and
-// grids (few, and a grid's layout needs them). Left out: the marker rules (percentage heights, z-index and the like,
-// where the engine's own layout is right for VS Code: the scan read the style of hundreds of elements a keystroke)
-// and the variables VS Code sets at run time (each one it set had the variables pass look through every rule with
-// one). Measured on the iPad 2 with both: 330 ms of shims a keystroke; without: 70.
+// The manifest is what the engine's shims redo after every change of the page. Kept: container queries and grids (a
+// grid's layout needs them). Left out: the marker rules (percentage heights, z-index and the like, where the engine's
+// own layout is right for VS Code: the scan read the style of hundreds of elements a keystroke) and the variables VS
+// Code sets at run time (each one it set had the variables pass look through every rule with one) - measured on the
+// iPad 2 with both: 330 ms of shims a keystroke; without: 70 - and the six :has() rules, all of them looks only (a
+// minimum width of the code action menu with a header, no bullets for Markdown's task items, the actions of extensions'
+// trees when scrolled sideways, a wider filter of the panel while it has the focus, the compact command center): 3 ms
+// of the 7 ms of every pass, and a pass after nearly every key.
 result.out = result.out.replace(/\/\*br-manifest:([\s\S]*?)\*\/(\s*)$/, (all, json, tail) => {
   const m = JSON.parse(json)
-  for (const kind of ['mk', 'cv']) if (Array.isArray(m[kind])) m[kind] = []
+  for (const kind of ['mk', 'cv', 'has']) if (Array.isArray(m[kind])) m[kind] = []
   return '/*br-manifest:' + JSON.stringify(m) + '*/' + tail
 })
 // The rewriter writes flex-direction: *-reverse as -webkit-box-direction: reverse too, which the iOS 6 engine inherits
