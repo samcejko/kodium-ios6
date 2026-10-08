@@ -37,6 +37,21 @@
         return { href: s, toString: function () { return s; } };
     };
 
+    // Typed arrays made from an array (web/vite.config.mjs plainTypedArrays puts this in place of `new XArray(...)`):
+    // core-js wraps the engine's constructors (iOS 6's lack the newer forms), and from an array-like its wrapper checks
+    // the constructor with Function.prototype.toString - of the polyfills' file, whose text the engine decodes again -
+    // 1-3 ms each on the iPad 2, ~500 times in 18 typed keys (line tokens). Made from a length, which the wrapper hands
+    // straight to the engine, and filled here; anything else as before.
+    G.__kdTypedArray = function (C, a, b, c) {
+        var count = arguments.length;
+        if (count > 2) return count > 3 ? new C(a, b, c) : new C(a, b);
+        if (count < 2) return new C();
+        if (a === null || typeof a !== 'object' || typeof a.length !== 'number') return new C(a);
+        var n = a.length, out = new C(n);
+        for (var i = 0; i < n; i++) out[i] = a[i];
+        return out;
+    };
+
     // The engine's Number wrapper (Surfari's shims.js, the __brLean one) copies only the statics the iOS 6 engine lists
     // as own names, and that list lacks the ES1 constants: Number.POSITIVE_INFINITY was undefined, so the editor's
     // maximum size (new Dimension(Number.POSITIVE_INFINITY, ...)) was NaN and every split view laid out at 0 x 0

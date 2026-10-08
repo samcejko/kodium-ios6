@@ -423,6 +423,9 @@ function quickerSwitch() {
 // what its base class's constructor had just refreshed), each time sorting them (by group, order and title: 12 000
 // localeCompare calls for the palette) and collecting the context keys of their conditions. Once now, and the sorted
 // items of a menu are kept until the registry changes for it.
+// Every context menu also gave the menus' shared <style> its text again - the same text: the old WebKit then made its
+// rule sets anew from all of the page's rules, and the engine's shim looked the text over again (0.23 s of an editor
+// context menu's 0.87 in the profiler). The text is given when it is another.
 function quickerMenus() {
   // (the registry tells of its changes in a microtask: a version number counts them at once, and a menu's kept items
   // are good for one version)
@@ -436,6 +439,13 @@ function quickerMenus() {
     }
   }
   return [registry, patchModules('kodium-quicker-menus', [
+    ['/vs/base/browser/ui/menu/menu.js', [
+      ['        this.styleSheet.textContent = __kdPlain(getMenuWidgetCSS(style, isInShadowDOM(container)));',
+       '        const kdCss = getMenuWidgetCSS(style, isInShadowDOM(container));\n' +
+       '        if (this.styleSheet.kdCss !== kdCss) {\n' +
+       '            this.styleSheet.kdCss = kdCss;\n' +
+       '            this.styleSheet.textContent = __kdPlain(kdCss);\n' +
+       '        }']]],
     ['/vs/platform/actions/common/menuService.js', [
       ['        const menuItems = this._sort(MenuRegistry.getMenuItems(this._id));', '        const menuItems = this._kdItems();'],
       ['    _sort(menuItems) {\n        return menuItems;\n    }',
@@ -782,6 +792,35 @@ function quickerViews() {
       ['    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n',
        '    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n            this.kdInputStale = true;\n']]]
   ])
+}
+
+// Typed arrays made from an array - line tokens, ~500 of them in 18 typed keys, the auto-indent check of every key
+// among them: core-js wraps the iOS 6 engine's constructors, and from an array-like its wrapper checks the constructor
+// with Function.prototype.toString, 1-3 ms each on the iPad 2 (~10 ms of a key in the profiler). `new XArray(...)` in
+// VS Code's modules becomes vsc-prelude's __kdTypedArray(XArray, ...), which makes them from a length (handed straight
+// to the engine) and fills them. (A worker has no prelude: there the module's stand-in constructs as before.)
+function plainTypedArrays() {
+  const find = /\bnew (Int8|Uint8|Uint8Clamped|Int16|Uint16|Int32|Uint32|Float32|Float64)Array\((?!\s*\))/g
+  const head = 'const __kdTA = typeof self !== "undefined" && self.__kdTypedArray || function (C, a, b, c) {\n' +
+    '    return arguments.length > 3 ? new C(a, b, c) : arguments.length > 2 ? new C(a, b) : arguments.length > 1 ? new C(a) : new C();\n' +
+    '};\n'
+  let count = 0
+  return {
+    name: 'kodium-plain-typed-arrays',
+    transform(code, id) {
+      const p = id.replace(/\\/g, '/').replace(/\?.*$/, '')
+      if (!/\.m?js$/.test(p) || !p.includes('/node_modules/@codingame/')) return null
+      find.lastIndex = 0
+      if (!find.test(code)) return null
+      find.lastIndex = 0
+      const body = code.replace(find, (m, kind) => { count++; return '__kdTA(' + kind + 'Array, ' })
+      // (a module's own constant, before its imports - which are hoisted anyway)
+      return { code: head + body, map: null }
+    },
+    buildEnd() {
+      if (count) console.log('kodium-plain-typed-arrays: ' + count + ' typed arrays')
+    }
+  }
 }
 
 // Drop-downs as the iPad's own <select>, as VS Code has them on a Mac (and in the Settings editor on an iPad with pointer
@@ -1210,7 +1249,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

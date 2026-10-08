@@ -49,6 +49,16 @@ The first build.
   under the mouse, and taps come as touches it handles itself (no mouse events, no :active).
 - Enter (and joining lines) no longer works out all ~160 options of the editor again for the new number of lines,
   which only the minimap reads - and it is off.
+- Context menus open in 0.35-0.5 s instead of 0.75-0.9 (the editor's, measured on the iPad 2): every menu gave the
+  menus' shared <style> its text again - the same text - and the old WebKit made its rule sets anew from all of the
+  page's rules, and the engine's shim looked the text over again. The text is given when it is another.
+- Every key does 7 % less inside it (in the profiler 100 ms instead of 108): typed arrays made from an array - line
+  tokens, ~30 a key, the auto-indent check of every key among them - went through core-js's wrapper of the engine's
+  constructors, which checks the constructor with Function.prototype.toString each time (1-3 ms on the iPad 2). They
+  are made from a length now, which the wrapper hands straight to the engine.
+- Suggestions come once typing pauses for a second (was half a second): on the on-screen keyboard that was often in the
+  middle of a word, and with the list open every further key took 0.25-0.65 s instead of 0.2 (the list filtered and
+  drawn again). The key bar's suggest key shows them at once.
 - The first key after a save (auto save saves after 2 s of pause) and the first key into a file opened for a look come
   sooner (in the profiler 0.34 s instead of 0.56 inside the key): the Open Editors view redraws the row of the editor
   that changed, and the list told its focus anew twice - at each, the view reset the 13 context keys of the focused

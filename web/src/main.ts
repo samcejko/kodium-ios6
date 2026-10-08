@@ -125,12 +125,13 @@ async function start() {
       // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
       'files.autoSave': 'afterDelay',
       'files.autoSaveDelay': 2000,
-      // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for half a second: worked out in the
-      // workers (the words of the file in the editor's, the rest in the language services'), the list drawn only then -
-      // not at every key while typing on (on the on-screen keyboard keys come 0.25-0.4 s apart: at 0.3 s the list came
-      // in the middle of words, and drawing it held the next key back)
+      // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for a second: worked out in the workers
+      // (the words of the file in the editor's, the rest in the language services'), the list drawn only then - not at
+      // every key while typing on (on the on-screen keyboard keys come 0.25-0.6 s apart: at 0.3 s and at 0.5 s the list
+      // came in the middle of words, and with it open every further key took 0.25-0.65 s on the iPad 2 instead of 0.2:
+      // the list filtered and drawn again). The key bar's suggest key shows it at once.
       'editor.quickSuggestions': { other: 'on', comments: 'off', strings: 'off' },
-      'editor.quickSuggestionsDelay': 500,
+      'editor.quickSuggestionsDelay': 1000,
       'editor.wordBasedSuggestions': 'currentDocument',
       // (CSS colours as swatches, from the language service)
       'editor.colorDecorators': true,
