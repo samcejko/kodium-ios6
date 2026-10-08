@@ -210,6 +210,26 @@ function quickerWorkers() {
   ])
 }
 
+// Tabular figures (font-variant-numeric: tabular-nums, which the engine's rewriter makes the feature setting 'tnum') on
+// the line numbers and the status bar's items: any feature setting sends text through Core Text's complex path (see
+// smootherEditor), here for every line number a scroll brings in (97 -> 88 ms a frame). The digits of iOS 6's Courier
+// and Helvetica are of one width anyway. Taken out of VS Code's stylesheets before the rewriter, which drops a rule
+// that only sets the feature settings back to normal.
+function plainFigures() {
+  const files = ['/vs/editor/browser/viewParts/lineNumbers/lineNumbers.css',
+    '/vs/workbench/browser/parts/statusbar/media/statusbarpart.css']
+  return {
+    name: 'kodium-plain-figures',
+    enforce: 'pre',
+    transform(code, id) {
+      const p = id.replace(/\\/g, '/').replace(/\?.*$/, '')
+      if (!files.some((f) => p.endsWith(f))) return null
+      if (code.split('font-variant-numeric: tabular-nums;').length !== 2) this.error('kodium-plain-figures: ' + p + ' has another form')
+      return { code: code.replace('font-variant-numeric: tabular-nums;', ''), map: null }
+    }
+  }
+}
+
 // The editor's work at every keystroke on the iPad 2 (WebKit's profiler while typing, line by line):
 // - a position in a line (the cursor, the scroll to it, indent guides) was measured in the page - getClientRects, a
 //   layout of the whole page each time - because VS Code does not trust its own arithmetic on Safari, whose zoom changes
@@ -227,8 +247,26 @@ function quickerWorkers() {
 // - the editor asked at every frame whether a screen reader is in use (to fill its hidden text area), which inspected
 //   the setting editor.accessibilitySupport in every settings layer (a merge of the configuration models each time):
 //   the answer is kept until that setting changes.
+// - the indent guides took the indentation of every line on the screen at every frame of a scroll (each line's text
+//   made from the piece tree and scanned), and of the lines around the cursor for the active guide: kept per line
+//   while the text and the tab size stay the same.
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/common/model/guidesTextModelPart.js', [
+      ['    _computeIndentLevel(lineIndex) {\n        return computeIndentLevel(\n            this.textModel.getLineContent(lineIndex + 1),\n            this.textModel.getOptions().tabSize\n        );\n    }',
+       '    _computeIndentLevel(lineIndex) {\n' +
+       '        const version = this.textModel.getVersionId();\n' +
+       '        const tabSize = this.textModel.getOptions().tabSize;\n' +
+       '        let cache = this.kdIndents;\n' +
+       '        if (!cache || cache.version !== version || cache.tabSize !== tabSize) {\n' +
+       '            cache = this.kdIndents = { version, tabSize, levels: [] };\n' +
+       '        }\n' +
+       '        let level = cache.levels[lineIndex];\n' +
+       '        if (level === undefined) {\n' +
+       '            level = cache.levels[lineIndex] = computeIndentLevel(this.textModel.getLineContent(lineIndex + 1), tabSize);\n' +
+       '        }\n' +
+       '        return level;\n' +
+       '    }']]],
     ['/vs/editor/common/config/editorOptions.js', [
       ['        this.OFF = "\\"liga\\" off, \\"calt\\" off";', '        this.OFF = "";']]],
     ['/vs/platform/accessibility/browser/accessibilityService.js', [
@@ -968,7 +1006,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), nativeSelects(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
