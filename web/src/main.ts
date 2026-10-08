@@ -230,6 +230,14 @@ async function start() {
   mark('workbench')
   receiveFiles()
   watchForeground()
+  // (the engine's grid shim makes its index of VS Code's 207 grid rules the first time it lays a grid out - 0.15 s on
+  // the iPad 2, which came with the first suggestions: made in a pause after the start)
+  setTimeout(() => {
+    const idle = (window as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback
+    const warm = () => { try { (window as { __brGrid?: { apply?: () => void } }).__brGrid?.apply?.() } catch { /* the engine's */ } }
+    if (idle) idle(warm, { timeout: 20000 })
+    else warm()
+  }, 8000)
   receiveKeys()
   registerJavaScript()
   registerMarkdown()

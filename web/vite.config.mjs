@@ -609,8 +609,49 @@ function leaveOut() {
 // And the Output view let go of its channel whenever the panel was hidden, and took it up again when shown: the
 // editor's whole view made anew (a quarter of the panel's 0.8-1 s). The channel stays now (a channel that changes
 // while hidden is shown as it is then).
+// The first suggestions of a start in a language parsed the body of every snippet of that language (146 for
+// JavaScript: whether it is trivial, uses the clipboard...), half of the first list's 1.5 s on the iPad 2: what came
+// of each body is kept in localStorage, for the next starts (the same body gives the same answers).
 function quickerViews() {
   return patchModules('kodium-quicker-views', [
+    ['/vs/workbench/contrib/snippets/browser/snippetsFile.js', [
+      ['class SnippetBodyInsights {\n    constructor(body) {\n',
+       'const kdInsightsKey = "kodium.snippetInsights." + (String(SnippetParser.prototype.parse) + String(SnippetParser.prototype._parse)).length;\n' +
+       'let kdInsights;\n' +
+       'let kdInsightsTimer;\n' +
+       'function kdKnownInsights() {\n' +
+       '    if (!kdInsights) {\n' +
+       '        kdInsights = new Map();\n' +
+       '        try {\n' +
+       '            const raw = localStorage.getItem(kdInsightsKey);\n' +
+       '            if (raw) for (const entry of JSON.parse(raw)) kdInsights.set(entry[0], entry[1]);\n' +
+       '        } catch (e) {}\n' +
+       '    }\n' +
+       '    return kdInsights;\n' +
+       '}\n' +
+       'function kdKeepInsights(body, insights) {\n' +
+       '    kdKnownInsights().set(body, insights);\n' +
+       '    clearTimeout(kdInsightsTimer);\n' +
+       '    kdInsightsTimer = setTimeout(() => {\n' +
+       '        try { localStorage.setItem(kdInsightsKey, JSON.stringify(Array.from(kdInsights))); } catch (e) {}\n' +
+       '    }, 5000);\n' +
+       '}\n' +
+       'class SnippetBodyInsights {\n    constructor(body) {\n' +
+       '        const known = kdKnownInsights().get(body);\n' +
+       '        if (known) {\n' +
+       '            this.isBogous = known[0];\n' +
+       '            this.isTrivial = known[1];\n' +
+       '            this.usesClipboardVariable = known[2];\n' +
+       '            this.usesSelectionVariable = known[3];\n' +
+       '            this.codeSnippet = known.length > 4 ? known[4] : body;\n' +
+       '            return;\n' +
+       '        }\n' +
+       '        this.kdCompute(body);\n' +
+       '        const insights = [this.isBogous, this.isTrivial, this.usesClipboardVariable, this.usesSelectionVariable];\n' +
+       '        if (this.codeSnippet !== body) insights.push(this.codeSnippet);\n' +
+       '        kdKeepInsights(body, insights);\n' +
+       '    }\n' +
+       '    kdCompute(body) {\n']]],
     ['/vs/workbench/contrib/output/browser/outputView.js', [
       ['        this.editor.setVisible(visible);\n        if (!visible) {\n            this.clearInput();\n        }\n',
        '        this.editor.setVisible(visible);\n']]],

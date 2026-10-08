@@ -98,6 +98,10 @@ The first build.
   read all its folders again whenever it was shown, for file changes it might have missed. It does now when something
   changed while it was hidden; what changes outside the workbench - a file from another app, what iTunes File Sharing
   put into Documents while the app was in the background - refreshes it (on the return to the foreground).
+- The first suggestions after a start come 0.35 s sooner (1.15 s instead of 1.5 on the iPad 2): what VS Code works
+  out of each snippet's body (whether it is trivial, uses the clipboard...) is kept in localStorage for the next
+  starts, and the engine's grid shim makes its index of VS Code's grid rules in a pause after the start, not at the
+  first page change that needs it.
 - The engine's style pass after a change of the page (after nearly every key) takes 5 ms instead of 9: it no longer
   emulates VS Code's six :has() rules, which are all looks only (the code action menu's minimum width with a header,
   Markdown's task items without bullets, the actions of extensions' trees scrolled sideways, a wider panel filter
