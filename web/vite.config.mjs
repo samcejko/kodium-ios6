@@ -203,16 +203,17 @@ function plainRules() {
 // a start, the first menu, the first suggestions).
 function plainStyles() {
   const prefix = 'const __kdPlain = (text) => typeof window !== "undefined" && window.__kd_plainStyle ? window.__kd_plainStyle(text) : text;\n'
-  const wrap = (suffix, assignment, value) => [suffix, [[assignment + value + ';', assignment + '__kdPlain(' + value + ');']], prefix]
+  const wrap = (suffix, indent, target, value) =>
+    [suffix, [[indent + target + '.textContent = ' + value + ';', indent + target + '.textContent = __kdPlain(' + value + ');']], prefix]
   return patchModules('kodium-plain-styles', [
-    wrap('/vs/base/browser/ui/list/listWidget.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
-    wrap('/vs/base/browser/ui/tree/abstractTree.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
-    wrap('/vs/base/browser/ui/table/tableWidget.js', '        this.styleElement.textContent = ', 'content.join("\\n")'),
-    wrap('/vs/platform/quickinput/browser/quickInputController.js', '                this.ui.styleSheet.textContent = ', 'newStyles'),
-    wrap('/vs/base/browser/ui/menu/menu.js', '        this.styleSheet.textContent = ', 'getMenuWidgetCSS(style, isInShadowDOM(container))'),
-    wrap('/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js', '        styleElement.textContent = ', 'content'),
-    wrap('/vs/editor/browser/editorDom.js', '        this._styleElement.textContent = ', 'this.getCssText(this.className, this.properties)'),
-    wrap('/vs/base/browser/domStylesheets.js', '            this._styleSheet.textContent = ', 'cssStyle')
+    wrap('/vs/base/browser/ui/list/listWidget.js', '        ', 'this.styleElement', 'content.join("\\n")'),
+    wrap('/vs/base/browser/ui/tree/abstractTree.js', '        ', 'this.styleElement', 'content.join("\\n")'),
+    wrap('/vs/base/browser/ui/table/tableWidget.js', '        ', 'this.styleElement', 'content.join("\\n")'),
+    wrap('/vs/platform/quickinput/browser/quickInputController.js', '                ', 'this.ui.styleSheet', 'newStyles'),
+    wrap('/vs/base/browser/ui/menu/menu.js', '        ', 'this.styleSheet', 'getMenuWidgetCSS(style, isInShadowDOM(container))'),
+    wrap('/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js', '        ', 'styleElement', 'content'),
+    wrap('/vs/editor/browser/editorDom.js', '        ', 'this._styleElement', 'this.getCssText(this.className, this.properties)'),
+    wrap('/vs/base/browser/domStylesheets.js', '            ', 'this._styleSheet', 'cssStyle')
   ])
 }
 
