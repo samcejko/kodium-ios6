@@ -6,6 +6,7 @@
 #import "BRURLProtocol.h"
 #import "BRCommon.h"
 #import "BRMemory.h"
+#import <QuartzCore/QuartzCore.h>
 #import <objc/message.h>
 #include <dlfcn.h>
 
@@ -161,11 +162,16 @@ static NSString *KDShimArgument(NSURL *url)
     return YES;
 }
 
+// (the key cap is drawn up again first: the script runs here, on the main thread holding the web lock, until the
+// workbench has typed - the key looked held down that long. Not put off to later: a key of the keyboard waiting behind
+// it would be typed first.)
 - (void)sendKey:(NSString *)key
 {
     NSData *json = [NSJSONSerialization dataWithJSONObject:@[key ?: @""] options:0 error:NULL];
     NSString *arg = json ? [[NSString alloc] initWithData:json encoding:NSUTF8StringEncoding] : nil;
-    if (arg) [self evaluateJavaScript:[NSString stringWithFormat:@"window.__kd_key && window.__kd_key(%@[0])", arg]];
+    if (!arg) return;
+    [CATransaction flush];
+    [self evaluateJavaScript:[NSString stringWithFormat:@"window.__kd_key && window.__kd_key(%@[0])", arg]];
 }
 
 #pragma mark - Files in and out

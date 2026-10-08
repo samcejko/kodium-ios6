@@ -3,8 +3,13 @@
 #import "BRCSSRewriter.h"
 #import "BRCommon.h"
 #import "BRJSEngine.h"
+#include <dlfcn.h>
 
 NSString * const KDShareFileNotification = @"KDShareFileNotification";
+
+// (when the engine's keeper of the compiled code started, and whether the warm-up had the start's code thrown away)
+static CFAbsoluteTime g_codeKeeperStarted;
+static BOOL g_startCodeThrown;
 
 static NSString * const KDSiteHost = @"kodium.invalid";
 // the app's Documents as a web site of its own, for the preview of a page (web/src/preview.ts)
@@ -48,6 +53,11 @@ static NSString *KDStylesheetCacheDirectory(void)
 + (NSURL *)startURL
 {
     return [NSURL URLWithString:[NSString stringWithFormat:@"https://%@/index.html", KDSiteHost]];
+}
+
++ (void)noteCodeKeeperStarted
+{
+    g_codeKeeperStarted = CFAbsoluteTimeGetCurrent();
 }
 
 + (BOOL)canInitWithRequest:(NSURLRequest *)request
@@ -128,6 +138,31 @@ static NSString *KDStylesheetCacheDirectory(void)
     if ([url.path isEqualToString:@"/__kd/app/idle"]) {
         [BRJSEngine collectPageGarbageIfAllocated:4 * 1024 * 1024];
         [self deliverData:[NSData data] type:@"text/plain" status:200];
+        return;
+    }
+    // The warm-up behind the splash (web/src/warmup.ts) asks between its steps: the start's compiled code thrown away now.
+    // Surfari's engine keeps the pages' code (BRJSEngine keepPageCode) once the start's is gone - which it sees at its
+    // second tick, the first being 20 s after launch: thrown away by JavaScriptCore at a collection a minute after the
+    // start, or by the engine at 75 s, and the warm-up's code went with it (its first actions as slow as without it).
+    // Thrown away after the first tick (2 s to spare), what the warm-up compiles from then on is what is kept.
+    // "later" before that, "done" once thrown away, "no" when the engine keeps no code.
+    if ([url.path isEqualToString:@"/__kd/app/keepcode"]) {
+        void (*run)(void (^)(void)) = (void (*)(void (^)(void)))dlsym(RTLD_DEFAULT, "WebThreadRun");
+        NSString *answer = g_startCodeThrown ? @"done" : !run || !g_codeKeeperStarted ? @"no"
+                         : CFAbsoluteTimeGetCurrent() - g_codeKeeperStarted < 22 ? @"later" : nil;
+        if (answer) {
+            [self deliverData:[answer dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain" status:200];
+            return;
+        }
+        g_startCodeThrown = YES;
+        // (on the WebThread between scripts, as the engine does it)
+        run(^{
+            BOOL done = [BRJSEngine discardPageCode];
+            BRLog(@"Warm-up: the start's compiled code %@", done ? @"thrown away, the warm-up's is kept" : @"not found");
+            [self performOnClientThread:^{
+                [self deliverData:[(done ? @"done" : @"no") dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain" status:200];
+            }];
+        });
         return;
     }
     // the files of the app's Documents (KDFiles)

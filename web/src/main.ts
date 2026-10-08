@@ -68,6 +68,7 @@ import { followTheme } from './theme'
 import { standInForLeftOutParts } from './exthost'
 import { receiveFiles } from './share'
 import { watchForeground } from './explorer'
+import { warmUp } from './warmup'
 import { receiveKeys } from './keybar'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
@@ -258,6 +259,9 @@ async function start() {
   // (and a JSON schema's text as the JSON language service gets it, e.g. 'vscode://schemas/keybindings')
   ;(window as { __kd_schemaContent?: unknown }).__kd_schemaContent = (uri: string) =>
     (Registry.as(JSONExtensions.JSONContribution) as { getSchemaContent(uri: string): string | undefined }).getSchemaContent(uri)
+  // what one does first done once unseen, before the splash goes (warmup.ts)
+  try { await warmUp() } catch { /* the workbench as it is */ }
+  mark('ready')
 }
 
 start().catch((e) => {

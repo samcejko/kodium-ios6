@@ -26,15 +26,19 @@ if (/^cs\b/i.test(window.__kd_lang)) document.write('<script src="nls.cs.js"><\/
 <div id="kd-splash"><div class="kd-name">Kodium</div><div class="kd-step" id="kd-step"></div><div class="kd-error" id="kd-error"></div></div>
 <script>
 // The splash while the workbench loads (half a minute on an iPad 2): the step it is at, the error if it fails. In the
-// device's language (English or Czech).
+// device's language (English or Czech). It stays while the workbench warms up (src/warmup.ts: the steps it shows),
+// and goes when it is ready - or a minute and a half after the workbench came, whatever happened.
 (function () {
     var cs = /^cs/i.test(window.__kd_lang || ''), step = document.getElementById('kd-step');
-    var words = cs ? { load: 'Načítání editoru…', run: 'Spouštění…', open: 'Otevírání pracovní plochy…', failed: 'Editor se nepodařilo spustit:' }
-                   : { load: 'Loading the editor…', run: 'Starting…', open: 'Opening the workbench…', failed: 'The editor could not start:' };
+    var words = cs ? { load: 'Načítání editoru…', run: 'Spouštění…', open: 'Otevírání pracovní plochy…', ready: 'Příprava editoru…', failed: 'Editor se nepodařilo spustit:' }
+                   : { load: 'Loading the editor…', run: 'Starting…', open: 'Opening the workbench…', ready: 'Getting the editor ready…', failed: 'The editor could not start:' };
+    var hide = function () { var s = document.getElementById('kd-splash'); if (s) s.parentNode.removeChild(s); };
+    window.__kd_splashStep = function (text) { step.innerHTML = ''; step.appendChild(document.createTextNode(String(text))); };
     var show = function (name) {
         if (name === 'main') step.innerHTML = words.run;
         else if (name === 'config') step.innerHTML = words.open;
-        else if (name === 'workbench') { var s = document.getElementById('kd-splash'); if (s) s.parentNode.removeChild(s); }
+        else if (name === 'workbench') { step.innerHTML = words.ready; setTimeout(hide, 90000); }
+        else if (name === 'ready') hide();
         else if (name.indexOf('failed: ') === 0) {
             step.innerHTML = words.failed;
             document.getElementById('kd-error').appendChild(document.createTextNode(name.slice(8)));

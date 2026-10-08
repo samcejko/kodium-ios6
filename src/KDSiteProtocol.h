@@ -8,12 +8,15 @@
 // /__br_inline-<name>.js) stays with BRURLProtocol. https://preview.kodium.invalid/ is the Documents as a web site of
 // its own, for the preview of a page. /__kd/app/share?path=<path in Documents>&x=&y=&w=&h= asks the app to share a file
 // (KDShareFileNotification on the main thread, with the query as userInfo). /__kd/app/idle tells that the workbench has
-// had no input for a while (BRJSEngine collectPageGarbageIfAllocated:).
+// had no input for a while (BRJSEngine collectPageGarbageIfAllocated:). /__kd/app/keepcode: the warm-up asks for the
+// start's compiled code to be thrown away (see KDSiteProtocol.m).
 extern NSString * const KDShareFileNotification;
 
 @interface KDSiteProtocol : NSURLProtocol
 
 + (void)registerProtocol;
 + (NSURL *)startURL;   // the workbench page
+// (main thread, at launch: when the engine began to keep the pages' compiled code - BRJSEngine keepPageCode)
++ (void)noteCodeKeeperStarted;
 
 @end

@@ -235,6 +235,8 @@ static void KDWriteResult(NSString *name, NSString *text)
     // last did, and the first action after a pause compiled again whatever it ran (a switch of editors 1.8 s instead
     // of 1.3). Surfari's engine keeps it (BRJSCKeepCode) and throws it away itself when memory gets critical (40 MB).
     [BRJSEngine keepPageCode];
+    // (the warm-up has the start's code thrown away once the engine can tell: KDSiteProtocol /__kd/app/keepcode)
+    [KDSiteProtocol noteCodeKeeperStarted];
     // The workbench's garbage is collected in the user's pauses (web/prelude/vsc-prelude.js asks, KDSiteProtocol
     // /__kd/app/idle), and JavaScriptCore's own timer, which collected in the middle of every second switch of editors
     // (0.3-0.6 s), is kept quiet
