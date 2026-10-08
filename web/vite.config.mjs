@@ -493,8 +493,48 @@ function quickerPalette() {
 // a changed value reaches the closed editor's tree as before. Opened again with the same groups (the same headings,
 // with as many settings each: VS Code makes the group objects again whenever its defaults change), it shows the tree
 // it has, its rows drawn again.
+// (and the first opening: each heading's patterns - "editor.cursor*" and the like - were tried on every setting left,
+// a regular expression each; now only on the settings whose names begin with the pattern's part before its first *,
+// found in the names sorted once - the same settings come out, 0.8 s less on the iPad 2)
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
+    ['/vs/workbench/contrib/preferences/browser/settingsTree.js', [
+      ['function getMatchingSettings(allSettings, filter) {\n    const result = [];\n',
+       'function kdSettingsByPrefix(allSettings, patterns) {\n' +
+       '    let index = allSettings.kdIndex;\n' +
+       '    if (!index) {\n' +
+       '        index = allSettings.kdIndex = Array.from(allSettings, s => [s.key.toLowerCase(), s]).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);\n' +
+       '    }\n' +
+       '    const found = new Set();\n' +
+       '    for (const pattern of patterns) {\n' +
+       '        const star = pattern.indexOf("*");\n' +
+       '        const prefix = (star < 0 ? pattern : pattern.slice(0, star)).toLowerCase();\n' +
+       '        let lo = 0, hi = index.length;\n' +
+       '        while (lo < hi) {\n' +
+       '            const mid = (lo + hi) >> 1;\n' +
+       '            if (index[mid][0] < prefix) lo = mid + 1; else hi = mid;\n' +
+       '        }\n' +
+       '        for (let i = lo; i < index.length && index[i][0].lastIndexOf(prefix, 0) === 0; i++) {\n' +
+       '            const setting = index[i][1];\n' +
+       '            if (allSettings.has(setting) && settingMatches(setting, pattern)) found.add(setting);\n' +
+       '        }\n' +
+       '    }\n' +
+       '    return found;\n' +
+       '}\n' +
+       'function getMatchingSettings(allSettings, filter) {\n    const result = [];\n' +
+       '    const patterns = filter.include?.keyPatterns;\n' +
+       '    if (patterns && !filter.include.tags?.length && !filter.exclude?.keyPatterns &&\n' +
+       '        !patterns.some(pattern => pattern.startsWith("@tag:") || pattern.indexOf("*") === 0)) {\n' +
+       '        const excludeTags = filter.exclude?.tags || [];\n' +
+       '        for (const setting of kdSettingsByPrefix(allSettings, patterns)) {\n' +
+       '            if (excludeTags.length && excludeTags.some(tag => setting.tags?.includes(tag))) continue;\n' +
+       '            result.push(setting);\n' +
+       '            if (!( multiGroupTocSettings.has(setting.key))) {\n' +
+       '                allSettings.delete(setting);\n' +
+       '            }\n' +
+       '        }\n' +
+       '        return result;\n' +
+       '    }\n']]],
     ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
       ['        this._setOptions(options);\n        this.onConfigUpdate(undefined, true).then(() => {',
        '        this._setOptions(options);\n        (this.kdSameTree(model) ? this.kdShowTree() : this.onConfigUpdate(undefined, true)).then(() => {'],
