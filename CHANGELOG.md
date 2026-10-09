@@ -51,6 +51,13 @@ The first build.
   checks a value (the default settings 0.27 s -> 0.07 s). Opened again, it no longer asks for the installed extensions
   (0.45-0.55 s) - only after one was installed, removed or changed. And a setting changed while the editor was closed
   (in settings.json, by a command) shows its new value when it opens again: the row on the screen kept the old one.
+- iOS no longer closes the app after a few windows: Kodium held 290-310 MB of the iPad 2's 512 once the Keyboard
+  Shortcuts editor, settings.json and the Extensions view had been opened (every editor an editor group has shown stays
+  made, settings.json's JSON worker with the schema of every setting took 17 MB), the other apps took 10-25 MB more, and
+  at 26 MB available iOS ended it. Under 40 MB available the workbench now lets go of what it can make again: the
+  editors' panes not on the screen (not the text editor nor the Settings editor the warm-up made - that one too at
+  iOS's memory warning) and the language services' idle workers. Measured on the iPad 2 after those windows: 289 ->
+  226 MB. An editor let go of opens as the first time again.
 - Garbage is collected in a pause only once 12 MB were allocated since the last collection (was 4): a collection takes
   0.35-0.5 s on the iPad 2 however little there is to collect (the workbench's ~49 MB are gone through), and each one
   was a chance for the next touch or key to wait for it; the heap's 25-40 MB of free room takes the allocations

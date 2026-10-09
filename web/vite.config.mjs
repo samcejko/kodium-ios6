@@ -738,6 +738,32 @@ function quickerSettings() {
   ])
 }
 
+// What the workbench lets go of when the iPad runs short of memory (web/src/memory.ts, asked by src/KDAppDelegate.m):
+// an editor group keeps the pane of every kind of editor it has shown (EditorPanes) - kdDropHiddenPanes(keep) disposes
+// those not on the screen whose id keep() does not want; the language services' workers (JSON, CSS, HTML) are listed
+// for it (self.__kdWorkerManagers), to be stopped before their 45 s without a request (quickerWorkers) are up:
+// settings.json's JSON worker, with the schema of every setting, took 17 MB of the iPad 2's memory.
+function memoryRelief() {
+  const workerManager = (lang) => ['/languages/features/' + lang + '/workerManager.js', [
+    ['    this._defaults = defaults;\n', '    this._defaults = defaults;\n    (self.__kdWorkerManagers || (self.__kdWorkerManagers = [])).push(this);\n']]]
+  return patchModules('kodium-memory-relief', [
+    ['/vs/workbench/browser/parts/editor/editorPanes.js', [
+      ['    closeEditor(editor) {\n',
+       '    kdDropHiddenPanes(keep) {\n' +
+       '        const dropped = this.editorPanes.filter(pane => pane !== this._activeEditorPane && !keep(pane.getId()));\n' +
+       '        if (!dropped.length) {\n            return 0;\n        }\n' +
+       '        this.editorPanes = this.editorPanes.filter(pane => !dropped.includes(pane));\n' +
+       '        for (const pane of dropped) {\n' +
+       '            this.mapEditorPaneToPendingSetInput.delete(pane);\n' +
+       '            try {\n                pane.getContainer()?.remove();\n                this._store.delete(pane);\n            } catch (error) {\n                this.logService.error(error);\n            }\n' +
+       '        }\n' +
+       '        return dropped.length;\n' +
+       '    }\n' +
+       '    closeEditor(editor) {\n']]],
+    workerManager('json'), workerManager('css'), workerManager('html')
+  ])
+}
+
 // A build for measuring the Settings editor (KODIUM_SETTINGS_TIMERS=1 .\web\build.ps1): marks along its opening -
 // self.__kdMark(name) and self.__kdAdd(name, ms), when a measuring script has set them (renderers' renderTemplate and
 // renderElement, the tree's splice summed) - and self.__kdResets: when the default settings were dropped, for which keys.
@@ -1484,7 +1510,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), memoryRelief(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

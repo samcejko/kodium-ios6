@@ -73,6 +73,7 @@ import { watchForeground } from './explorer'
 import { warmUp } from './warmup'
 import { receiveKeys } from './keybar'
 import { showPresses } from './presses'
+import { watchMemory } from './memory'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
 import { registerMarkdown } from './markdown'
@@ -248,6 +249,7 @@ async function start() {
   }, 8000)
   receiveKeys()
   showPresses()
+  void watchMemory()
   registerJavaScript()
   registerMarkdown()
   registerPython()
