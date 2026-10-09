@@ -66,9 +66,6 @@ static void KDWriteResult(NSString *name, NSString *text)
 //   receive?file=<path>     takes a file of the app's home as another app's file ("Open in Kodium")
 //   keyboard                the on-screen keyboard over the editor, as after a tap into it
 //   jsprofile               WebKit's JavaScript profiler on (console.profile/profileEnd -> console.profiles), to tmp/eval.txt
-//   watch?secs=<s>&every=<ms>   what the screen shows, as the system grabs it, every <ms> (25) for <s> seconds (6): when
-//                           which parts of it changed, to tmp/watch.txt - for measuring when an action's result is
-//                           seen (the page's own times end where WebKit's drawing starts)
 - (BOOL)application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
 {
     // "Open in Kodium" from another app (Mail, Safari, Dropbox...): the file comes into Documents and opens
@@ -139,12 +136,6 @@ static void KDWriteResult(NSString *name, NSString *text)
             KDWriteResult(@"profile.txt", report ?: @"(no profile: no such thread, or one is running)");
             BRLog(@"Profile: %@", report.length > 1500 ? [report substringToIndex:1500] : report);
         }];
-        return YES;
-    }
-    if ([command isEqualToString:@"watch"]) {
-        NSTimeInterval secs = q[@"secs"] ? MAX(0.5, MIN(30, [q[@"secs"] doubleValue])) : 6;
-        NSInteger every = q[@"every"] ? MAX(10, MIN(500, [q[@"every"] integerValue])) : 25;
-        [self watchScreenFor:secs every:every];
         return YES;
     }
     if ([command isEqualToString:@"reload"]) {
@@ -280,66 +271,6 @@ static void KDWriteResult(NSString *name, NSString *text)
     SEL giveBack = NSSelectorFromString(@"returnFreeMemoryToSystem");
     if (!run || ![stats respondsToSelector:giveBack]) return;
     run(^{ ((void (*)(id, SEL))objc_msgSend)(stats, giveBack); });
-}
-
-// (measuring, kodium:watch) The screen as the system grabs it (UIGetScreenImage: what the display shows, WebKit's
-// tiles as drawn), scaled down to 96 x 128 (the hardware's portrait way round) and cut into 8 x 8 cells of 12 x 16;
-// every grab whose cells differ from the last one's is a line "<ms since 1970> <changed cells>" (cell = row * 8 + column,
-// row 0 at the top of the portrait picture). On a queue of its own, while the page runs on the WebThread.
-- (void)watchScreenFor:(NSTimeInterval)secs every:(NSInteger)every
-{
-    static BOOL watching;
-    CGImageRef (*grab)(void) = (CGImageRef (*)(void))dlsym(RTLD_DEFAULT, "UIGetScreenImage");
-    if (!grab || watching) { KDWriteResult(@"watch.txt", grab ? @"(watching already)" : @"(no screen grab)"); return; }
-    watching = YES;
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
-        enum { W = 96, H = 128, CW = 12, CH = 16, NX = W / CW, NY = H / CH };
-        uint32_t *px = calloc(W * H, 4);
-        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-        CGContextRef ctx = CGBitmapContextCreate(px, W, H, 8, W * 4, space, kCGImageAlphaNoneSkipLast);
-        CGColorSpaceRelease(space);
-        CGContextSetInterpolationQuality(ctx, kCGInterpolationNone);
-        uint32_t last[NX * NY];
-        BOOL first = YES;
-        NSMutableString *out = [NSMutableString string];
-        double start = [[NSDate date] timeIntervalSince1970], end = start + secs, spent = 0;
-        int grabs = 0;
-        while ([[NSDate date] timeIntervalSince1970] < end) {
-            @autoreleasepool {
-                double t0 = [[NSDate date] timeIntervalSince1970];
-                CGImageRef shot = grab();
-                if (shot && ctx) {
-                    CGContextDrawImage(ctx, CGRectMake(0, 0, W, H), shot);
-                    CGImageRelease(shot);
-                    uint32_t cells[NX * NY];
-                    NSMutableString *changed = [NSMutableString string];
-                    for (int cy = 0; cy < NY; cy++) for (int cx = 0; cx < NX; cx++) {
-                        uint32_t h = 2166136261u;
-                        for (int y = 0; y < CH; y++) {
-                            const uint32_t *row = px + (cy * CH + y) * W + cx * CW;
-                            for (int x = 0; x < CW; x++) { h ^= row[x] & 0xffffff; h *= 16777619u; }
-                        }
-                        int i = cy * NX + cx;
-                        cells[i] = h;
-                        if (!first && last[i] != h) [changed appendFormat:@"%@%d", changed.length ? @"," : @"", i];
-                    }
-                    if (first || changed.length) [out appendFormat:@"%.0f %@\n", t0 * 1000, first ? @"first" : changed];
-                    memcpy(last, cells, sizeof(cells));
-                    first = NO;
-                } else if (shot) CGImageRelease(shot);
-                double t1 = [[NSDate date] timeIntervalSince1970];
-                grabs++;
-                spent += t1 - t0;
-                double wait = every / 1000.0 - (t1 - t0);
-                if (wait > 0) [NSThread sleepForTimeInterval:wait];
-            }
-        }
-        if (ctx) CGContextRelease(ctx);
-        free(px);
-        [out appendFormat:@"%d grabs, %.1f ms each\n", grabs, grabs ? spent * 1000 / grabs : 0];
-        KDWriteResult(@"watch.txt", out);
-        dispatch_async(dispatch_get_main_queue(), ^{ watching = NO; });
-    });
 }
 
 // (diagnosis: what keeping the compiled code costs - kodium:mem?discard=1 throws it away, and WebKit's free memory back

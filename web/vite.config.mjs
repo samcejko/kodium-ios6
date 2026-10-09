@@ -805,6 +805,142 @@ function soonerFirstLines() {
        '            });']]]
   ])
 }
+// Scrolling with a finger (measured on the iPad 2 with touch events made in the page, which is the way a finger
+// goes: VS Code's Gesture turns them into the editor's scroll):
+// - the engine makes pointer events of touches (its Pointer Events polyfill), and the editor took every pointermove
+//   of a finger for a mouse move: the position under it worked out (a forced layout, caretRangeFromPoint) and the
+//   hover's and the links' handlers run, at every move of the finger - a quarter of a scrolling frame in the
+//   profiler. A finger's moves scroll (Gesture) or select nothing: they are not mouse moves.
+// - the line numbers made each line's HTML anew at every frame (two view-to-model conversions a line and a template):
+//   kept while only the scroll position changes (any other change of the editor drops them).
+// - the indent guides asked each line's length (the piece tree) to see over how many view lines it wraps - one, when
+//   its projection has one line; and without bracket pair guides (off by default) each line's guides are kept while
+//   its indentation, the active guide on it and the scroll width stay: their HTML and the position of column 1 were
+//   made anew for every line at every frame.
+// - lines drawn ahead: a frame in which lines came onto the screen cost ~65 ms, one that only moved them ~27 (the old
+//   WebKit's style, layout, compositing and paint for any change of the lines, more than for the lines themselves).
+//   The editor draws 10 lines more above and below the screen and keeps them while the screen's lines stay inside
+//   with 2 lines to spare; then it draws the next ones, again 10 around. Features see the lines on the screen as before
+//   (the view model's viewport), and a content widget whose line is off the screen stays hidden.
+function smootherScroll() {
+  return patchModules('kodium-smoother-scroll', [
+    ['/vs/editor/browser/controller/pointerHandler.js', [
+      ['            pointerEvents.onPointerMove(this.viewHelper.viewDomNode, e => this._onMouseMove(e))',
+       '            pointerEvents.onPointerMove(this.viewHelper.viewDomNode, e => {\n' +
+       '                if (e.browserEvent.pointerType !== "touch") {\n                    this._onMouseMove(e);\n                }\n' +
+       '            })']]],
+    ['/vs/editor/browser/viewParts/lineNumbers/lineNumbers.js', [
+      ['    onConfigurationChanged(e) {\n        this._readConfig();\n        return true;\n    }',
+       '    onConfigurationChanged(e) {\n        this._readConfig();\n        this.kdLines = null;\n        return true;\n    }'],
+      ['            this._activeModelLineNumber = this._lastCursorModelPosition.lineNumber;\n            shouldRender = true;',
+       '            this._activeModelLineNumber = this._lastCursorModelPosition.lineNumber;\n            this.kdLines = null;\n            shouldRender = true;'],
+      ['    onFlushed(e) {\n        return true;\n    }\n    onLinesChanged(e) {\n        return true;\n    }\n    onLinesDeleted(e) {\n        return true;\n    }\n    onLinesInserted(e) {\n        return true;\n    }',
+       '    onFlushed(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onLinesChanged(e) {\n        this.kdLines = null;\n        return true;\n    }\n' +
+       '    onLinesDeleted(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onLinesInserted(e) {\n        this.kdLines = null;\n        return true;\n    }'],
+      ['    onZonesChanged(e) {\n        return true;\n    }\n    onDecorationsChanged(e) {\n        return e.affectsLineNumber;\n    }',
+       '    onZonesChanged(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onDecorationsChanged(e) {\n        if (e.affectsLineNumber) {\n            this.kdLines = null;\n        }\n        return e.affectsLineNumber;\n    }'],
+      ['        const output = [];\n        for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n            const lineIndex = lineNumber - visibleStartLineNumber;\n',
+       '        const output = [];\n' +
+       '        let kdLines = null;\n' +
+       '        if (!lineNoDecorations.length && this._renderLineNumbers === RenderLineNumbersType.On && !this._renderCustomLineNumbers) {\n' +
+       '            kdLines = this.kdLines;\n' +
+       '            if (!kdLines || kdLines.count > 600) {\n                kdLines = this.kdLines = { count: 0, html: Object.create(null) };\n            }\n' +
+       '        }\n' +
+       '        for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n            const lineIndex = lineNumber - visibleStartLineNumber;\n' +
+       '            if (kdLines) {\n                const kept = kdLines.html[lineNumber];\n                if (kept !== undefined) {\n                    output[lineIndex] = kept;\n                    continue;\n                }\n            }\n'],
+      ['            output[lineIndex] = (`<div class="${LineNumbersOverlay.CLASS_NAME}${lineHeightClassName}${extraClassNames}" style="left:${this._lineNumbersLeft}px;width:${this._lineNumbersWidth}px;">${renderLineNumber}</div>`);',
+       '            output[lineIndex] = (`<div class="${LineNumbersOverlay.CLASS_NAME}${lineHeightClassName}${extraClassNames}" style="left:${this._lineNumbersLeft}px;width:${this._lineNumbersWidth}px;">${renderLineNumber}</div>`);\n' +
+       '            if (kdLines) {\n                kdLines.html[lineNumber] = output[lineIndex];\n                kdLines.count++;\n            }']]],
+    ['/vs/editor/common/viewModel/viewModelLines.js', [
+      ['                const viewLineEndIndex = line.getViewLineNumberOfModelPosition(0, this.model.getLineMaxColumn(modelLineIndex + 1));',
+       '                const viewLineEndIndex = line.getViewLineCount() === 1 ? 0 : line.getViewLineNumberOfModelPosition(0, this.model.getLineMaxColumn(modelLineIndex + 1));']]],
+    ['/vs/editor/browser/view.js', [
+      ['                const viewportData = ( new ViewportData(\n                    this._selections,\n                    partialViewportData,',
+       '                const viewportData = ( new ViewportData(\n                    this._selections,\n                    this.kdRenderedLines(partialViewportData),'],
+      ['    _createCoordinatedRendering() {\n',
+       '    kdRenderedLines(visible) {\n' +
+       '        const viewLayout = this._context.viewLayout;\n' +
+       '        const linesLayout = viewLayout._linesLayout;\n' +
+       '        if (!linesLayout || typeof linesLayout.getLinesViewportData !== "function") {\n            return visible;\n        }\n' +
+       '        const viewport = viewLayout.getCurrentViewport();\n' +
+       '        const lineHeight = this._context.configuration.options.get(EditorOption.lineHeight);\n' +
+       '        const top = viewport.top, bottom = viewport.top + viewport.height, scrollHeight = viewLayout.getScrollHeight();\n' +
+       '        let range = this.kdRange;\n' +
+       '        if (!range || range.height !== viewport.height || (top < range.top + 2 * lineHeight && range.top > 0) || (bottom > range.bottom - 2 * lineHeight && range.bottom < scrollHeight)) {\n' +
+       '            range = this.kdRange = { top: Math.max(0, top - 10 * lineHeight), bottom: Math.min(scrollHeight, bottom + 10 * lineHeight), height: viewport.height };\n' +
+       '        }\n' +
+       '        if (range.top >= top && range.bottom <= bottom) {\n            return visible;\n        }\n' +
+       '        const data = linesLayout.getLinesViewportData(range.top, range.bottom);\n' +
+       '        data.centeredLineNumber = visible.centeredLineNumber;\n' +
+       '        data.completelyVisibleStartLineNumber = visible.completelyVisibleStartLineNumber;\n' +
+       '        data.completelyVisibleEndLineNumber = visible.completelyVisibleEndLineNumber;\n' +
+       '        return data;\n' +
+       '    }\n' +
+       '    _createCoordinatedRendering() {\n']]],
+    // (a content widget - hover, suggestions, parameter hints - whose line is drawn but off the screen stays hidden, as
+    // when only the lines on the screen were drawn)
+    ['/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js', [
+      ['            const top = ctx.getVerticalOffsetForLineNumber(position.lineNumber) - ctx.scrollTop;\n            const lineHeight = ctx.getLineHeightForLineNumber(position.lineNumber);\n',
+       '            const top = ctx.getVerticalOffsetForLineNumber(position.lineNumber) - ctx.scrollTop;\n            const lineHeight = ctx.getLineHeightForLineNumber(position.lineNumber);\n' +
+       '            if (top + lineHeight <= 0 || top >= ctx.viewportHeight) {\n                return null;\n            }\n']]],
+    ['/vs/editor/browser/viewParts/indentGuides/indentGuides.js', [
+      ['        const activeCursorPosition = this._primaryPosition;\n        const indents = this.getGuidesByLine(',
+       '        const activeCursorPosition = this._primaryPosition;\n' +
+       '        if (this._bracketPairGuideOptions.bracketPairs === false && this._bracketPairGuideOptions.indentation) {\n' +
+       '            this.kdPrepareIndentGuides(ctx, visibleStartLineNumber, visibleEndLineNumber, scrollWidth, activeCursorPosition);\n' +
+       '            return;\n' +
+       '        }\n' +
+       '        const indents = this.getGuidesByLine('],
+      ['    getGuidesByLine(visibleStartLineNumber, visibleEndLineNumber, activeCursorPosition) {\n',
+       // (the guides of indentation alone - no bracket pair guides: the same HTML as below, each line's kept while its
+       // indentation, the active guide on it and the scroll width stay; a scroll makes the lines it brings in)
+       '    kdPrepareIndentGuides(ctx, start, end, scrollWidth, activeCursorPosition) {\n' +
+       '        const viewModel = this._context.viewModel;\n' +
+       '        const end2 = Math.min(end + 1, viewModel.getLineCount());\n' +
+       '        const levels = viewModel.getLinesIndentGuides(start, end2);\n' +
+       '        let activeStart = 0, activeEnd = 0, activeLevel = 0;\n' +
+       '        if (this._bracketPairGuideOptions.highlightActiveIndentation !== false && activeCursorPosition) {\n' +
+       '            const info = viewModel.getActiveIndentGuide(activeCursorPosition.lineNumber, start, end2);\n' +
+       '            activeStart = info.startLineNumber;\n            activeEnd = info.endLineNumber;\n            activeLevel = info.indent;\n' +
+       '        }\n' +
+       '        const indentSize = viewModel.model.getOptions().indentSize;\n' +
+       '        let kd = this.kdLines;\n' +
+       '        if (!kd || kd.scrollWidth !== scrollWidth || kd.indentSize !== indentSize || kd.count > 600) {\n' +
+       '            kd = this.kdLines = { scrollWidth, indentSize, count: 0, lines: Object.create(null) };\n' +
+       '        }\n' +
+       '        const output = [];\n' +
+       '        for (let lineNumber = start; lineNumber <= end; lineNumber++) {\n' +
+       '            const lineIndex = lineNumber - start;\n' +
+       '            const level = levels[lineIndex] || 0;\n' +
+       '            const active = activeStart <= lineNumber && lineNumber <= activeEnd ? activeLevel : 0;\n' +
+       '            const kept = kd.lines[lineNumber];\n' +
+       '            if (kept !== undefined && kept.level === level && kept.active === active) {\n                output[lineIndex] = kept.html;\n                continue;\n            }\n' +
+       '            let result = "";\n' +
+       '            if (level > 0) {\n' +
+       '                const leftOffset = ctx.visibleRangeForPosition(( new Position(lineNumber, 1)))?.left ?? 0;\n' +
+       '                for (let indentLvl = 1; indentLvl <= level; indentLvl++) {\n' +
+       '                    const left = leftOffset + (indentLvl - 1) * indentSize * this._spaceWidth;\n' +
+       '                    if (left > scrollWidth || (this._maxIndentLeft > 0 && left > this._maxIndentLeft)) {\n                        break;\n                    }\n' +
+       '                    result += `<div class="core-guide core-guide-indent lvl-${(indentLvl - 1) % 30}${indentLvl === active ? " indent-active" : ""} vertical" style="left:${left}px;width:${this._spaceWidth}px"></div>`;\n' +
+       '                }\n' +
+       '            }\n' +
+       '            output[lineIndex] = result;\n' +
+       '            kd.lines[lineNumber] = { level, active, html: result };\n' +
+       '            kd.count++;\n' +
+       '        }\n' +
+       '        this._renderResult = output;\n' +
+       '    }\n' +
+       '    getGuidesByLine(visibleStartLineNumber, visibleEndLineNumber, activeCursorPosition) {\n'],
+      ['        this._bracketPairGuideOptions = options.get(EditorOption.guides);\n        return true;\n    }',
+       '        this._bracketPairGuideOptions = options.get(EditorOption.guides);\n        this.kdLines = null;\n        return true;\n    }'],
+      ['    onFlushed(e) {\n        return true;\n    }\n    onLinesChanged(e) {\n        return true;\n    }\n    onLinesDeleted(e) {\n        return true;\n    }\n    onLinesInserted(e) {\n        return true;\n    }',
+       '    onFlushed(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onLinesChanged(e) {\n        this.kdLines = null;\n        return true;\n    }\n' +
+       '    onLinesDeleted(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onLinesInserted(e) {\n        this.kdLines = null;\n        return true;\n    }'],
+      ['    onZonesChanged(e) {\n        return true;\n    }\n    onLanguageConfigurationChanged(e) {\n        return true;\n    }',
+       '    onZonesChanged(e) {\n        this.kdLines = null;\n        return true;\n    }\n    onLanguageConfigurationChanged(e) {\n        this.kdLines = null;\n        return true;\n    }']]]
+  ])
+}
+
 // The editor lays out every line on the screen at every frame of a scroll - its view lines, its overlays, its margin:
 // setTop, setHeight and setLineHeight of each, ~400 calls a frame - and FastDomNode made the value's "Npx" string
 // before it found it unchanged (it nearly always is: a line keeps its place in the content while the content moves).
@@ -1691,7 +1827,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

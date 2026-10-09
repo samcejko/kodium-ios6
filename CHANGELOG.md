@@ -64,6 +64,17 @@ The first build.
   the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
   editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
   go the asynchronous way.
+- Scrolling with a finger is twice as smooth: 32-36 ms a frame instead of 65-74 on the iPad 2 (the median, measured
+  with touch events made in the page - the way a finger scrolls - interleaved), typing as quick as before. A frame in
+  which lines came onto the screen cost ~65 ms and one that only moved them ~27: the old WebKit's style, layout,
+  compositing and paint for a change of the editor's lines cost more than the lines themselves. The editor now draws
+  10 lines more above and below the screen and keeps them while the screen's lines stay inside (2 lines to spare),
+  then draws the next 10 - most frames only move what is drawn. Features see the lines on the screen as before (the
+  view model's viewport), and suggestions or a hover whose line is off the screen stay hidden. Besides: a finger's
+  moves were taken for mouse moves (the engine makes pointer events of touches): the position under the finger worked
+  out (a forced layout and caretRangeFromPoint) and the hover's handlers run at every move - no longer; the line
+  numbers and (without bracket pair guides) the indent guides keep each line's HTML while only the scroll position
+  changes, and the guides no longer ask each line's length to see whether it wraps.
 - Scrolling: the first scroll of a file 10-15 % quicker (119 ms a frame instead of 131-140 on the iPad 2), the rest
   ~2 %. The engine's grid pass - after every change of the page has settled, every 150-300 ms while scrolling -
   queried the whole page nine times for the modal editor's grid, which never shows here (workbench.editor.useModal
