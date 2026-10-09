@@ -181,6 +181,9 @@
     // sorts with it - it has no Intl.Collator here: the command palette's thousand commands, the explorer's and quick
     // open's files. Two strings of plain ASCII are compared the way the collator orders them (punctuation, then
     // digits, then letters without regard to case; then lower case before upper); anything else goes to the engine's.
+    // (Where both strings have the same character - "Otevřít s|oubor", "Otevřít s|ložku" - it decides nothing, whatever
+    // the character: only a difference at a character outside ASCII goes to the engine. In Czech nearly every label has
+    // one: the Keyboard Shortcuts editor's sort of its ~2000 entries went there 11 000 times, 1 s in the profiler.)
     (function () {
         var nativeCompare = String.prototype.localeCompare;
         if (typeof nativeCompare !== 'function') return;
@@ -205,8 +208,8 @@
             var a = String(this), b = String(that), n = Math.min(a.length, b.length), i, ca, cb, caseDiff = 0;
             for (i = 0; i < n; i++) {
                 ca = a.charCodeAt(i); cb = b.charCodeAt(i);
-                if (ca > 126 || cb > 126) return slow(a, b, arguments);
                 if (ca === cb) continue;
+                if (ca > 126 || cb > 126) return slow(a, b, arguments);
                 var ra = rank(ca), rb = rank(cb);
                 if (ra !== rb) return ra < rb ? -1 : 1;
                 if (!caseDiff) caseDiff = ca > cb ? -1 : 1;        // (the same letter: lower case first)

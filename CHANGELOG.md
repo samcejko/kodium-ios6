@@ -51,6 +51,13 @@ The first build.
   checks a value (the default settings 0.27 s -> 0.07 s). Opened again, it no longer asks for the installed extensions
   (0.45-0.55 s) - only after one was installed, removed or changed. And a setting changed while the editor was closed
   (in settings.json, by a command) shows its new value when it opens again: the row on the screen kept the old one.
+- A keystroke allocates ~17 % less (an edit 150-180 KB -> 125-150 KB, measured with the engine's heap report): fewer
+  garbage collections (0.35-0.5 s each) in and after typing. The window's timers no longer go through VS Code's
+  wrapper for auxiliary windows (~30 timers are put off again at every key; Kodium has the one window), the log's
+  trace and debug calls stop at once when their level is off (~10 a key copied their arguments through three
+  loggers), and neither the links (off) nor the viewport's semantic tokens (no provider) work out a delay at every
+  key - the semantic tokens at every frame of a scroll too. And in Czech, two labels that begin the same way with
+  accented letters ("Otevřít s|oubor") are compared without the engine's collator where they differ in plain letters.
 - iOS no longer closes the app after a few windows: Kodium held 290-310 MB of the iPad 2's 512 once the Keyboard
   Shortcuts editor, settings.json and the Extensions view had been opened (every editor an editor group has shown stays
   made, settings.json's JSON worker with the schema of every setting took 17 MB), the other apps took 10-25 MB more, and

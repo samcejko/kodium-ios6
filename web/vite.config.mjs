@@ -738,6 +738,34 @@ function quickerSettings() {
   ])
 }
 
+// What a keystroke made for nothing (measured on the iPad 2 with the engine's heap report: an edit allocates 150-180 KB,
+// and every 12 MB of it is a garbage collection of 0.35-0.5 s at the next pause, every ~50 MB one in the middle of
+// typing):
+// - the window's setTimeout and clearTimeout went through VS Code's wrapper for auxiliary windows - arrays of the
+//   arguments, the windows' Map asked for its size - ~30 times a key (every debounced task is put off again); Kodium
+//   has the one window: the browser's own stay
+// - every logService.trace() and debug() - the editor's text area, the history of places... ~10 a key - copied its
+//   arguments through three loggers before the last one found the level off (Info here): they stop at the start
+// - the links (off: editor.links) and the viewport's semantic tokens (no provider) worked out how long to wait from the
+//   languages' providers at every key - and the semantic tokens at every frame of a scroll too
+function lighterTyping() {
+  return patchModules('kodium-lighter-typing', [
+    ['/vs/workbench/browser/window.js', [
+      ['        this.enableMultiWindowAwareTimeout(targetWindow, dom);\n', '']]],
+    ['/vs/platform/log/common/logService.js', [
+      ['    trace(message, ...args) {\n        this.logger.trace(message, ...args);\n    }',
+       '    trace(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 1) {\n            return;\n        }\n        this.logger.trace.apply(this.logger, arguments);\n    }'],
+      ['    debug(message, ...args) {\n        this.logger.debug(message, ...args);\n    }',
+       '    debug(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 2) {\n            return;\n        }\n        this.logger.debug.apply(this.logger, arguments);\n    }']]],
+    ['/vs/editor/contrib/links/browser/links.js', [
+      ['        this._register(editor.onDidChangeModelContent(e => {\n            if (!this.editor.hasModel()) {\n                return;\n            }\n            this.computeLinks.schedule(',
+       '        this._register(editor.onDidChangeModelContent(e => {\n            if (!this.editor.hasModel() || !this.editor.getOption(EditorOption.links)) {\n                return;\n            }\n            this.computeLinks.schedule(']]],
+    ['/vs/editor/contrib/semanticTokens/browser/viewportSemanticTokens.js', [
+      ['            if (this._editor.hasModel()) {\n                this._tokenizeViewport.schedule(this._debounceInformation.get(this._editor.getModel()));',
+       '            if (this._editor.hasModel() && (this._provider._entries.length || this._editor.getModel().tokenization.hasSomeSemanticTokens())) {\n                this._tokenizeViewport.schedule(this._debounceInformation.get(this._editor.getModel()));']]]
+  ])
+}
+
 // What the workbench lets go of when the iPad runs short of memory (web/src/memory.ts, asked by src/KDAppDelegate.m):
 // an editor group keeps the pane of every kind of editor it has shown (EditorPanes) - kdDropHiddenPanes(keep) disposes
 // those not on the screen whose id keep() does not want; the language services' workers (JSON, CSS, HTML) are listed
@@ -1510,7 +1538,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), memoryRelief(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), memoryRelief(), lighterTyping(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
