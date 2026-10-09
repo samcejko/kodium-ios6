@@ -757,6 +757,11 @@ function lighterTyping() {
   return patchModules('kodium-lighter-typing', [
     ['/vs/workbench/browser/window.js', [
       ['        this.enableMultiWindowAwareTimeout(targetWindow, dom);\n', '']]],
+    // (the workbench's state flushed every 60 s, as VS Code's desktop does, not every 5 as in a browser tab: each
+    // flush had every component save its state - 50-100 ms on the iPad 2, in the next pause of typing; the app flushes
+    // it when it goes to the background, web/src/main.ts __kd_saveAll)
+    ['/vs/workbench/services/storage/browser/storageService.js', [
+      ['this.BROWSER_DEFAULT_FLUSH_INTERVAL = 5 * 1000;', 'this.BROWSER_DEFAULT_FLUSH_INTERVAL = 60 * 1000;']]],
     ['/vs/platform/log/common/logService.js', [
       ['    trace(message, ...args) {\n        this.logger.trace(message, ...args);\n    }',
        '    trace(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 1) {\n            return;\n        }\n        this.logger.trace.apply(this.logger, arguments);\n    }'],
@@ -909,6 +914,12 @@ function smootherScroll() {
        '        if (this._canUseLayerHinting && self.__kdMoveLayer) {\n' +
        '            this._domNode.setTop(0);\n            self.__kdMoveLayer(this._domNode, 0, -adjustedScrollTop);\n' +
        '        } else {\n            this._domNode.setTop(-adjustedScrollTop);\n        }']]],
+    // (the hidden textarea got the font's line height and then its own - 19px, then 1px - at every render of the
+    // editor: a change of its style at every frame of a scroll and every key, a layout of the page each time. The
+    // font is applied when it changes.)
+    ['/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js', [
+      ['        const tac = this.textAreaCover;\n        applyFontInfo(ta, this._fontInfo);\n',
+       '        const tac = this.textAreaCover;\n        if (this.kdFontInfo !== this._fontInfo) {\n            this.kdFontInfo = this._fontInfo;\n            applyFontInfo(ta, this._fontInfo);\n        }\n']]],
     // (a content widget - hover, suggestions, parameter hints - whose line is drawn but off the screen stays hidden, as
     // when only the lines on the screen were drawn)
     ['/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js', [

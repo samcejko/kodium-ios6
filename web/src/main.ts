@@ -7,6 +7,8 @@ import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
 import { SaveReason } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/editor'
+import { IStorageService } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage.service'
+import { WillSaveStateReason } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage'
 import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api'
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override'
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override'
@@ -139,13 +141,16 @@ async function start() {
       'editor.quickSuggestions': { other: 'on', comments: 'off', strings: 'off' },
       'editor.quickSuggestionsDelay': 1000,
       'editor.wordBasedSuggestions': 'currentDocument',
-      // (CSS colours as swatches, from the language service)
+      // (CSS colours as swatches, from the language service; not the editor's own search for colours in any other file -
+      // the editor's worker asked again after every pause in typing)
       'editor.colorDecorators': true,
+      'editor.defaultColorDecorators': 'never',
       // What the iPad 2 cannot afford at every keystroke. The sticky scroll and bracket pair colours recompute; the
       // blinking cursor changed the page twice a second (and every change has the engine's shims run); the highlight of
-      // a word's other places follows every move of the cursor. Layer hints made composited layers the old WebKit
-      // rebuilt at every layout. The minimap's section headers were looked for in the whole file after every pause in
-      // typing, with the minimap off.
+      // a word's other places follows every move of the cursor. The minimap's section headers were looked for in the
+      // whole file after every pause in typing, with the minimap off. (Layer hints stay: the lines and the margin are
+      // composited layers that a scroll moves by their transform - web/vite.config.mjs smootherScroll. This setting's
+      // true here never took effect: measured with the hints on.)
       'editor.occurrencesHighlight': 'off',
       'editor.links': false,
       'editor.minimap.showRegionSectionHeaders': false,
@@ -158,7 +163,7 @@ async function start() {
       'editor.cursorBlinking': 'solid',
       'editor.inlineSuggest.enabled': false,
       'editor.lightbulb.enabled': 'off',
-      'editor.disableLayerHinting': true,
+      'editor.disableLayerHinting': false,
       // (measured with WebKit's profiler while typing on the iPad 2) The dots of selected white space: worked out again
       // for every line on the screen at every frame - a sixth of the time of a keystroke. And the text VS Code keeps in
       // its hidden text area for screen readers - 500 characters around the cursor, written again with the selection
@@ -261,8 +266,12 @@ async function start() {
   // (the app's call when it goes to the background - src/KDAppDelegate.m: every changed file saved, as VS Code saves when
   // its window loses the focus; untitled documents stay with their backups)
   const editorService = await getService(IEditorService)
+  const storageService = await getService(IStorageService)
   ;(window as { __kd_saveAll?: unknown }).__kd_saveAll = () => {
     void editorService.saveAll({ includeUntitled: false, reason: SaveReason.WINDOW_CHANGE })
+    // (and the workbench's state - the views, the editors' places, the history - which is flushed every 60 s, not
+    // every 5 as in a browser: each flush had every component save its state, 50-100 ms on the iPad 2 in a pause)
+    void storageService.flush(WillSaveStateReason.NONE).catch(() => undefined)
     return 'saving'
   }
   // (and the time each of the workbench's contributions took to create, by phase - what VS Code's Startup Performance

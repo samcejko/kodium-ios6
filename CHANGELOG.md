@@ -76,7 +76,11 @@ The first build.
   numbers and (without bracket pair guides) the indent guides keep each line's HTML while only the scroll position
   changes, and the guides no longer ask each line's length to see whether it wraps. And the layers of the lines and
   of the margin (composited) move by their transform instead of top: a change of top laid the page out at every frame,
-  with the compositor's pass over all of the page's 300-500 layers (another 10 %: 26-31 ms a frame).
+  with the compositor's pass over all of the page's 300-500 layers (another 10 %: 26-31 ms a frame). The editor's
+  hidden text area no longer gets the font's line height and then its own (19 px, then 1 px) at every frame and key.
+- The workbench's state (views, the editors' places, the history) is written every 60 s, as VS Code's desktop does,
+  instead of every 5 s as in a browser tab: each time every component saved its state, 50-100 ms on the iPad 2 in the
+  next pause of typing. The app writes it when it goes to the background, with the changed files.
 - Scrolling: the first scroll of a file 10-15 % quicker (119 ms a frame instead of 131-140 on the iPad 2), the rest
   ~2 %. The engine's grid pass - after every change of the page has settled, every 150-300 ms while scrolling -
   queried the whole page nine times for the modal editor's grid, which never shows here (workbench.editor.useModal
