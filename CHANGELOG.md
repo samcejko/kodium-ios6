@@ -76,6 +76,12 @@ The first build.
   element) - now they are found once when the touch begins, and LinkedLists (gesture targets, commands' handlers,
   keybindings) are gone through with a plain iterator: the command palette's list scrolls at 43-47 ms a frame
   instead of 48-55, and the garbage no longer brings a collection (0.5-0.6 s) into a scroll of the editor.
+- A key reaches the screen a quarter sooner in a big file (144 ms instead of 199 to its frame in a file of 1,500 lines,
+  interleaved), and Enter a little sooner (296 instead of 322). Every move of the cursor set its transition style to
+  the same value - a change of the page in the key's own handling, which the engine's style setter took ~20 ms over
+  and which had the page laid out before the frame that draws the key; it is set when it changes now. An Enter (or a
+  deleted line) took the line that left the drawn range out of the page at once, in the key's handling, the same way
+  (three of them: the line, its overlay, its number); they go at the start of the frame that draws the change.
 - JavaScript's syntax check and the file's symbols (the outline, Go to Symbol) come from a worker of their own: acorn
   parsed the file on the page's thread in every pause of typing, 0.9-1.4 s for a file of 1,500 lines on the iPad 2,
   and a key or a touch in that time waited for it. Go to Definition, Find All References and Rename still parse on

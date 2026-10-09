@@ -795,6 +795,25 @@ function lighterTyping() {
        '    return type;\n' +
        '}\n' +
        'function findBracket(lexer, matched) {\n']]],
+    // (an Enter or a deleted line took the editor's lines out of the page at once, in the key's own handling - a line,
+    // its overlay and its number: the page was laid out and its layers put together again before the frame that draws
+    // the key, 80-130 ms on the iPad 2 between the key and its frame. They go at the start of that frame's rendering
+    // now, with the rest of its changes; a line that left the drawn range is off the screen until then.)
+    ['/vs/editor/browser/view/viewLayer.js', [
+      ['    onFlushed(e, flushDom) {\n        if (flushDom) {\n',
+       '    kdRemoveLeft() {\n        const nodes = this.kdLeft;\n        if (nodes) {\n            this.kdLeft = null;\n            for (let i = 0; i < nodes.length; i++) {\n                nodes[i].remove();\n            }\n        }\n    }\n' +
+       '    onFlushed(e, flushDom) {\n        this.kdRemoveLeft();\n        if (flushDom) {\n'],
+      ['    onLinesDeleted(e) {\n        const deleted = this._linesCollection.onLinesDeleted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                lineDomNode?.remove();\n            }\n        }\n',
+       '    onLinesDeleted(e) {\n        const deleted = this._linesCollection.onLinesDeleted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                if (lineDomNode) {\n                    (this.kdLeft || (this.kdLeft = [])).push(lineDomNode);\n                }\n            }\n        }\n'],
+      ['    onLinesInserted(e) {\n        const deleted = this._linesCollection.onLinesInserted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                lineDomNode?.remove();\n            }\n        }\n',
+       '    onLinesInserted(e) {\n        const deleted = this._linesCollection.onLinesInserted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                if (lineDomNode) {\n                    (this.kdLeft || (this.kdLeft = [])).push(lineDomNode);\n                }\n            }\n        }\n'],
+      ['    renderLines(viewportData) {\n        const inp = this._linesCollection._get();\n',
+       '    renderLines(viewportData) {\n        this.kdRemoveLeft();\n        const inp = this._linesCollection._get();\n']]],
+    // (and the cursor's transition, set to the same value at every move of the cursor - a change of its style in the
+    // key's own handling, the same layout before the frame: set when it changes)
+    ['/vs/editor/browser/viewParts/viewCursors/viewCursor.js', [
+      ['        if (pauseAnimation) {\n            this._domNode.domNode.style.transitionProperty = "none";\n        } else {\n            this._domNode.domNode.style.transitionProperty = "";\n        }\n',
+       '        const kdTransition = pauseAnimation ? "none" : "";\n        if (this.kdTransition !== kdTransition) {\n            this.kdTransition = kdTransition;\n            this._domNode.domNode.style.transitionProperty = kdTransition;\n        }\n']]],
     // (the rest of a file's tokens is made in the page's idle time, in steps until the 50 ms given are spent: it stops
     // at the next step once a key or a touch came - timeRemaining() is 0 then, vsc-prelude.js - instead of going on to
     // the end with the input's frame waiting behind it. A step is 5 ms instead of 1: each one's tokens went to the
@@ -1279,7 +1298,36 @@ function openTimers() {
        '    onTimeout() {\n        this.timeoutToken = undefined;\n        if (this.runner) {\n            const kdT = Date.now();\n            this.doRun();\n            self.__kdTask && self.__kdTask("scheduler", this.runner, Date.now() - kdT);\n        }\n    }']]],
     ['/vs/base/browser/dom.js', [
       ['        try {\n            this._runner();\n        } catch (e) {',
-       '        try {\n            const kdT = Date.now();\n            this._runner();\n            self.__kdTask && self.__kdTask("frame item", this._runner, Date.now() - kdT);\n        } catch (e) {']]]
+       '        try {\n            const kdT = Date.now();\n            this._runner();\n            self.__kdTask && self.__kdTask("frame item", this._runner, Date.now() - kdT);\n        } catch (e) {']]],
+    // the editor's view parts, each timed: self.__kdPart(name, "events" | "prepare" | "render" | "renderText", ms) -
+    // their handling of the view model's events (a key's synchronous part), and the frame's rendering; the outgoing
+    // events (the editor's own listeners: contributions) as "outgoing <kind>". A part is named by its DOM node's class
+    // or by its first own fields (self.__kdPartName).
+    ['/vs/editor/browser/view.js', [
+      ['            prepareRender: (viewPartsToRender, ctx) => {\n                for (const viewPart of viewPartsToRender) {\n                    viewPart.prepareRender(ctx);\n                }\n            },\n' +
+       '            render: (viewPartsToRender, ctx) => {\n                for (const viewPart of viewPartsToRender) {\n                    viewPart.render(ctx);\n                    viewPart.onDidRender();\n                }\n            }',
+       '            prepareRender: (viewPartsToRender, ctx) => {\n                for (const viewPart of viewPartsToRender) {\n                    const kdT = Date.now();\n                    viewPart.prepareRender(ctx);\n' +
+       '                    self.__kdPart && self.__kdPart(self.__kdPartName(viewPart), "prepare", Date.now() - kdT);\n                }\n            },\n' +
+       '            render: (viewPartsToRender, ctx) => {\n                for (const viewPart of viewPartsToRender) {\n                    const kdT = Date.now();\n                    viewPart.render(ctx);\n                    viewPart.onDidRender();\n' +
+       '                    self.__kdPart && self.__kdPart(self.__kdPartName(viewPart), "render", Date.now() - kdT);\n                }\n            }'],
+      ['                if (this._viewLines.shouldRender()) {\n                    this._viewLines.renderText(viewportData);\n                    this._viewLines.onDidRender();\n                }\n',
+       '                if (this._viewLines.shouldRender()) {\n                    const kdT = Date.now();\n                    this._viewLines.renderText(viewportData);\n                    this._viewLines.onDidRender();\n' +
+       '                    self.__kdPart && self.__kdPart("view-lines", "renderText", Date.now() - kdT);\n                }\n']],
+     'self.__kdPartName = function (part) {\n' +
+     '    if (part.kdName) return part.kdName;\n' +
+     '    let name = "";\n' +
+     '    const nodes = [part._domNode, part.domNode, part._linesContent];\n' +
+     '    for (const n of nodes) {\n        const el = n && (n.domNode || n);\n        if (el && typeof el.className === "string" && el.className) { name = el.className.split(" ")[0]; break; }\n    }\n' +
+     '    if (!name) name = Object.keys(part).filter(k => k !== "_context" && k !== "_store" && k !== "_isDisposed" && k !== "_shouldRender").slice(0, 2).join(",") || "part";\n' +
+     '    part.kdName = name;\n' +
+     '    return name;\n' +
+     '};\n'],
+    ['/vs/editor/common/viewModelEventDispatcher.js', [
+      ['            for (const eventHandler of eventHandlers) {\n                eventHandler.handleEvents(events);\n            }\n',
+       '            for (const eventHandler of eventHandlers) {\n                const kdT = Date.now();\n                eventHandler.handleEvents(events);\n' +
+       '                self.__kdPart && self.__kdPart(self.__kdPartName ? self.__kdPartName(eventHandler) : "?", "events", Date.now() - kdT);\n            }\n'],
+      ['            this._onEvent.fire(event);\n',
+       '            const kdT = Date.now();\n            this._onEvent.fire(event);\n            self.__kdPart && self.__kdPart("outgoing " + event.kind, "events", Date.now() - kdT);\n']]]
   ])
 }
 
