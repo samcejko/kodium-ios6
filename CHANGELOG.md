@@ -70,7 +70,12 @@ The first build.
   scroll of the editor, 3 rows into the command palette's list) and its momentum was lost, as was the end of the
   touch. Its moves and its end are passed on to the document now, and VS Code's gestures go to the editor or list
   that held the touch when it began. The app's collection of garbage in pauses, which took the stopped moves for a
-  pause, no longer comes in the middle of a long scroll (0.45 s).
+  pause, no longer comes in the middle of a long scroll (0.45 s). And each move of a finger went through all the
+  gesture targets of the workbench (~160: lists, editors, scrollable elements) asking each whether it holds the
+  touch, through a generator (the LinkedList's iterator: the regenerator runtime's three calls and a try per
+  element) - now they are found once when the touch begins, and LinkedLists (gesture targets, commands' handlers,
+  keybindings) are gone through with a plain iterator: the command palette's list scrolls at 43-47 ms a frame
+  instead of 48-55, and the garbage no longer brings a collection (0.5-0.6 s) into a scroll of the editor.
 - The code is coloured (Monarch) 2.4 times as fast: a file of 1,500 lines in 1.2 s instead of 2.8 on the iPad 2, and a
   file just opened has all its colours a fifth sooner (7.7 s instead of 9.2-11.6, interleaved). Monarch asked each
   rule whether its regex is a RegExp at every try (instanceof, through the lowering's Symbol.hasInstance helper),

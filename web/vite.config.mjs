@@ -985,25 +985,46 @@ function smootherScroll() {
        '        return true;\n' +
        '    }\n' +
        '    _renderAtTopLeft() {\n']]],
+    // (a LinkedList - the gesture targets, a command's handlers, keybindings - is gone through with a plain iterator:
+    // its generator was the regenerator runtime's three calls and a try per element)
+    ['/vs/base/common/linkedList.js', [
+      ['    *[Symbol.iterator]() {\n        let node = this._first;\n        while (node !== Node.Undefined) {\n            yield node.element;\n            node = node.next;\n        }\n    }',
+       '    [Symbol.iterator]() {\n' +
+       '        const list = this;\n' +
+       '        let node = Node.Undefined, first = true;\n' +
+       '        const iterator = {\n' +
+       '            next() {\n' +
+       '                if (first) {\n                    first = false;\n                    node = list._first;\n                } else if (node !== Node.Undefined) {\n                    node = node.next;\n                }\n' +
+       '                return node === Node.Undefined ? { done: true, value: undefined } : { done: false, value: node.element };\n' +
+       '            },\n' +
+       '            [Symbol.iterator]() {\n                return iterator;\n            }\n' +
+       '        };\n' +
+       '        return iterator;\n' +
+       '    }']]],
     // (a touch whose element left the page - the scroll under the finger recycled its line or row, vsc-prelude.js
     // passes its moves on to the document - still goes to the targets that held it when it began: their contains()
     // no longer finds it, and the scroll stopped half way, its momentum too)
     ['/vs/base/browser/touch.js', [
-      ['                rollingPageY: [touch.pageY]\n            };\n',
-       '                rollingPageY: [touch.pageY],\n                kdTargets: this.kdTargetsOf(touch.target)\n            };\n'],
+      ['                rollingPageY: [touch.pageY]\n            };\n            const evt = this.newGestureEvent(EventType.Start, touch.target);\n',
+       '                rollingPageY: [touch.pageY],\n                kdTargets: this.kdTargetsOf(touch.target)\n            };\n' +
+       '            const evt = this.newGestureEvent(EventType.Start, touch.target);\n            evt.kdTargets = this.activeTouches[touch.identifier].kdTargets;\n'],
       ['                const evt = this.newGestureEvent(EventType.Tap, data.initialTarget);\n',
        '                const evt = this.newGestureEvent(EventType.Tap, data.initialTarget);\n                evt.kdTargets = data.kdTargets;\n'],
       ['                const evt = this.newGestureEvent(EventType.Contextmenu, data.initialTarget);\n',
        '                const evt = this.newGestureEvent(EventType.Contextmenu, data.initialTarget);\n                evt.kdTargets = data.kdTargets;\n'],
       ['                const dispatchTo = [...this.targets].filter(t => data.initialTarget instanceof Node && t.contains(data.initialTarget));\n',
-       '                const dispatchTo = kdDetached(data.initialTarget) ? data.kdTargets.filter(t => !kdDetached(t)) : [...this.targets].filter(t => data.initialTarget instanceof Node && t.contains(data.initialTarget));\n'],
+       '                const dispatchTo = data.kdTargets.filter(t => !kdDetached(t));\n'],
       ['            this.dispatchEvent(this.newGestureEvent(EventType.End, data.initialTarget));\n',
        '            const kdEnd = this.newGestureEvent(EventType.End, data.initialTarget);\n            kdEnd.kdTargets = data.kdTargets;\n            this.dispatchEvent(kdEnd);\n'],
       ['            const evt = this.newGestureEvent(EventType.Change, data.initialTarget);\n            evt.translationX = touch.pageX - data.rollingPageX.at(-1);\n',
        '            const evt = this.newGestureEvent(EventType.Change, data.initialTarget);\n            evt.kdTargets = data.kdTargets;\n            evt.translationX = touch.pageX - data.rollingPageX.at(-1);\n'],
+      // (and every event of a touch goes to the targets found when it began: each move went through all the gesture
+      // targets of the workbench - ~160 lists, editors, scrollable elements - with contains(), the list's iterator a
+      // generator; 40 % of the script's time in a list's scroll)
       ['        if (event.initialTarget instanceof Node) {\n            for (const ignoreTarget of this.ignoreTargets) {\n',
-       '        if (event.kdTargets && kdDetached(event.initialTarget)) {\n' +
-       '            for (const target of event.kdTargets) {\n                if (!kdDetached(target)) {\n                    target.dispatchEvent(event);\n                    this.dispatched = true;\n                }\n            }\n' +
+       '        if (event.kdTargets) {\n' +
+       '            const kdTargets = event.kdTargets;\n' +
+       '            for (let i = 0; i < kdTargets.length; i++) {\n                if (!kdDetached(kdTargets[i])) {\n                    kdTargets[i].dispatchEvent(event);\n                    this.dispatched = true;\n                }\n            }\n' +
        '            return;\n' +
        '        }\n' +
        '        if (event.initialTarget instanceof Node) {\n            for (const ignoreTarget of this.ignoreTargets) {\n'],

@@ -305,7 +305,8 @@ jobs:
             packages/*.deb
             packages/SHA256SUMS
           if-no-files-found: error
-          retention-days: 14
+          # (~17 MB a build: kept 14 days they filled the account's artifact storage within three days of builds)
+          retention-days: 3
 
       - name: Upload build log
         if: always()
@@ -314,4 +315,4 @@ jobs:
           name: build-log
           path: build.log
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 3
