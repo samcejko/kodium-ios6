@@ -778,8 +778,29 @@ function leaveOut() {
 // each, the view reset its 13 context keys (the focused file's name, folder, language...) and set them again, every
 // change told to every menu - 0.35 s of such a key's 0.55 in the profiler. The keys change now when what the focused
 // row stands for does, in one change.
+// The views' title bars (the Explorer's New File..., Open Editors', the Outline's, the Timeline's) made their toolbars
+// anew whenever a context key their menus look at changed - opening a file, switching tabs - though the actions came
+// out the same: a toolbar is made again when its actions (what they show and whether they are on) are others. The
+// actions of a view's title get the view's context at run time, not the editor's.
 function quickerViews() {
   return patchModules('kodium-quicker-views', [
+    ['/vs/workbench/browser/parts/views/viewPane.js', [
+      ['            this.toolbar.setActions(\n                prepareActions(primaryActions),\n                prepareActions(this.menuActions.getSecondaryActions())\n            );\n            this.toolbar.context = this.getActionsContext();',
+       '            const kdPrimary = prepareActions(primaryActions), kdSecondary = prepareActions(this.menuActions.getSecondaryActions());\n' +
+       '            const kdKey = kdActionsKey(kdPrimary) + "||" + kdActionsKey(kdSecondary);\n' +
+       '            if (kdKey !== this.kdActionsKey) {\n' +
+       '                this.kdActionsKey = kdKey;\n' +
+       '                this.toolbar.setActions(kdPrimary, kdSecondary);\n' +
+       '            }\n' +
+       '            this.toolbar.context = this.getActionsContext();']],
+     'function kdActionsKey(actions) {\n' +
+     '    let key = "";\n' +
+     '    for (const a of actions) {\n' +
+     '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0002";\n' +
+     '        if (a.actions && a.actions.length) {\n            key += "[" + kdActionsKey(a.actions) + "]";\n        }\n' +
+     '    }\n' +
+     '    return key;\n' +
+     '}\n'],
     ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
       ['        this._register(this.list.onDidChangeFocus(e => {\n            resourceContext.reset();\n' +
        '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +

@@ -4,12 +4,14 @@
 // their indexes: the command palette 2.7 s the first time and 0.8 s the next, the panel 2.3 s and then 0.6, the
 // Search view 1.3 s and then 0.45. So while the splash still shows, the workbench does once or twice, unseen, what one
 // does first: the command palette and Go to File (with a filter too), the panel with the Problems view, the side bar
-// and the Search view. Then everything is as it was - the side bar, the panel, their views, the focus - the garbage
-// is collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it out: what the first time costs.)
+// and the Search view, an editor. Then everything is as it was - the side bar, the panel, their views, the focus -
+// the garbage is collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it out: what the first
+// time costs.)
 // Measured on the iPad 2 (first actions after the splash, with and without, interleaved): an editor of its own typed
-// into (an untitled document: suggestions, find) made no first action in an editor quicker - opening a file, the first
-// keys, suggestions - and took 12.7 s; the Settings editor opened beforehand opened 0.7 s sooner (4.3 s instead of 5),
-// for 4.5 s more at every start. Both left out.
+// into (an untitled document: suggestions, find) made the editor's first actions no quicker and took 12.7 s - it is
+// only opened and closed now, which makes the editor pane every file is shown in (the first two files open 0.16-0.18 s
+// sooner); the Settings editor opened beforehand opened 0.7 s sooner (4.3 s instead of 5), for 4.5 s more at every
+// start: left out.
 // The compiled code has to stay for that: Surfari's engine keeps it once the start's code was thrown away - which
 // JavaScriptCore did a minute after the start, or the engine at 75 s, right when one had begun to work: the warm-up's
 // went with it. So the app throws the start's code away between two steps (as soon as the engine can tell, 22 s after
@@ -24,6 +26,7 @@ import { Parts } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services
 import { IPaneCompositePartService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/panecomposite/browser/panecomposite.service'
 import { ViewContainerLocation } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/views'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
+import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 
 // (while it runs: files from other apps wait - share.ts - and the splash says how far it is)
 export let warming = false
@@ -137,6 +140,20 @@ export async function warmUp(): Promise<void> {
         await until(() => shown('.search-view'), 3000)
         await run('workbench.view.explorer')
         await until(() => shown('.explorer-folders-view'), 3000)
+      },
+      // an editor of its own (an untitled JavaScript document, nothing typed, never saved): the editor pane and its
+      // editor, which every file opened later is shown in, made now
+      async () => {
+        const pane = await editors.openEditor({ resource: URI.from({ scheme: 'untitled', path: 'kodium-warm-up.js' }), languageId: 'javascript', options: { pinned: false } })
+        const input = pane?.input
+        if (!pane || !input) return
+        try {
+          const control = pane.getControl() as { getDomNode?(): HTMLElement | null } | undefined
+          await until(() => !!control?.getDomNode?.()?.querySelector('.view-line'), 5000)
+        } finally {
+          await input.revert(pane.group.id).catch(() => undefined)
+          await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
+        }
       }
     ]
     // (how long each step took: window.__kd_warmTimes, for the developer commands)

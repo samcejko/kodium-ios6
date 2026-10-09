@@ -5,6 +5,8 @@
 // 512 MB): Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
+import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
+import { SaveReason } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/editor'
 import type { IWorkbenchConstructionOptions } from '@codingame/monaco-vscode-api'
 import getWorkbenchServiceOverride from '@codingame/monaco-vscode-workbench-service-override'
 import getQuickAccessServiceOverride from '@codingame/monaco-vscode-quickaccess-service-override'
@@ -122,9 +124,12 @@ async function start() {
       'editor.minimap.enabled': false,
       'workbench.startupEditor': 'none',
       'editor.fontSize': 14,
-      // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short)
+      // (the on-screen keyboard has no Cmd+S, and iOS ends the app without asking when memory runs short.) After 5 s of
+      // pause: every save makes the next key make the file changed again - its tab, the Open Editors view and the
+      // editor's toolbar redrawn, 0.2-0.3 s more for that key on the iPad 2 - and at 2 s every pause in typing did. The
+      // app saves when it goes to the background, where iOS ends it (src/KDAppDelegate.m).
       'files.autoSave': 'afterDelay',
-      'files.autoSaveDelay': 2000,
+      'files.autoSaveDelay': 5000,
       // Suggestions (IntelliSense) as VS Code shows them, once typing pauses for a second: worked out in the workers
       // (the words of the file in the editor's, the rest in the language services'), the list drawn only then - not at
       // every key while typing on (on the on-screen keyboard keys come 0.25-0.6 s apart: at 0.3 s and at 0.5 s the list
@@ -251,6 +256,13 @@ async function start() {
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
   const commands = await getService(ICommandService)
   ;(window as { __kd_commands?: unknown }).__kd_commands = (id: string, ...args: unknown[]) => commands.executeCommand(id, ...args)
+  // (the app's call when it goes to the background - src/KDAppDelegate.m: every changed file saved, as VS Code saves when
+  // its window loses the focus; untitled documents stay with their backups)
+  const editorService = await getService(IEditorService)
+  ;(window as { __kd_saveAll?: unknown }).__kd_saveAll = () => {
+    void editorService.saveAll({ includeUntitled: false, reason: SaveReason.WINDOW_CHANGE })
+    return 'saving'
+  }
   // (and the time each of the workbench's contributions took to create, by phase - what VS Code's Startup Performance
   // view shows: [[id, ms], ...] for phases 1-4)
   ;(window as { __kd_contribTimes?: unknown }).__kd_contribTimes = () => {

@@ -46,6 +46,11 @@ static void KDWriteResult(NSString *name, NSString *text)
     [text ?: @"" writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:name] atomically:YES encoding:NSUTF8StringEncoding error:NULL];
 }
 
+@interface KDAppDelegate ()
+// (the few seconds asked for the saves when the app goes to the background)
+@property (nonatomic) UIBackgroundTaskIdentifier saveTask;
+@end
+
 @implementation KDAppDelegate
 
 // Developer commands over SSH, as Surfari has them: `uiopen 'kodium:<command>?key=<debug key>&...'`, only with the debug
@@ -237,6 +242,7 @@ static void KDWriteResult(NSString *name, NSString *text)
     [BRJSEngine keepPageCode];
     // (the warm-up has the start's code thrown away once the engine can tell: KDSiteProtocol /__kd/app/keepcode)
     [KDSiteProtocol noteCodeKeeperStarted];
+    self.saveTask = UIBackgroundTaskInvalid;
     // The workbench's garbage is collected in the user's pauses (web/prelude/vsc-prelude.js asks, KDSiteProtocol
     // /__kd/app/idle), and JavaScriptCore's own timer, which collected in the middle of every second switch of editors
     // (0.3-0.6 s), is kept quiet
@@ -277,6 +283,31 @@ static void KDWriteResult(NSString *name, NSString *text)
         if ([stats respondsToSelector:giveBack]) ((void (*)(id, SEL))objc_msgSend)(stats, giveBack);
         BRLog(@"Compiled code %@: %ld -> %ld MB", done ? @"thrown away" : @"not found", before, (long)BRResidentMemoryMB());
     });
+}
+
+// Going to the background (the Home button, another app, a call): every changed file is saved first, as VS Code saves
+// when its window loses the focus - iOS may end the app there without a word, and auto save waits for a pause in
+// typing (web/src/main.ts __kd_saveAll; untitled documents stay with their backups). A few seconds are asked for the
+// writes.
+- (void)applicationWillResignActive:(UIApplication *)application
+{
+    KDWorkbenchViewController *workbench = (KDWorkbenchViewController *)self.window.rootViewController;
+    if (![workbench isKindOfClass:[KDWorkbenchViewController class]]) return;
+    if (self.saveTask == UIBackgroundTaskInvalid) {
+        self.saveTask = [application beginBackgroundTaskWithExpirationHandler:^{ [self endSaveTask]; }];
+    }
+    NSString *answer = [workbench evaluateJavaScript:@"window.__kd_saveAll ? window.__kd_saveAll() : ''"];
+    BRLog(@"Going to the background: %@", answer.length ? answer : @"the workbench is not up");
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(endSaveTask) object:nil];
+    [self performSelector:@selector(endSaveTask) withObject:nil afterDelay:5];
+}
+
+- (void)endSaveTask
+{
+    if (self.saveTask == UIBackgroundTaskInvalid) return;
+    UIBackgroundTaskIdentifier task = self.saveTask;
+    self.saveTask = UIBackgroundTaskInvalid;
+    [[UIApplication sharedApplication] endBackgroundTask:task];
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication *)application

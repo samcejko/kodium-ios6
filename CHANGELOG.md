@@ -69,6 +69,13 @@ The first build.
   the context itself.
 - A line's height while scrolling (~365 times a frame) is the default at once when no line has a height of its own -
   in Kodium none has - instead of a binary search over those lines.
+- Changed files are saved when the app goes to the background (the Home button, another app, a call), as VS Code saves
+  when its window loses the focus: iOS may end an app in the background without a word, and auto save waited for a
+  pause in typing. Auto save now comes after 5 s of pause instead of 2: every save made the next key make the file
+  changed again - its tab, the Open Editors view and the editor's toolbar redrawn, 0.2-0.3 s more for that key on the
+  iPad 2.
+- The warm-up also opens and closes an editor of its own (an untitled document, nothing typed): the editor pane every
+  file is shown in is made then, and the first two files open 0.16-0.18 s sooner.
 - Scrolling ~5 % faster (79-80 ms a frame instead of 83 on the iPad 2): the indent guides cost 11 ms of each frame and
   now 5. Each line's guides are kept while the text is the same (a scroll works out the lines it brings in, not all
   the lines on the screen), and without bracket pair guides (off by default) the indent guides no longer go through
