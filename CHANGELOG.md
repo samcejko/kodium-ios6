@@ -37,12 +37,20 @@ The first build.
   actions then take nearly what the next ones take (measured with and without, interleaved): the command palette
   0.75-1 s instead of 2.7, the panel 0.6-0.7 s instead of 2.3 and hiding it 0.4 s instead of 1.4, the Search view
   0.45 s instead of 1.35, hiding the side bar 0.33 s instead of 0.76. (An editor of its own typed into made no first
-  action in an editor quicker, and the Settings editor opened beforehand saved 0.7 s of its 5 for 4.5 s at every
-  start: both are not part of it.) The compiled code has to stay for that: Surfari's engine keeps it once the start's
-  code is gone, which JavaScriptCore threw away a minute after the start (or the engine at 75 s) - the warm-up's with
-  it. The app throws the start's code away between two steps now, as soon as the engine can tell (22 s after
-  launch), and the steps before that run once more at the end. Files from other apps wait until the warm-up is done.
-  (localStorage kodium.noWarmUp = 1 leaves it out.)
+  action in an editor quicker: it is not part of it.) The compiled code has to stay for that: Surfari's engine keeps
+  it once the start's code is gone, which JavaScriptCore threw away a minute after the start (or the engine at 75 s) -
+  the warm-up's with it. The app throws the start's code away between two steps now, as soon as the engine can tell
+  (22 s after launch), and the steps before that run once more at the end. Files from other apps wait until the
+  warm-up is done. (localStorage kodium.noWarmUp = 1 leaves it out.)
+- The Settings editor opens in 1.2-1.5 s the first time too (was 4.7 s on the iPad 2): the warm-up makes it and builds
+  its tree (4.5 s more at the start). That only helps now that window.newWindowProfile, which lists the profiles, is
+  registered with the start's other settings: VS Code registered it "eventually" - 40 s after the start on the iPad 2,
+  after the warm-up - and every setting registered drops the default settings, so the tree was built again at the
+  first opening. Making the editor also does less: each of the ~700 settings had its validator made with them, its
+  ~8 messages put together in the display language whether they applied or not; a validator makes them when it first
+  checks a value (the default settings 0.27 s -> 0.07 s). Opened again, it no longer asks for the installed extensions
+  (0.45-0.55 s) - only after one was installed, removed or changed. And a setting changed while the editor was closed
+  (in settings.json, by a command) shows its new value when it opens again: the row on the screen kept the old one.
 - What is pressed shows at once, while the finger is on it: a button of a toolbar or the activity bar, a tab, a row
   of a list or tree (the explorer's, suggestions, the command palette's), a menu's item, a button, a status bar item,
   a section's header. What a tap does takes the iPad 2 0.3-1 s, and nothing showed until then: VS Code marks what is

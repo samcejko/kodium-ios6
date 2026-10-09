@@ -629,8 +629,21 @@ function quickerPalette() {
 // (and the default settings were written out twice as JSON text with their descriptions - with the "Commonly Used"
 // group and without it - whenever they were made, for the Settings editor too; only the second is ever read, by the
 // default settings' JSON view: the first is written when asked for)
+// (and each of the ~700 settings got its validator made with them: its checks, each with its message put together in
+// the display language whether it applies or not - 5400 messages, for a value checked only when a row shows it. A
+// validator makes them when it first checks a value; it reads the setting's schema as before)
+// (and window.newWindowProfile, which lists the profiles, is registered with the start's other settings, not "eventually"
+// - 30-45 s after the start on the iPad 2, the page busy: it came after the warm-up had made the Settings editor's tree,
+// and every setting registered drops the default settings, so the tree was built again at the first opening)
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
+    ['/vs/workbench/browser/workbench.contribution.js', [
+      ['        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.Eventually\n',
+       '        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.AfterRestored\n']]],
+    ['/vs/workbench/services/preferences/common/preferencesValidation.js', [
+      ['function createValidator(prop) {\n    const type = Array.isArray(prop.type) ? prop.type : [prop.type];',
+       'function createValidator(prop) {\n    let validate;\n    return value => (validate || (validate = kdCreateValidator(prop)))(value);\n}\n' +
+       'function kdCreateValidator(prop) {\n    const type = Array.isArray(prop.type) ? prop.type : [prop.type];']]],
     ['/vs/workbench/services/preferences/common/preferencesModels.js', [
       ['    getContent(forceUpdate = false) {\n        if (!this._content || forceUpdate) {\n            this.initialize();\n        }\n        return this._content;\n    }',
        '    getContent(forceUpdate = false) {\n' +
@@ -682,22 +695,96 @@ function quickerSettings() {
     ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
       ['        this._setOptions(options);\n        this.onConfigUpdate(undefined, true).then(() => {',
        '        this._setOptions(options);\n        (this.kdSameTree(model) ? this.kdShowTree() : this.onConfigUpdate(undefined, true)).then(() => {'],
-      ['    async refreshInstalledExtensionsList() {',
+      ['    async refreshInstalledExtensionsList() {\n        const installedExtensions = await this.extensionManagementService.getInstalled();\n',
        '    kdTreeShape(groups) {\n' +
        '        return groups.map(group => group.id + ":" + group.sections.reduce((n, section) => n + section.settings.length, 0)).join(",");\n' +
        '    }\n' +
        '    kdSameTree(model) {\n' +
-       '        return !!(this.settingsTreeModel.value && this.kdTreeGroups && this.kdTreeAdvanced === this.canShowAdvancedSettings() &&\n' +
+       '        return !!(this.settingsTreeModel.value && this.kdTreeGroups && !this.kdTreeStale && this.kdTreeAdvanced === this.canShowAdvancedSettings() &&\n' +
        '            !this.viewState.query && !this.searchResultModel && this.kdTreeShape(model.settingsGroups) === this.kdTreeGroups);\n' +
        '    }\n' +
        '    async kdShowTree() {\n' +
+       '        const stale = this.kdStaleRows || [];\n' +
+       '        this.kdStaleRows = undefined;\n' +
+       '        stale.forEach((element, i) => { if (stale.indexOf(element) === i) this.refreshSingleElement(element); });\n' +
        '        this.settingsTree.rerender();\n' +
        '        this.tocTree.rerender();\n' +
        '    }\n' +
-       '    async refreshInstalledExtensionsList() {'],
+       '    async refreshInstalledExtensionsList() {\n' +
+       '        if (!this.kdInstalledWatched) {\n' +
+       '            this.kdInstalledWatched = true;\n' +
+       '            const service = this.extensionManagementService, changed = () => { this.kdInstalledKnown = false; };\n' +
+       '            for (const event of [service.onDidUpdateExtensionMetadata, service.onDidChangeProfile, service.onProfileAwareDidInstallExtensions, service.onProfileAwareDidUninstallExtension]) {\n' +
+       '                if (event) this._register(event(changed));\n' +
+       '            }\n' +
+       '        }\n' +
+       '        if (this.kdInstalledKnown) return;\n' +
+       '        this.kdInstalledKnown = true;\n' +
+       '        let installedExtensions;\n' +
+       '        try { installedExtensions = await this.extensionManagementService.getInstalled(); } catch (e) { this.kdInstalledKnown = false; throw e; }\n'],
+      ['        this._register(extensionManagementService.onDidInstallExtensions(() => {\n            this.refreshInstalledExtensionsList();',
+       '        this._register(extensionManagementService.onDidInstallExtensions(() => {\n            this.kdInstalledKnown = false;\n            this.refreshInstalledExtensionsList();'],
+      ['        this._register(extensionManagementService.onDidUninstallExtension(() => {\n            this.refreshInstalledExtensionsList();',
+       '        this._register(extensionManagementService.onDidUninstallExtension(() => {\n            this.kdInstalledKnown = false;\n            this.refreshInstalledExtensionsList();'],
+      ['    refreshSingleElement(element) {\n',
+       '    refreshSingleElement(element) {\n        if (!this.isVisible()) {\n            (this.kdStaleRows || (this.kdStaleRows = [])).push(element);\n            return;\n        }\n'],
+      ['            this.settingsTree.setChildren(null, createGroupIterator(this.currentSettingsModel.root));\n        }\n',
+       '            this.settingsTree.setChildren(null, createGroupIterator(this.currentSettingsModel.root));\n        } else if (!this.isVisible()) {\n            this.kdTreeStale = true;\n        }\n'],
+      ['            this.tocTree.setChildren(null, createTOCIterator(this.tocTreeModel));\n        }\n',
+       '            this.tocTree.setChildren(null, createTOCIterator(this.tocTreeModel));\n        } else {\n            this.kdTreeStale = true;\n        }\n'],
       ['        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];',
-       '        this.kdTreeGroups = this.kdTreeShape(this.defaultSettingsEditorModel.settingsGroups);\n        this.kdTreeAdvanced = this.canShowAdvancedSettings();\n' +
+       '        this.kdTreeGroups = this.kdTreeShape(this.defaultSettingsEditorModel.settingsGroups);\n        this.kdTreeAdvanced = this.canShowAdvancedSettings();\n        this.kdTreeStale = false;\n' +
        '        const groups = this.defaultSettingsEditorModel.settingsGroups.slice(1);\n        const coreSettingsGroups = [], extensionSettingsGroups = [];']]]
+  ])
+}
+
+// A build for measuring the Settings editor (KODIUM_SETTINGS_TIMERS=1 .\web\build.ps1): marks along its opening -
+// self.__kdMark(name) and self.__kdAdd(name, ms), when a measuring script has set them (renderers' renderTemplate and
+// renderElement, the tree's splice summed) - and self.__kdResets: when the default settings were dropped, for which keys.
+function settingsTimers() {
+  if (!process.env.KODIUM_SETTINGS_TIMERS) return null
+  const m = (n) => 'self.__kdMark && self.__kdMark("' + n + '");\n'
+  return patchModules('kodium-settings-timers', [
+    ['/vs/workbench/services/preferences/common/preferencesModels.js', [
+      ['            if (e.source === ConfigurationTarget.DEFAULT) {\n                this.reset();',
+       '            if (e.source === ConfigurationTarget.DEFAULT) {\n                (self.__kdResets = self.__kdResets || []).push(Math.round(performance.now()) + ":" + [...e.affectedKeys].slice(0, 6).join("|") + ":" + e.affectedKeys.size);\n                this.reset();'],
+      ['        this._allSettingsGroups = this.parse();\n        this._content = undefined;\n        this._contentWithoutMostCommonlyUsed = this.toContent(this._allSettingsGroups, 1);\n',
+       '        ' + m('parse') + '        this._allSettingsGroups = this.parse();\n        ' + m('parsed') + '        this._content = undefined;\n        this._contentWithoutMostCommonlyUsed = this.toContent(this._allSettingsGroups, 1);\n        ' + m('toContent') ],
+      ['        return this.sortGroups(groups);', '        ' + m('registered') + '        try { return this.sortGroups(groups); } finally { ' + m('sorted') + ' }'],
+      ['        this.initAllSettingsMap(settingsGroups);\n        const mostCommonlyUsed = this.getMostCommonlyUsedSettings();',
+       '        this.initAllSettingsMap(settingsGroups);\n        const mostCommonlyUsed = this.getMostCommonlyUsedSettings();\n        ' + m('commonly')]]],
+    ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
+      ['    createEditor(parent) {\n', '    createEditor(parent) {\n        ' + m('createEditor')],
+      ['        this.createHeader(this.rootElement);\n        this.createBody(this.rootElement);',
+       '        this.createHeader(this.rootElement);\n        ' + m('header') + '        this.createBody(this.rootElement);'],
+      ['        this._register(this.searchWidget.onDidFocus(() => {', '        ' + m('search widget') + '        this._register(this.searchWidget.onDidFocus(() => {'],
+      ['        this.settingsTargetsWidget.settingsTarget = ConfigurationTarget.USER_LOCAL;', '        ' + m('targets widget') + '        this.settingsTargetsWidget.settingsTarget = ConfigurationTarget.USER_LOCAL;'],
+      ['        this.createTOC(this.tocTreeContainer);\n        this.createSettingsTree(this.settingsTreeContainer);',
+       '        this.createTOC(this.tocTreeContainer);\n        ' + m('toc') + '        this.createSettingsTree(this.settingsTreeContainer);\n        ' + m('settings tree')],
+      ['        this.settingsTree = this._register(this.instantiationService.createInstance(\n            SettingsTree,',
+       '        ' + m('renderers') + '        this.settingsTree = this._register(this.instantiationService.createInstance(\n            SettingsTree,'],
+      ['        this._register(this.settingsTree.onDidScroll(() => {',
+       '        for (const r of this.settingRenderers.allRenderers) for (const k of ["renderTemplate", "renderElement"]) { const f = r[k]; if (f) r[k] = function () { const t = Date.now(); try { return f.apply(this, arguments); } finally { self.__kdAdd && self.__kdAdd(k, Date.now() - t); } }; }\n' +
+       '        { const v = this.settingsTree.view, f = v.splice; v.splice = function () { const t = Date.now(); try { return f.apply(this, arguments); } finally { self.__kdAdd && self.__kdAdd("view.splice", Date.now() - t); } }; }\n' +
+       '        this._register(this.settingsTree.onDidScroll(() => {'],
+      ['        await this.refreshInstalledExtensionsList();\n    }\n', '        await this.refreshInstalledExtensionsList();\n        ' + m('setInput done') + '    }\n'],
+      ['    layout(dimension) {\n        this.dimension = dimension;', '    layout(dimension) {\n        ' + m('layout') + '        this.dimension = dimension;'],
+      ['        this.settingsTree.rerender();\n        this.tocTree.rerender();\n', '        ' + m('kdShowTree') + '        this.settingsTree.rerender();\n        ' + m('rerendered') + '        this.tocTree.rerender();\n        ' + m('toc rerendered')],
+      ['        try { installedExtensions = await this.extensionManagementService.getInstalled(); }',
+       '        ' + m('getInstalled') + '        try { installedExtensions = await this.extensionManagementService.getInstalled(); ' + m('installed') + ' }'],
+      ['        this.addCtrlAInterceptor(this.rootElement);', '        ' + m('created') + '        this.addCtrlAInterceptor(this.rootElement);'],
+      ['        const model = await this.input.resolve();', '        ' + m('setInput') + '        const model = await this.input.resolve();\n        ' + m('input resolved')],
+      ['        this.kdTreeGroups = this.kdTreeShape(', '        ' + m('onConfigUpdate') + '        this.kdTreeGroups = this.kdTreeShape('],
+      ['        const settingsResult = resolveSettingsTree(tocData, coreSettingsGroups, filter);',
+       '        ' + m('groups') + '        const settingsResult = resolveSettingsTree(tocData, coreSettingsGroups, filter);\n        ' + m('tree resolved')],
+      ['        const additionalGroups = [];\n        let setAdditionalGroups = false;', '        const additionalGroups = [];\n        let setAdditionalGroups = false;\n        ' + m('toggle?')],
+      ['        resolvedSettingsRoot.children.unshift(getCommonlyUsedData(groups));',
+       '        ' + m('extension toc') + '        resolvedSettingsRoot.children.unshift(getCommonlyUsedData(groups));\n        ' + m('commonly used')],
+      ['            this.refreshModels(resolvedSettingsRoot);\n            const cachedState',
+       '            ' + m('models') + '            this.refreshModels(resolvedSettingsRoot);\n            ' + m('models done') + '            const cachedState'],
+      ['                this.refreshTOCTree();\n                const rootChildren', '                this.refreshTOCTree();\n                ' + m('toc tree') + '                const rootChildren'],
+      ['                this.refreshTree();\n                this.tocTree.collapseAll();',
+       '                ' + m('refreshTree') + '                this.refreshTree();\n                ' + m('tree') + '                this.tocTree.collapseAll();\n                ' + m('collapsed')]]]
   ])
 }
 
@@ -1382,7 +1469,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

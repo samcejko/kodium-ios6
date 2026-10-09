@@ -4,14 +4,15 @@
 // their indexes: the command palette 2.7 s the first time and 0.8 s the next, the panel 2.3 s and then 0.6, the
 // Search view 1.3 s and then 0.45. So while the splash still shows, the workbench does once or twice, unseen, what one
 // does first: the command palette and Go to File (with a filter too), the panel with the Problems view, the side bar
-// and the Search view, an editor. Then everything is as it was - the side bar, the panel, their views, the focus -
-// the garbage is collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it out: what the first
-// time costs.)
+// and the Search view, an editor, the Settings editor. Then everything is as it was - the side bar, the panel, their
+// views, the focus - the garbage is collected, and the splash goes. (localStorage 'kodium.noWarmUp' = '1' leaves it
+// out: what the first time costs.)
 // Measured on the iPad 2 (first actions after the splash, with and without, interleaved): an editor of its own typed
 // into (an untitled document: suggestions, find) made the editor's first actions no quicker and took 12.7 s - it is
 // only opened and closed now, which makes the editor pane every file is shown in (the first two files open 0.16-0.18 s
-// sooner); the Settings editor opened beforehand opened 0.7 s sooner (4.3 s instead of 5), for 4.5 s more at every
-// start: left out.
+// sooner). The Settings editor, made and its tree built, opens in 1.2-1.5 s instead of 4.7, for 4.5 s more at every
+// start (it was only 0.7 s sooner while a setting registered "eventually" - window.newWindowProfile, at 40 s - came
+// after it and had its tree built again: vite.config.mjs quickerSettings).
 // The compiled code has to stay for that: Surfari's engine keeps it once the start's code was thrown away - which
 // JavaScriptCore did a minute after the start, or the engine at 75 s, right when one had begun to work: the warm-up's
 // went with it. So the app throws the start's code away between two steps (as soon as the engine can tell, 22 s after
@@ -153,6 +154,18 @@ export async function warmUp(): Promise<void> {
         } finally {
           await input.revert(pane.group.id).catch(() => undefined)
           await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
+        }
+      },
+      // the Settings editor, its tree built (unless one is open already - restored): opened again, it shows that tree
+      async () => {
+        const isSettings = (input?: { typeId: string }) => input?.typeId === 'workbench.input.settings2'
+        if (editors.editors.some(isSettings)) return
+        await run('workbench.action.openSettings2')
+        try {
+          await until(() => some('.settings-editor .setting-item'), 10000)
+        } finally {
+          const pane = editors.activeEditorPane
+          if (pane && isSettings(pane.input)) await pane.group.closeEditor(pane.input, { preserveFocus: true }).catch(() => undefined)
         }
       }
     ]
