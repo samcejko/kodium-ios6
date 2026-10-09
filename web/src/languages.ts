@@ -107,11 +107,12 @@ interface VSCodeTheme {
 }
 
 function makeTokenTheme(theme: VSCodeTheme) {
-  const cache = new Map<string, number>()
+  // (asked at every token: an object's own property, not the engine's Map stand-in - a function of the shim per get)
+  const cache: Record<string, number> = Object.create(null)
   const index = theme.getTokenColorIndex()
   return {
     match(languageId: number, token: string): number {
-      let metadata = cache.get(token)
+      let metadata = cache[token]
       if (metadata === undefined) {
         const parts = token.split('.')
         let scope = token
@@ -125,7 +126,7 @@ function makeTokenTheme(theme: VSCodeTheme) {
         // (comments, strings and regular expressions are told apart for brackets and auto-closing, as monaco does)
         const type = /\bcomment\b/.test(token) ? 1 : /\bstring\b/.test(token) ? 2 : /\bregexp?\b/.test(token) ? 3 : 0
         metadata = ((fg << FOREGROUND_OFFSET) | (fontStyle << FONT_STYLE_OFFSET) | (type << TOKEN_TYPE_OFFSET) | (DEFAULT_BG << BACKGROUND_OFFSET)) >>> 0
-        cache.set(token, metadata)
+        cache[token] = metadata
       }
       return (metadata | languageId) >>> 0
     }

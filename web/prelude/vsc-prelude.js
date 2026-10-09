@@ -79,7 +79,8 @@
     // engine gives it a timer 1 ms later and 50 ms to spend - right after every key, so the next key waited behind it
     // (up to 90 ms on the iPad 2). It runs once nothing was typed or touched for 0.2 s and the page itself is idle (three
     // timers of 10 ms in a row came on time: between the steps of a switch of editors the storage's flush of every
-    // component's state ran, 100 ms), or when its own timeout is up.
+    // component's state ran, 100 ms), or when its own timeout is up. A key or a touch while it runs leaves it no time
+    // (timeRemaining() 0), for work that asks between its steps (the background tokenization, web/vite.config.mjs).
     // The engine's garbage collection while the user pauses, too: JavaScriptCore collects on a timer some seconds after
     // a few megabytes were allocated (11 s after 5 MB), and at once when the allocations reach the heap's size - in
     // the middle of the next action as often as not, 0.3-0.6 s in the workbench. Once nothing was typed or touched for
@@ -121,7 +122,7 @@
             calm = now - runDue <= 15 ? calm + 1 : 0;
             var ready = quiet && calm >= 3;
             queue = [];
-            var idle = { didTimeout: false, timeRemaining: function () { return Math.max(0, 50 - (Date.now() - start)); } };
+            var idle = { didTimeout: false, timeRemaining: function () { return last > start ? 0 : Math.max(0, 50 - (Date.now() - start)); } };
             var late = { didTimeout: true, timeRemaining: function () { return 0; } };
             for (var k = 0; k < list.length; k++) {
                 var it = list[k];
@@ -145,6 +146,34 @@
         G.cancelIdleCallback = function (id) {
             for (var j = 0; j < queue.length; j++) if (queue[j].id === id) queue[j].off = true;
         };
+    })();
+    // A touch goes on to the element it began on, and when that element has left the page - a line of the editor or a
+    // list's row that the scroll under the finger recycled, a line drawn anew - its moves and its end reach that element
+    // alone, no listener of the document: VS Code's Gesture (the scroll stopped half way, measured: 36 lines into a
+    // finger's scroll of the editor, 3 rows into a list's), the engine's pointer events, the idle work's watch for input
+    // above (the garbage collection came in the middle of the scroll, 0.45 s). They are passed on to the document then.
+    (function () {
+        if (!document.createEvent) return;
+        var relay = function (e) {
+            var node = e.currentTarget;
+            if (document.documentElement.contains(node)) return;
+            try {
+                var copy = document.createEvent('TouchEvent');
+                copy.initTouchEvent(e.type, true, e.cancelable, window, 0, 0, 0, 0, 0, e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
+                    e.touches, e.targetTouches, e.changedTouches, e.scale, e.rotation);
+                document.dispatchEvent(copy);
+                if (copy.defaultPrevented && e.cancelable) e.preventDefault();
+            } catch (err) {}
+        };
+        document.addEventListener('touchstart', function (e) {
+            var node = e.target;
+            if (node && node.nodeType === 3) node = node.parentNode;
+            if (!node || node.__kdRelay || !node.addEventListener) return;
+            node.__kdRelay = true;
+            node.addEventListener('touchmove', relay, false);
+            node.addEventListener('touchend', relay, false);
+            node.addEventListener('touchcancel', relay, false);
+        }, true);
     })();
     // and what the engine's rewriter finds in the styles VS Code inserts at run time (its theme, icons, token colours)
     // reaches the shims without the marker rules, variable users and deferred values, as for the stylesheet (see
@@ -535,14 +564,26 @@
     }
     // instanceof (the lowered code asks __br_instanceof): such a proxy is an instance of the class its getPrototypeOf
     // trap names, as with a real Proxy (the storage service, for one, is initialized only when it is one)
+    // And a class without a hasInstance of its own - nearly every one - is asked with the engine's instanceof at once:
+    // the lowered helper looked the class's Symbol.hasInstance up each time (core-js's, through Function.prototype)
+    // after this function had checked for the proxy - 41,000 times while Monarch coloured a file of 1,000 lines
+    // (its rules' regexes are asked `instanceof RegExp` at every try), a third of that time.
     var OrigInst = G.__br_instanceof;
     if (typeof OrigInst === 'function' && !OrigInst.__vsc) {
         var hasOwn2 = Object.prototype.hasOwnProperty, isProto = Object.prototype.isPrototypeOf;
+        var HI = G.Symbol && G.Symbol.hasInstance;
+        var HK = HI === undefined || HI === null ? null : typeof HI === 'symbol' ? HI : String(HI);
+        var DEF_HI = HK === null ? undefined : Function.prototype[HK];
+        var proxied = function (x, C) {
+            var cp = C.prototype, xp = x.__vsc_proto;
+            return cp !== null && typeof cp === 'object' && (cp === xp || isProto.call(cp, xp));
+        };
         var VInst = function (x, C) {
-            if (x !== null && typeof x === 'object' && typeof C === 'function' && hasOwn2.call(x, '__vsc_proto')) {
-                var cp = C.prototype, xp = x.__vsc_proto;
-                if (cp !== null && typeof cp === 'object' && (cp === xp || isProto.call(cp, xp))) return true;
+            if (typeof C === 'function' && (HK === null || C[HK] === DEF_HI)) {
+                if (x instanceof C) return true;
+                return x !== null && typeof x === 'object' && x.__vsc_proto !== undefined && hasOwn2.call(x, '__vsc_proto') && proxied(x, C);
             }
+            if (x !== null && typeof x === 'object' && typeof C === 'function' && hasOwn2.call(x, '__vsc_proto') && proxied(x, C)) return true;
             return OrigInst(x, C);
         };
         VInst.__vsc = true;

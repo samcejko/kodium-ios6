@@ -762,6 +762,48 @@ function lighterTyping() {
     // it when it goes to the background, web/src/main.ts __kd_saveAll)
     ['/vs/workbench/services/storage/browser/storageService.js', [
       ['this.BROWSER_DEFAULT_FLUSH_INTERVAL = 5 * 1000;', 'this.BROWSER_DEFAULT_FLUSH_INTERVAL = 60 * 1000;']]],
+    // (Monarch asks each rule whether its regex is a RegExp or a function of the state at every try - 35,000 times
+    // for a file of 1,000 lines: the answer is kept with the regex it was given for; an action's cases are tried with
+    // an index, not the lowered for...of's function call per case)
+    ['/vs/editor/standalone/common/monarch/monarchCompile.js', [
+      ['    resolveRegex(state) {\n        if (this.regex instanceof RegExp) {\n            return this.regex;\n        } else {\n            return this.regex(state);\n        }\n    }',
+       '    resolveRegex(state) {\n        if (this.kdRegex !== this.regex) {\n            this.kdRegex = this.regex;\n            this.kdIsRegExp = this.regex instanceof RegExp;\n        }\n' +
+       '        return this.kdIsRegExp ? this.regex : this.regex(state);\n    }'],
+      ['                for (const _case of cases) {\n                    const didmatch = (!_case.test || _case.test(id, matches, state, eos));\n',
+       '                for (let kdIndex = 0; kdIndex < cases.length; kdIndex++) {\n                    const _case = cases[kdIndex];\n                    const didmatch = (!_case.test || _case.test(id, matches, state, eos));\n']]],
+    // (and tries the rules with an index and the regex's own exec - the lowered for...of called a function for each
+    // rule, and String.prototype.match went through the engine's regexp shim; Monarch's regexes have no g flag, for
+    // which match is exec -, with a rule's regex taken without a call when it is one. A token's type is sanitized
+    // once, and the tokens go in without Array.prototype.push: the engine's stand-in, two functions more a push.)
+    ['/vs/editor/standalone/common/monarch/monarchLexer.js', [
+      ['                for (const rule of rules) {\n                    if (pos === 0 || !rule.matchOnlyAtLineStart) {\n                        matches = restOfLine.match(rule.resolveRegex(state));\n',
+       '                for (let kdIndex = 0; kdIndex < rules.length; kdIndex++) {\n                    const rule = rules[kdIndex];\n                    if (pos === 0 || !rule.matchOnlyAtLineStart) {\n' +
+       '                        const kdRegex = rule.kdRegex === rule.regex && rule.kdIsRegExp ? rule.regex : rule.resolveRegex(state);\n' +
+       '                        matches = kdRegex.exec(restOfLine);\n'],
+      ['                    const token = (result === "" ? "" : result + this._lexer.tokenPostfix);\n                    tokenType = sanitize(token);\n',
+       '                    const token = (result === "" ? "" : result + this._lexer.tokenPostfix);\n                    tokenType = kdSanitize(token);\n'],
+      ['        this._lastTokenMetadata = metadata;\n        this._tokens.push(startOffset);\n        this._tokens.push(metadata);\n',
+       '        this._lastTokenMetadata = metadata;\n        const kdTokens = this._tokens;\n        kdTokens[kdTokens.length] = startOffset;\n        kdTokens[kdTokens.length] = metadata;\n'],
+      ['function findBracket(lexer, matched) {\n',
+       'const kdSanitized = { count: 0, types: Object.create(null) };\n' +
+       'function kdSanitize(token) {\n' +
+       '    let type = kdSanitized.types[token];\n' +
+       '    if (type === undefined) {\n' +
+       '        if (++kdSanitized.count > 2000) {\n            kdSanitized.count = 1;\n            kdSanitized.types = Object.create(null);\n        }\n' +
+       '        type = kdSanitized.types[token] = sanitize(token);\n' +
+       '    }\n' +
+       '    return type;\n' +
+       '}\n' +
+       'function findBracket(lexer, matched) {\n']]],
+    // (the rest of a file's tokens is made in the page's idle time, in steps until the 50 ms given are spent: it stops
+    // at the next step once a key or a touch came - timeRemaining() is 0 then, vsc-prelude.js - instead of going on to
+    // the end with the input's frame waiting behind it. A step is 5 ms instead of 1: each one's tokens went to the
+    // model, the view's parts and the bracket pairs on their own, and the next step came through a message event.)
+    ['/vs/editor/common/model/textModelTokens.js', [
+      ['            this._backgroundTokenizeForAtLeast1ms();\n            if (Date.now() < endTime) {\n',
+       '            this._backgroundTokenizeForAtLeast1ms();\n            if (Date.now() < endTime && deadline.timeRemaining() > 0) {\n'],
+      ['        do {\n            if (sw.elapsed() > 1) {\n                break;\n            }\n',
+       '        do {\n            if (sw.elapsed() > 5) {\n                break;\n            }\n']]],
     ['/vs/platform/log/common/logService.js', [
       ['    trace(message, ...args) {\n        this.logger.trace(message, ...args);\n    }',
        '    trace(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 1) {\n            return;\n        }\n        this.logger.trace.apply(this.logger, arguments);\n    }'],
@@ -916,10 +958,102 @@ function smootherScroll() {
        '        } else {\n            this._domNode.setTop(-adjustedScrollTop);\n        }']]],
     // (the hidden textarea got the font's line height and then its own - 19px, then 1px - at every render of the
     // editor: a change of its style at every frame of a scroll and every key, a layout of the page each time. The
-    // font is applied when it changes.)
+    // font is applied when it changes. And while the editor scrolls, the textarea stays where it was put at the
+    // cursor - its top changed at every frame in which the cursor's line was on the screen, a layout of the page each:
+    // it goes to the cursor once the scrolling stops, or at once when the cursor moves.)
     ['/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js', [
       ['        const tac = this.textAreaCover;\n        applyFontInfo(ta, this._fontInfo);\n',
-       '        const tac = this.textAreaCover;\n        if (this.kdFontInfo !== this._fontInfo) {\n            this.kdFontInfo = this._fontInfo;\n            applyFontInfo(ta, this._fontInfo);\n        }\n']]],
+       '        const tac = this.textAreaCover;\n        if (this.kdFontInfo !== this._fontInfo) {\n            this.kdFontInfo = this._fontInfo;\n            applyFontInfo(ta, this._fontInfo);\n        }\n'],
+      ['    onScrollChanged(e) {\n        this._scrollLeft = e.scrollLeft;\n        this._scrollTop = e.scrollTop;\n        return true;\n    }',
+       '    onScrollChanged(e) {\n        this._scrollLeft = e.scrollLeft;\n        this._scrollTop = e.scrollTop;\n' +
+       '        if (e.scrollTopChanged) {\n            this.kdScrolledAt = Date.now();\n        }\n        return true;\n    }'],
+      ['        this._doRender({\n            lastRenderPosition: this._primaryCursorPosition,\n            top: top,\n',
+       '        if (this.kdKeepPlace()) {\n            return;\n        }\n' +
+       '        this._doRender({\n            lastRenderPosition: this._primaryCursorPosition,\n            top: top,\n'],
+      ['    _renderAtTopLeft() {\n',
+       '    kdKeepPlace() {\n' +
+       '        if (Date.now() - (this.kdScrolledAt || 0) >= 250 || !this._lastRenderPosition || !this._lastRenderPosition.equals(this._primaryCursorPosition)) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '        if (!this.kdLate) {\n' +
+       '            if (!this.kdLateRegistered) {\n' +
+       '                this.kdLateRegistered = true;\n' +
+       '                this._register({ dispose: () => {\n                    clearTimeout(this.kdLate);\n                    this.kdLate = 0;\n                } });\n' +
+       '            }\n' +
+       '            this.kdLate = setTimeout(() => {\n                this.kdLate = 0;\n                this._render();\n            }, 300);\n' +
+       '        }\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    _renderAtTopLeft() {\n']]],
+    // (a touch whose element left the page - the scroll under the finger recycled its line or row, vsc-prelude.js
+    // passes its moves on to the document - still goes to the targets that held it when it began: their contains()
+    // no longer finds it, and the scroll stopped half way, its momentum too)
+    ['/vs/base/browser/touch.js', [
+      ['                rollingPageY: [touch.pageY]\n            };\n',
+       '                rollingPageY: [touch.pageY],\n                kdTargets: this.kdTargetsOf(touch.target)\n            };\n'],
+      ['                const evt = this.newGestureEvent(EventType.Tap, data.initialTarget);\n',
+       '                const evt = this.newGestureEvent(EventType.Tap, data.initialTarget);\n                evt.kdTargets = data.kdTargets;\n'],
+      ['                const evt = this.newGestureEvent(EventType.Contextmenu, data.initialTarget);\n',
+       '                const evt = this.newGestureEvent(EventType.Contextmenu, data.initialTarget);\n                evt.kdTargets = data.kdTargets;\n'],
+      ['                const dispatchTo = [...this.targets].filter(t => data.initialTarget instanceof Node && t.contains(data.initialTarget));\n',
+       '                const dispatchTo = kdDetached(data.initialTarget) ? data.kdTargets.filter(t => !kdDetached(t)) : [...this.targets].filter(t => data.initialTarget instanceof Node && t.contains(data.initialTarget));\n'],
+      ['            this.dispatchEvent(this.newGestureEvent(EventType.End, data.initialTarget));\n',
+       '            const kdEnd = this.newGestureEvent(EventType.End, data.initialTarget);\n            kdEnd.kdTargets = data.kdTargets;\n            this.dispatchEvent(kdEnd);\n'],
+      ['            const evt = this.newGestureEvent(EventType.Change, data.initialTarget);\n            evt.translationX = touch.pageX - data.rollingPageX.at(-1);\n',
+       '            const evt = this.newGestureEvent(EventType.Change, data.initialTarget);\n            evt.kdTargets = data.kdTargets;\n            evt.translationX = touch.pageX - data.rollingPageX.at(-1);\n'],
+      ['        if (event.initialTarget instanceof Node) {\n            for (const ignoreTarget of this.ignoreTargets) {\n',
+       '        if (event.kdTargets && kdDetached(event.initialTarget)) {\n' +
+       '            for (const target of event.kdTargets) {\n                if (!kdDetached(target)) {\n                    target.dispatchEvent(event);\n                    this.dispatched = true;\n                }\n            }\n' +
+       '            return;\n' +
+       '        }\n' +
+       '        if (event.initialTarget instanceof Node) {\n            for (const ignoreTarget of this.ignoreTargets) {\n'],
+      ['    inertia(targetWindow, dispatchTo, t1, vX, dirX, x, vY, dirY, y) {\n',
+       '    kdTargetsOf(node) {\n' +
+       '        const targets = [];\n' +
+       '        if (!(node instanceof Node)) {\n            return targets;\n        }\n' +
+       '        for (const ignoreTarget of this.ignoreTargets) {\n            if (ignoreTarget.contains(node)) {\n                return targets;\n            }\n        }\n' +
+       '        for (const target of this.targets) {\n' +
+       '            if (target.contains(node)) {\n' +
+       '                let depth = 0;\n                let now = node;\n' +
+       '                while (now && now !== target) {\n                    depth++;\n                    now = now.parentElement;\n                }\n' +
+       '                targets.push([depth, target]);\n' +
+       '            }\n' +
+       '        }\n' +
+       '        targets.sort((a, b) => a[0] - b[0]);\n' +
+       '        return targets.map(t => t[1]);\n' +
+       '    }\n' +
+       '    inertia(targetWindow, dispatchTo, t1, vX, dirX, x, vY, dirY, y) {\n'],
+      ['class Gesture extends Disposable {',
+       'function kdDetached(node) {\n' +
+       '    return node instanceof Node && !!node.ownerDocument && !node.ownerDocument.documentElement.contains(node);\n' +
+       '}\n' +
+       'class Gesture extends Disposable {']]],
+    // (a list's rows - their container composited, VS Code's transformOptimization - are moved by its transform too:
+    // its top laid the page out at every frame of a list's scroll, the explorer's, quick open's, the suggestions')
+    ['/vs/base/browser/ui/list/listView.js', [
+      ['            this.rowsContainer.style.contain = "strict";\n        }\n',
+       '            this.rowsContainer.style.contain = "strict";\n            this.kdMoveRows = true;\n        }\n'],
+      ['        if (renderLeft !== undefined) {\n            this.rowsContainer.style.left = `-${renderLeft}px`;\n        }\n        this.rowsContainer.style.top = `-${renderTop}px`;\n',
+       '        if (this.kdMoveRows) {\n' +
+       '            if (renderLeft !== undefined) {\n                this.kdRenderLeft = renderLeft;\n            }\n' +
+       '            const kdTransform = "translate3d(" + -(this.kdRenderLeft || 0) + "px, " + -renderTop + "px, 0px)";\n' +
+       '            if (this.kdTransform !== kdTransform) {\n                this.kdTransform = kdTransform;\n                this.rowsContainer.style.transform = kdTransform;\n            }\n' +
+       '        } else {\n' +
+       '            if (renderLeft !== undefined) {\n                this.rowsContainer.style.left = `-${renderLeft}px`;\n            }\n' +
+       '            this.rowsContainer.style.top = `-${renderTop}px`;\n' +
+       '        }\n']]],
+    // (a scrollbar's slider - composited, layer hinting - is moved by its transform, as the lines: its top laid the
+    // page out at every frame of a scroll, in the editor and in every list)
+    ['/vs/base/browser/ui/scrollbar/verticalScrollbar.js', [
+      ['        this.slider.setHeight(sliderSize);\n        this.slider.setTop(sliderPosition);\n',
+       '        this.slider.setHeight(sliderSize);\n' +
+       '        if (self.__kdMoveLayer) {\n            this.slider.setTop(0);\n            self.__kdMoveLayer(this.slider, 0, sliderPosition);\n' +
+       '        } else {\n            this.slider.setTop(sliderPosition);\n        }\n']]],
+    ['/vs/base/browser/ui/scrollbar/horizontalScrollbar.js', [
+      ['        this.slider.setWidth(sliderSize);\n        this.slider.setLeft(sliderPosition);\n',
+       '        this.slider.setWidth(sliderSize);\n' +
+       '        if (self.__kdMoveLayer) {\n            this.slider.setLeft(0);\n            self.__kdMoveLayer(this.slider, sliderPosition, 0);\n' +
+       '        } else {\n            this.slider.setLeft(sliderPosition);\n        }\n']]],
     // (a content widget - hover, suggestions, parameter hints - whose line is drawn but off the screen stays hidden, as
     // when only the lines on the screen were drawn)
     ['/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js', [
@@ -1107,6 +1241,10 @@ function openTimers() {
     ['/vs/platform/files/common/fileService.js', [
       ['    async validateReadFile(resource, options) {\n        const stat = await this.resolve(resource, {\n            resolveMetadata: true\n        });\n',
        '    async validateReadFile(resource, options) {\n        const stat = await this.resolve(resource, {\n            resolveMetadata: true\n        });\n        ' + m('stat resolved')]]],
+    // (a file's background tokenization done)
+    ['/vs/editor/common/model/tokens/tokenizerSyntaxTokenBackend.js', [
+      ['                    const newState = BackgroundTokenizationState.Completed;\n',
+       '                    self.__kdMark && self.__kdMark("tokenized");\n                    const newState = BackgroundTokenizationState.Completed;\n']]],
     // every context key set: self.__kdCtx(key, changed, ms of its change event's listeners, listeners)
     ['/vs/platform/contextkey/browser/contextKeyService.js', [
       ['        if (myContext.setValue(key, value)) {\n            this._onDidChangeContext.fire(( new SimpleContextKeyChangeEvent(key)));\n        }',

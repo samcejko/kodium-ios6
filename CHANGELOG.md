@@ -64,6 +64,23 @@ The first build.
   the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
   editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
   go the asynchronous way.
+- A finger's scroll no longer stops half way. A touch goes on to the element it began on, and the scroll under the
+  finger recycles that element - a line of the editor, a row of a list - or draws it anew; from then on its moves
+  reached no listener of the document, so the scroll stopped (measured with touches made on a line: 36 lines into a
+  scroll of the editor, 3 rows into the command palette's list) and its momentum was lost, as was the end of the
+  touch. Its moves and its end are passed on to the document now, and VS Code's gestures go to the editor or list
+  that held the touch when it began. The app's collection of garbage in pauses, which took the stopped moves for a
+  pause, no longer comes in the middle of a long scroll (0.45 s).
+- The code is coloured (Monarch) 2.4 times as fast: a file of 1,500 lines in 1.2 s instead of 2.8 on the iPad 2, and a
+  file just opened has all its colours a fifth sooner (7.7 s instead of 9.2-11.6, interleaved). Monarch asked each
+  rule whether its regex is a RegExp at every try (instanceof, through the lowering's Symbol.hasInstance helper),
+  matched through String.prototype.match (the engine's regexp shim, a function more per try: exec is the same for
+  Monarch's regexes, which have no g flag), went through the rules and cases with the lowered for...of (a function
+  call per rule), sanitized every token's type anew and looked its colour up in a Map (the engine's stand-in) - the
+  answers are kept now. instanceof in general is quicker too: the lowering's helper goes straight to the engine's
+  own instanceof when the class has no Symbol.hasInstance of its own. The rest of a file is coloured in the page's
+  idle time in steps of 5 ms instead of 1 (each step's tokens went through the model, the view and the bracket
+  pairs), and stops at the next step when a key or a touch comes instead of going on for the rest of its 50 ms.
 - Scrolling with a finger is twice as smooth: 32-36 ms a frame instead of 65-74 on the iPad 2 (the median, measured
   with touch events made in the page - the way a finger scrolls - interleaved), typing as quick as before. A frame in
   which lines came onto the screen cost ~65 ms and one that only moved them ~27: the old WebKit's style, layout,
@@ -78,6 +95,9 @@ The first build.
   of the margin (composited) move by their transform instead of top: a change of top laid the page out at every frame,
   with the compositor's pass over all of the page's 300-500 layers (another 10 %: 26-31 ms a frame). The editor's
   hidden text area no longer gets the font's line height and then its own (19 px, then 1 px) at every frame and key.
+  The scrollbars' sliders and the rows of every list (the explorer, quick open, the suggestions) are moved by their
+  transform as well, and the hidden text area stays where it was put at the cursor while the editor scrolls (it goes
+  there once the scrolling stops): another 10 %, 26-28 ms a frame instead of 30-32 (interleaved).
 - The workbench's state (views, the editors' places, the history) is written every 60 s, as VS Code's desktop does,
   instead of every 5 s as in a browser tab: each time every component saved its state, 50-100 ms on the iPad 2 in the
   next pause of typing. The app writes it when it goes to the background, with the changed files.
