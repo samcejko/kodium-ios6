@@ -877,6 +877,38 @@ function smootherScroll() {
        '        return data;\n' +
        '    }\n' +
        '    _createCoordinatedRendering() {\n']]],
+    // (the lines' layer and the margin's - composited, layer hinting - are moved by their transform instead of top and
+    // left: a change of top laid the page out at every frame of a scroll, with the compositor's pass over all of the
+    // page's ~300-500 layers; a transform is the compositor's alone)
+    ['/vs/editor/browser/viewParts/viewLines/viewLines.js', [
+      ['        this._linesContent.setLayerHinting(this._canUseLayerHinting);\n        this._linesContent.setContain("strict");\n' +
+       '        const adjustedScrollTop = this._context.viewLayout.getCurrentScrollTop() - viewportData.bigNumbersDelta;\n' +
+       '        this._linesContent.setTop(-adjustedScrollTop);\n        this._linesContent.setLeft(-this._context.viewLayout.getCurrentScrollLeft());',
+       '        this._linesContent.setLayerHinting(this._canUseLayerHinting);\n        this._linesContent.setContain("strict");\n' +
+       '        const adjustedScrollTop = this._context.viewLayout.getCurrentScrollTop() - viewportData.bigNumbersDelta;\n' +
+       '        if (this._canUseLayerHinting) {\n' +
+       '            this._linesContent.setTop(0);\n            this._linesContent.setLeft(0);\n' +
+       '            __kdMoveLayer(this._linesContent, -this._context.viewLayout.getCurrentScrollLeft(), -adjustedScrollTop);\n' +
+       '        } else {\n' +
+       '            this._linesContent.setTop(-adjustedScrollTop);\n            this._linesContent.setLeft(-this._context.viewLayout.getCurrentScrollLeft());\n' +
+       '        }'],
+      ['class ViewLines extends ViewPart {',
+       'function __kdMoveLayer(node, x, y) {\n' +
+       '    const transform = "translate3d(" + x + "px, " + y + "px, 0px)";\n' +
+       '    if (node.kdTransform === transform) {\n        return;\n    }\n' +
+       '    node.kdTransform = transform;\n' +
+       '    node._layerHint = true;\n' +
+       '    const style = node.domNode.style;\n' +
+       '    if ("webkitTransform" in style) {\n        style.webkitTransform = transform;\n    } else {\n        style.transform = transform;\n    }\n' +
+       '}\n' +
+       'self.__kdMoveLayer = __kdMoveLayer;\n' +
+       'class ViewLines extends ViewPart {']]],
+    ['/vs/editor/browser/viewParts/margin/margin.js', [
+      ['        const adjustedScrollTop = ctx.scrollTop - ctx.bigNumbersDelta;\n        this._domNode.setTop(-adjustedScrollTop);',
+       '        const adjustedScrollTop = ctx.scrollTop - ctx.bigNumbersDelta;\n' +
+       '        if (this._canUseLayerHinting && self.__kdMoveLayer) {\n' +
+       '            this._domNode.setTop(0);\n            self.__kdMoveLayer(this._domNode, 0, -adjustedScrollTop);\n' +
+       '        } else {\n            this._domNode.setTop(-adjustedScrollTop);\n        }']]],
     // (a content widget - hover, suggestions, parameter hints - whose line is drawn but off the screen stays hidden, as
     // when only the lines on the screen were drawn)
     ['/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js', [

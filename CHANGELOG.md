@@ -74,7 +74,9 @@ The first build.
   moves were taken for mouse moves (the engine makes pointer events of touches): the position under the finger worked
   out (a forced layout and caretRangeFromPoint) and the hover's handlers run at every move - no longer; the line
   numbers and (without bracket pair guides) the indent guides keep each line's HTML while only the scroll position
-  changes, and the guides no longer ask each line's length to see whether it wraps.
+  changes, and the guides no longer ask each line's length to see whether it wraps. And the layers of the lines and
+  of the margin (composited) move by their transform instead of top: a change of top laid the page out at every frame,
+  with the compositor's pass over all of the page's 300-500 layers (another 10 %: 26-31 ms a frame).
 - Scrolling: the first scroll of a file 10-15 % quicker (119 ms a frame instead of 131-140 on the iPad 2), the rest
   ~2 %. The engine's grid pass - after every change of the page has settled, every 150-300 ms while scrolling -
   queried the whole page nine times for the modal editor's grid, which never shows here (workbench.editor.useModal
