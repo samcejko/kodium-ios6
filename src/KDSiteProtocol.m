@@ -133,11 +133,23 @@ static NSString *KDStylesheetCacheDirectory(void)
         return;
     }
     // the workbench has had no input for a while (web/prelude/vsc-prelude.js): the garbage collection JavaScriptCore
-    // would run some seconds later - in the middle of the next action, as often as not - comes now, once 4 MB were
-    // allocated since the last one (Surfari's engine)
+    // would run some seconds later - in the middle of the next action, as often as not - comes now, once ?mb= (4 if
+    // not given) megabytes were allocated since the last one (Surfari's engine)
     if ([url.path isEqualToString:@"/__kd/app/idle"]) {
-        [BRJSEngine collectPageGarbageIfAllocated:4 * 1024 * 1024];
+        NSInteger mb = 4;
+        for (NSString *pair in [url.query ?: @"" componentsSeparatedByString:@"&"]) {
+            if ([pair hasPrefix:@"mb="]) mb = MAX(1, MIN(64, [[pair substringFromIndex:3] integerValue]));
+        }
+        [BRJSEngine collectPageGarbageIfAllocated:(size_t)mb * 1024 * 1024];
         [self deliverData:[NSData data] type:@"text/plain" status:200];
+        return;
+    }
+    // what the page's heap has allocated since its last collection, for measuring ("X of Y MB allocated since the last
+    // collection (Z ms)", empty where the engine cannot tell). Read here, not on the WebThread: a synchronous request
+    // holds that thread, and the numbers are only read.
+    if ([url.path isEqualToString:@"/__kd/app/heap"]) {
+        NSString *report = [BRJSEngine pageHeapReport] ?: @"";
+        [self deliverData:[report dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain" status:200];
         return;
     }
     // The warm-up behind the splash (web/src/warmup.ts) asks between its steps: the start's compiled code thrown away now.

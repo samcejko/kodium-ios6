@@ -775,6 +775,13 @@ function settingsTimers() {
       ['        this.addCtrlAInterceptor(this.rootElement);', '        ' + m('created') + '        this.addCtrlAInterceptor(this.rootElement);'],
       ['        const model = await this.input.resolve();', '        ' + m('setInput') + '        const model = await this.input.resolve();\n        ' + m('input resolved')],
       ['        this.kdTreeGroups = this.kdTreeShape(', '        ' + m('onConfigUpdate') + '        this.kdTreeGroups = this.kdTreeShape('],
+      ['        } else if (!this.isVisible()) {\n            this.kdTreeStale = true;\n',
+       '        } else if (!this.isVisible()) {\n            (self.__kdLog = self.__kdLog || []).push(Math.round(performance.now()) + " tree stale (refreshTree hidden)");\n            this.kdTreeStale = true;\n'],
+      ['        } else {\n            this.kdTreeStale = true;\n',
+       '        } else {\n            (self.__kdLog = self.__kdLog || []).push(Math.round(performance.now()) + " tree stale (refreshTOCTree hidden)");\n            this.kdTreeStale = true;\n'],
+      ['    async kdShowTree() {\n', '    async kdShowTree() {\n        (self.__kdLog = self.__kdLog || []).push(Math.round(performance.now()) + " kdShowTree, stale rows " + (this.kdStaleRows ? this.kdStaleRows.length : 0));\n'],
+      ['    updateElementsByKey(keys) {\n', '    updateElementsByKey(keys) {\n        (self.__kdLog = self.__kdLog || []).push(Math.round(performance.now()) + " updateElementsByKey " + keys.size + (this.isVisible() ? " visible" : " hidden") + ": " + [...keys].slice(0, 4).join("|"));\n'],
+      ['    kdSameTree(model) {\n', '    kdSameTree(model) {\n        (self.__kdLog = self.__kdLog || []).push(Math.round(performance.now()) + " kdSameTree: model " + !!this.settingsTreeModel.value + ", groups " + !!this.kdTreeGroups + ", stale " + !!this.kdTreeStale + ", advanced " + (this.kdTreeAdvanced === this.canShowAdvancedSettings()) + ", query " + !!this.viewState.query + ", search " + !!this.searchResultModel);\n'],
       ['        const settingsResult = resolveSettingsTree(tocData, coreSettingsGroups, filter);',
        '        ' + m('groups') + '        const settingsResult = resolveSettingsTree(tocData, coreSettingsGroups, filter);\n        ' + m('tree resolved')],
       ['        const additionalGroups = [];\n        let setAdditionalGroups = false;', '        const additionalGroups = [];\n        let setAdditionalGroups = false;\n        ' + m('toggle?')],
@@ -1063,8 +1070,16 @@ function nativeSelects() {
 // of them - only the keys the settings have (all, with a language section in them); the sash sizes went into a <style>
 // of CSS variables, which the iOS 6 engine does not have - only a full rebuild of its rule sets (the sizes still reach
 // the sashes, in code); the schema of the paste/drop kinds (settings' suggestions) is left out.
+// (and localize() - thousands of calls at a start, every label - made the array of its format arguments from the
+// function's arguments object even when there were none: the old engine builds the whole arguments object for that,
+// 5 µs a call on the iPad 2 against 0.2 for reading arguments.length)
 function quickerStart() {
   return patchModules('kodium-quicker-start', [
+    ['/vscode/src/vs/nls.js', [
+      ['function localize(data , message , ...args) {\n',
+       'const kdNoArgs = [];\nfunction localize(data , message) {\n    const args = arguments.length > 2 ? Array.prototype.slice.call(arguments, 2) : kdNoArgs;\n'],
+      ['function localize2(data , originalMessage, ...args) {\n',
+       'function localize2(data , originalMessage) {\n    const args = arguments.length > 2 ? Array.prototype.slice.call(arguments, 2) : kdNoArgs;\n']]],
     ['/vs/workbench/common/configuration.js', [
       ['    async migrateConfigurations(migrations) {\n',
        '    async migrateConfigurations(migrations) {\n' +

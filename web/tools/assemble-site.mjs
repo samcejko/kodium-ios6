@@ -211,11 +211,24 @@ for (const name of fs.readdirSync(path.join(out, 'assets'))) {
 const pack = fs.readFileSync(path.join(web, 'node_modules', '@codingame', 'monaco-vscode-language-pack-cs', 'translations', 'main.i18n.json.js'), 'utf8')
 const tail = /\n\s*export\s*\{\s*content\s+as\s+default\s*\};?\s*$/
 if (!/^var content = \[/.test(pack) || !tail.test(pack)) throw new Error('assemble-site: the Czech language pack has another form')
+const packCtx = vm.createContext({})
+vm.runInContext(pack.replace(tail, '\n'), packCtx)
+const messages = packCtx.content
+if (!Array.isArray(messages) || messages.length < 1000) throw new Error('assemble-site: the Czech language pack has no messages')
+// Only the messages the bundle asks for: the pack has all of VS Code's (22 600), the bundle's code numbers ~8 000 of
+// them - every call with a number as its first argument counts, more than are messages - and the rest were 1.6 MB of
+// strings in the page's heap, all the time. Each one left out is a 0, for which VS Code takes its English text.
+const bundleCode = fs.readFileSync(path.join(out, 'assets', 'workbench.es5.js'), 'utf8')
+const asked = new Set()
+for (const m of bundleCode.matchAll(/[\w$]\((\d{1,5}),/g)) asked.add(+m[1])
 // (two buttons of the "trust the publisher?" question came out as "Důvěřovat vydavateli &> Nainstalovat" in the
 // translation: the "&&" of an ampersand gone wrong)
+const kept = messages.map((text, i) => asked.has(i) && typeof text === 'string' ? text.replace(/ &> Nainstalovat$/, ' a nainstalovat') : 0)
+const keptCount = kept.filter((text) => text !== 0).length
 const nls = '/* VS Code\'s texts in Czech: @codingame/monaco-vscode-language-pack-cs (MIT; the vscode-loc translations, MIT) */\n' +
-  '(function () {\n' + pack.replace(tail, '\n').replace(/ &> Nainstalovat"/g, ' a nainstalovat"') +
+  '(function () {\nvar content = ' + JSON.stringify(kept).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') + ';\n' +
   'window._VSCODE_NLS_MESSAGES = content;\nwindow._VSCODE_NLS_LANGUAGE = \'cs\';\n})();\n'
+console.log('Czech messages:', keptCount, 'of', messages.length, '(' + (nls.length / 1024).toFixed(0) + ' KB)')
 const acornCtx = vm.createContext({})
 vm.runInContext(fs.readFileSync(path.join(web, 'tp', 'acorn.js'), 'utf8'), acornCtx)
 acornCtx.acorn.parse(nls, { ecmaVersion: 5 })   // (the iOS 6 engine reads it as it is)

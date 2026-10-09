@@ -51,6 +51,13 @@ The first build.
   checks a value (the default settings 0.27 s -> 0.07 s). Opened again, it no longer asks for the installed extensions
   (0.45-0.55 s) - only after one was installed, removed or changed. And a setting changed while the editor was closed
   (in settings.json, by a command) shows its new value when it opens again: the row on the screen kept the old one.
+- Garbage is collected in a pause only once 12 MB were allocated since the last collection (was 4): a collection takes
+  0.35-0.5 s on the iPad 2 however little there is to collect (the workbench's ~49 MB are gone through), and each one
+  was a chance for the next touch or key to wait for it; the heap's 25-40 MB of free room takes the allocations
+  meanwhile, so the app's memory stays as it was. (/__kd/app/idle?mb=, and /__kd/app/heap for measuring.)
+- The Czech texts are only those the workbench asks for: 7 900 of the language pack's 22 600 messages (the file 1.3 MB
+  -> 0.5 MB, ~11 000 fewer objects in the page's heap); a message left out would show in English. And localize() no
+  longer builds the arguments object of every call (5 µs each on the iPad 2), thousands of them at every start.
 - What is pressed shows at once, while the finger is on it: a button of a toolbar or the activity bar, a tab, a row
   of a list or tree (the explorer's, suggestions, the command palette's), a menu's item, a button, a status bar item,
   a section's header. What a tap does takes the iPad 2 0.3-1 s, and nothing showed until then: VS Code marks what is
