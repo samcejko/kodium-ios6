@@ -76,6 +76,13 @@ The first build.
   iPad 2.
 - The warm-up also opens and closes an editor of its own (an untitled document, nothing typed): the editor pane every
   file is shown in is made then, and the first two files open 0.16-0.18 s sooner.
+- The views' title bars (Explorer, Open Editors, Outline, Timeline) make their toolbars again only when their actions
+  change: the first file opened had all of them made anew though they came out the same.
+- Every key does ~10 % less (in the profiler 80-100 ms inside a key instead of 97-120): whether the key should indent
+  its line anew is worked out on the line's text with the brackets inside strings, comments and regular expressions
+  taken out - new tokens were made for that at every key (13 ms of it; now 3.6). A line without a bracket in such a
+  token, in one language, is that text already and is taken as it is - the same answers (checked by typing the same
+  code with and without).
 - Scrolling ~5 % faster (79-80 ms a frame instead of 83 on the iPad 2): the indent guides cost 11 ms of each frame and
   now 5. Each line's guides are kept while the text is the same (a scroll works out the lines it brings in, not all
   the lines on the screen), and without bracket pair guides (off by default) the indent guides no longer go through

@@ -285,8 +285,52 @@ function plainFigures() {
 // - the indent guides of every line on the screen, at every frame of a scroll, went through a queue of the line's
 //   bracket pair guides - which are off - with two spreads per guide (lowered to ES5: copies through slice) and the
 //   engine's push: without bracket pair guides, the indent guides alone (an eighth of a scroll frame in the profiler).
+// - every key typed asks whether it should indent its line anew (the language's indentation rules), on the line's text
+//   with the brackets inside strings, comments and regular expressions taken out - new tokens made for that, sliced,
+//   typed arrays: 13 ms of a key in the profiler. A line with no bracket in such a token is that text already: taken as
+//   it is (the same answers).
 function smootherEditor() {
   return patchModules('kodium-smoother-editor', [
+    ['/vs/editor/common/languages/autoIndent.js', [
+      ['    const indentationContextProcessor = ( new IndentationContextProcessor(model, languageConfigurationService));\n' +
+       '    const processedContextTokens = indentationContextProcessor.getProcessedTokenContextAroundRange(range);\n' +
+       '    const beforeRangeText = processedContextTokens.beforeRangeProcessedTokens.getLineContent();\n' +
+       '    const afterRangeText = processedContextTokens.afterRangeProcessedTokens.getLineContent();\n' +
+       '    const textAroundRange = beforeRangeText + afterRangeText;\n' +
+       '    const textAroundRangeWithCharacter = beforeRangeText + ch + afterRangeText;\n' +
+       '    if (!indentRulesSupport.shouldDecrease(textAroundRange)',
+       '    let beforeRangeText, afterRangeText;\n' +
+       '    const kdLine = kdPlainLine(model, range, languageConfigurationService, languageId);\n' +
+       '    if (kdLine !== null) {\n' +
+       '        beforeRangeText = kdLine.substring(0, range.startColumn - 1);\n' +
+       '        afterRangeText = kdLine.substring(range.endColumn - 1);\n' +
+       '    } else {\n' +
+       '        const indentationContextProcessor = ( new IndentationContextProcessor(model, languageConfigurationService));\n' +
+       '        const processedContextTokens = indentationContextProcessor.getProcessedTokenContextAroundRange(range);\n' +
+       '        beforeRangeText = processedContextTokens.beforeRangeProcessedTokens.getLineContent();\n' +
+       '        afterRangeText = processedContextTokens.afterRangeProcessedTokens.getLineContent();\n' +
+       '    }\n' +
+       '    const textAroundRange = beforeRangeText + afterRangeText;\n' +
+       '    const textAroundRangeWithCharacter = beforeRangeText + ch + afterRangeText;\n' +
+       '    if (!indentRulesSupport.shouldDecrease(textAroundRange)']],
+     '// (the line as it is - one language on it, no bracket in a string, comment or regex token - or null)\n' +
+     'function kdPlainLine(model, range, languageConfigurationService, languageId) {\n' +
+     '    if (range.startLineNumber !== range.endLineNumber) {\n        return null;\n    }\n' +
+     '    const lineNumber = range.startLineNumber;\n' +
+     '    model.tokenization.forceTokenization(lineNumber);\n' +
+     '    const tokens = model.tokenization.getLineTokens(lineNumber);\n' +
+     '    const text = tokens.getLineContent();\n' +
+     '    const brackets = languageConfigurationService.getLanguageConfiguration(languageId).bracketsNew;\n' +
+     '    let test = brackets.kdTest;\n' +
+     '    if (test === undefined) {\n        test = brackets.kdTest = brackets.getBracketRegExp();\n    }\n' +
+     '    const anyBracket = !!test && test.test(text);\n' +
+     '    for (let i = 0, n = tokens.getCount(); i < n; i++) {\n' +
+     '        if (tokens.getLanguageId(i) !== languageId) {\n            return null;\n        }\n' +
+     '        const type = anyBracket ? tokens.getStandardTokenType(i) : 0;\n' +
+     '        if ((type === 1 || type === 2 || type === 3) && test.test(text.substring(tokens.getStartOffset(i), tokens.getEndOffset(i)))) {\n            return null;\n        }\n' +
+     '    }\n' +
+     '    return text;\n' +
+     '}\n'],
     ['/vs/editor/browser/viewParts/indentGuides/indentGuides.js', [
       ['        const result = [];\n        for (let lineNumber = visibleStartLineNumber; lineNumber <= visibleEndLineNumber; lineNumber++) {\n            const lineGuides = ( new Array());',
        '        const result = [];\n' +
