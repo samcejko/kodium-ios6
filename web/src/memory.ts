@@ -4,7 +4,8 @@
 // with the schema of every setting took 17 MB) - while the other apps and daemons take 10-25 MB more now and then. It
 // was closed that way after a few windows (313 MB, 26 MB available). The app asks the workbench (src/KDAppDelegate.m)
 // to let go of what it can make again:
-// - level 1 (under 40 MB available, at most every 30 s): the editors' panes that are not on the screen, in every group
+// - level 1 (under 48 MB available, at most every 30 s - before the engine's relief at 40 MB, which throws the compiled
+//   code away too): the editors' panes that are not on the screen, in every group
 //   (made again when opened - their first opening's time again), but the text editor every file is shown in and the
 //   Settings editor the warm-up made; and the language services' workers that are idle (started again when asked; on
 //   their own they stop after 45 s without a request)

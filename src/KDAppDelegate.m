@@ -236,8 +236,9 @@ static void KDWriteResult(NSString *name, NSString *text)
     // it once the workbench had worked a while) goes back to the system - no garbage collection, which the engine's
     // relief does (it throws away the compiled code with it), so the iPad keeps room before the engine or iOS act
     [NSTimer scheduledTimerWithTimeInterval:20 target:self selector:@selector(returnFreeMemory) userInfo:nil repeats:YES];
-    // and the workbench's own (web/src/memory.ts): under 40 MB available, at most every 30 s, it lets go of what it can
-    // make again - iOS closed the app at 26 MB available after a few windows had been opened
+    // and the workbench's own (web/src/memory.ts): under 48 MB available, at most every 30 s, it lets go of what it can
+    // make again - iOS closed the app at 26 MB available after a few windows had been opened. (Before the engine's
+    // relief at 40 MB, which throws the compiled code away with the garbage: everything is slow again for a while.)
     [NSTimer scheduledTimerWithTimeInterval:3 target:self selector:@selector(checkWorkbenchMemory) userInfo:nil repeats:YES];
     // The workbench's compiled code stays while memory allows: JavaScriptCore throws all of it away a minute after it
     // last did, and the first action after a pause compiled again whatever it ran (a switch of editors 1.8 s instead
@@ -323,7 +324,7 @@ static void KDWriteResult(NSString *name, NSString *text)
 - (void)checkWorkbenchMemory
 {
     static CFAbsoluteTime last;
-    if ([BRMemory availableMB] >= 40 || CFAbsoluteTimeGetCurrent() - last < 30) return;
+    if ([BRMemory availableMB] >= 48 || CFAbsoluteTimeGetCurrent() - last < 30) return;
     last = CFAbsoluteTimeGetCurrent();
     [self relieveWorkbench:1];
 }

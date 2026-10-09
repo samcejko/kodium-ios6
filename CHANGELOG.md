@@ -61,7 +61,8 @@ The first build.
 - iOS no longer closes the app after a few windows: Kodium held 290-310 MB of the iPad 2's 512 once the Keyboard
   Shortcuts editor, settings.json and the Extensions view had been opened (every editor an editor group has shown stays
   made, settings.json's JSON worker with the schema of every setting took 17 MB), the other apps took 10-25 MB more, and
-  at 26 MB available iOS ended it. Under 40 MB available the workbench now lets go of what it can make again: the
+  at 26 MB available iOS ended it. Under 48 MB available (before the engine's own relief at 40, which throws the
+  compiled code away and leaves everything slow for a while) the workbench now lets go of what it can make again: the
   editors' panes not on the screen (not the text editor nor the Settings editor the warm-up made - that one too at
   iOS's memory warning) and the language services' idle workers. Measured on the iPad 2 after those windows: 289 ->
   226 MB. An editor let go of opens as the first time again.
