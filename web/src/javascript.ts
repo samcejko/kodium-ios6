@@ -1,16 +1,19 @@
 // JavaScript without a language server. VS Code's comes from TypeScript's language service, which needs more memory
 // than the iPad 2 has to spare (a worker of tens of megabytes); Kodium has a parser (acorn) and a formatter (js-beautify)
-// instead, on the page's thread and only when they are asked:
-// - syntax errors as problems (squiggles, the Problems view), checked once typing pauses;
+// instead, and only when they are asked:
+// - syntax errors as problems (squiggles, the Problems view), checked once typing pauses - in a worker of their own
+//   (workers/javascript.worker.ts): acorn took 0.9-1.4 s for a file of 1,500 lines on the iPad 2, and a key typed
+//   then waited for it on the page's thread;
 // - the file's symbols - functions, classes and their members, variables - for the outline, the breadcrumbs and Go to
-//   Symbol in Editor (Ctrl+Shift+O);
+//   Symbol in Editor (Ctrl+Shift+O), from the same worker;
 // - Format Document (Shift+Alt+F);
 // - Go to Definition (F12), Find All References (Shift+F12) and Rename Symbol (F2), within the file: which declaration
-//   a name means is worked out from the file's scopes when one of them is asked for.
+//   a name means is worked out from the file's scopes when one of them is asked for (parsed on the page's thread).
 // (a .jsx file is JavaScript to Kodium's grammar, but acorn does not read JSX: no syntax check there)
-import { editor, languages, MarkerSeverity, type IDisposable, type IRange } from 'monaco-editor'
+import { editor, languages, MarkerSeverity, type IDisposable } from 'monaco-editor'
 import { Parser, type Node } from 'acorn'
 import beautify from 'js-beautify/js/lib/beautify.js'
+import { parseOptions, documentSymbols, range, type AnyNode, type JsSymbol } from './jsSymbols'
 
 const LANGUAGE = 'javascript'
 const OWNER = 'kodium-javascript'
@@ -45,11 +48,12 @@ const message = (raw: string) => {
   return text
 }
 
-type Parsed = { version: number, program: Node | null, error: { message: string, pos: number, end: number } | null }
+type SyntaxProblem = { message: string, pos: number, end: number }
+type Parsed = { version: number, program: Node | null, error: SyntaxProblem | null }
 const parsed = new Map<string, Parsed>()
 const lastSymbols = new Map<string, languages.DocumentSymbol[]>()
 
-// (a module when the file imports or exports at its top, else a script - in a module a script's sloppy code is an error)
+// the file's tree on the page's thread, for its scopes (definitions, references, renames)
 function parse(model: editor.ITextModel): Parsed {
   const key = model.uri.toString(), version = model.getVersionId()
   const known = parsed.get(key)
@@ -57,10 +61,7 @@ function parse(model: editor.ITextModel): Parsed {
   const text = model.getValue()
   let result: Parsed
   try {
-    const program = Parser.parse(text, {
-      ecmaVersion: 'latest', sourceType: /^\s*(import|export)\b/m.test(text) ? 'module' : 'script', locations: true,
-      allowHashBang: true, allowReturnOutsideFunction: true, allowAwaitOutsideFunction: true
-    }) as unknown as Node
+    const program = Parser.parse(text, parseOptions(text)) as unknown as Node
     result = { version, program, error: null }
   } catch (e) {
     const err = e as { message?: string, pos?: number, raisedAt?: number }
@@ -71,15 +72,79 @@ function parse(model: editor.ITextModel): Parsed {
   return result
 }
 
+// ---- the worker: a file's syntax error or its symbols, by the file's version. It goes after a minute without a
+// request (and when memory runs short, src/memory.ts); a page whose worker does not start parses on its own thread.
+// (stale: the worker was let go before it answered - nothing known then)
+type Checked = { version: number, error: SyntaxProblem | null, symbols: languages.DocumentSymbol[] | null, stale?: boolean }
+type Reply = { id: number, error: { message: string, pos: number, raisedAt: number } | null, symbols: JsSymbol[] | null }
+const SITE = location.href.replace(/[?#].*$/, '').replace(/\/[^/]*$/, '')
+const pending = new Map<number, (reply: Reply | null) => void>()
+const checking = new Map<string, { version: number, result: Promise<Checked> }>()
+let nextId = 1, broken = false, idleTimer: number | undefined
+const worker = {
+  _worker: null as Worker | null,
+  _lastUsedTime: 0,
+  _stopWorker() {
+    if (idleTimer !== undefined) { clearTimeout(idleTimer); idleTimer = undefined }
+    this._worker?.terminate()
+    this._worker = null
+    for (const done of pending.values()) done(null)
+    pending.clear()
+  }
+}
+;((self as { __kdWorkerManagers?: unknown[] }).__kdWorkerManagers || ((self as { __kdWorkerManagers?: unknown[] }).__kdWorkerManagers = [])).push(worker)
+function ask(text: string): Promise<Reply | null> {
+  if (broken) return Promise.resolve(null)
+  if (!worker._worker) {
+    try {
+      const w = new Worker(SITE + '/assets/workers/javascript.worker.es5.js')
+      w.onmessage = (e: MessageEvent) => {
+        const reply = e.data as Reply, done = pending.get(reply.id)
+        pending.delete(reply.id)
+        done?.(reply)
+      }
+      w.onerror = () => { broken = true; worker._stopWorker() }
+      worker._worker = w
+    } catch { broken = true; return Promise.resolve(null) }
+  }
+  worker._lastUsedTime = Date.now()
+  if (idleTimer !== undefined) clearTimeout(idleTimer)
+  idleTimer = window.setTimeout(() => { idleTimer = undefined; if (!pending.size) worker._stopWorker() }, 60 * 1000)
+  const id = nextId++
+  return new Promise((resolve) => { pending.set(id, resolve); worker._worker!.postMessage({ id, text }) })
+}
+// (the same version asked for twice - the check and the outline - goes to the worker once)
+function checked(model: editor.ITextModel): Promise<Checked> {
+  const key = model.uri.toString(), version = model.getVersionId()
+  const known = checking.get(key)
+  if (known && known.version === version) return known.result
+  const result = ask(model.getValue()).then((reply): Checked => {
+    if (!reply && !broken) {
+      if (checking.get(key)?.result === result) checking.delete(key)
+      return { version, error: null, symbols: null, stale: true }
+    }
+    if (!reply) {
+      const { program, error } = parse(model)
+      return { version, error, symbols: program ? documentSymbols(program) as languages.DocumentSymbol[] : null }
+    }
+    const error = reply.error && { message: message(reply.error.message), pos: reply.error.pos, end: Math.max(reply.error.pos + 1, reply.error.raisedAt) }
+    return { version, error, symbols: reply.symbols as languages.DocumentSymbol[] | null }
+  })
+  checking.set(key, { version, result })
+  return result
+}
+
 // ---- syntax errors, once typing pauses (and the page is idle: vsc-prelude.js holds idle work while keys come)
 const marked = new Set<string>()   // (the files with a problem of ours: only theirs are cleared)
 function clear(model: editor.ITextModel): void {
   if (marked.delete(model.uri.toString())) editor.setModelMarkers(model, OWNER, [])
 }
-function check(model: editor.ITextModel): void {
+async function check(model: editor.ITextModel): Promise<void> {
   if (model.isDisposed() || model.getLanguageId() !== LANGUAGE) return
   if (/\.jsx$/i.test(model.uri.path) || model.getValueLength() > TOO_BIG) { clear(model); return }
-  const { error } = parse(model)
+  const { version, error, stale } = await checked(model)
+  // (an answer for a version the file no longer has: the next check comes)
+  if (stale || model.isDisposed() || model.getVersionId() !== version || model.getLanguageId() !== LANGUAGE) return
   if (!error) { clear(model); return }
   const start = model.getPositionAt(error.pos), end = model.getPositionAt(Math.min(error.end, model.getValueLength()))
   const sameSpot = end.lineNumber === start.lineNumber && end.column <= start.column
@@ -95,7 +160,7 @@ function watch(model: editor.ITextModel): void {
   let timer: number | undefined, listening: IDisposable | undefined
   const later = () => {
     if (timer !== undefined) clearTimeout(timer)
-    timer = window.setTimeout(() => { timer = undefined; window.requestIdleCallback(() => check(model)) }, 600)
+    timer = window.setTimeout(() => { timer = undefined; window.requestIdleCallback(() => { void check(model) }) }, 600)
   }
   const follow = () => {
     listening?.dispose()
@@ -109,97 +174,22 @@ function watch(model: editor.ITextModel): void {
     if (timer !== undefined) clearTimeout(timer)
     listening?.dispose()
     parsed.delete(model.uri.toString())
+    checking.delete(model.uri.toString())
     analyses.delete(model.uri.toString())
     lastSymbols.delete(model.uri.toString())
     marked.delete(model.uri.toString())
   })
 }
 
-// ---- the file's symbols
-type AnyNode = Node & Record<string, any>
-const SK = languages.SymbolKind
-
-function range(node: AnyNode): IRange {
-  const loc = node.loc!
-  return { startLineNumber: loc.start.line, startColumn: loc.start.column + 1, endLineNumber: loc.end.line, endColumn: loc.end.column + 1 }
-}
-function symbol(name: string, kind: languages.SymbolKind, node: AnyNode, nameNode: AnyNode | null, children: languages.DocumentSymbol[]): languages.DocumentSymbol {
-  return { name: name || '<anonymous>', detail: '', kind, tags: [], range: range(node), selectionRange: range(nameNode || node), children }
-}
-const isFunction = (n: AnyNode | null | undefined) => !!n && (n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression')
-const keyName = (key: AnyNode) => key.type === 'Identifier' ? key.name : key.type === 'Literal' ? String(key.value) : key.type === 'PrivateIdentifier' ? '#' + key.name : '[…]'
-const source = (n: AnyNode): string => n.type === 'Identifier' ? n.name : n.type === 'ThisExpression' ? 'this'
-  : n.type === 'MemberExpression' && !n.computed ? source(n.object) + '.' + keyName(n.property) : ''
-
-// what a function's body declares (functions, classes, and variables holding them), to a few levels
-function inner(fn: AnyNode, depth: number): languages.DocumentSymbol[] {
-  const out: languages.DocumentSymbol[] = []
-  if (depth > 3 || !fn.body || fn.body.type !== 'BlockStatement') return out
-  for (const s of fn.body.body) statement(s, out, depth + 1, false)
-  return out
-}
-function members(cls: AnyNode, depth: number): languages.DocumentSymbol[] {
-  const out: languages.DocumentSymbol[] = []
-  for (const m of cls.body.body) {
-    if (m.type === 'MethodDefinition') {
-      const kind = m.kind === 'constructor' ? SK.Constructor : m.kind === 'get' || m.kind === 'set' ? SK.Property : SK.Method
-      out.push(symbol(keyName(m.key), kind, m, m.key, inner(m.value, depth)))
-    } else if (m.type === 'PropertyDefinition') {
-      out.push(symbol(keyName(m.key), isFunction(m.value) ? SK.Method : SK.Field, m, m.key, isFunction(m.value) ? inner(m.value, depth) : []))
-    }
-  }
-  return out
-}
-function objectMembers(obj: AnyNode, depth: number): languages.DocumentSymbol[] {
-  const out: languages.DocumentSymbol[] = []
-  for (const p of obj.properties) {
-    if (p.type !== 'Property') continue
-    if (p.method || isFunction(p.value)) out.push(symbol(keyName(p.key), SK.Method, p, p.key, inner(p.value, depth)))
-    else if (p.kind === 'get' || p.kind === 'set') out.push(symbol(keyName(p.key), SK.Property, p, p.key, []))
-    else if (p.value && p.value.type === 'ObjectExpression' && depth < 3) out.push(symbol(keyName(p.key), SK.Property, p, p.key, objectMembers(p.value, depth + 1)))
-  }
-  return out
-}
-function valueSymbol(name: string, varKind: string, node: AnyNode, nameNode: AnyNode, init: AnyNode | null, depth: number, top: boolean, out: languages.DocumentSymbol[]) {
-  if (isFunction(init)) out.push(symbol(name, SK.Function, node, nameNode, inner(init!, depth)))
-  else if (init && init.type === 'ClassExpression') out.push(symbol(name, SK.Class, node, nameNode, members(init, depth)))
-  else if (init && init.type === 'ObjectExpression') out.push(symbol(name, varKind === 'const' ? SK.Constant : SK.Variable, node, nameNode, objectMembers(init, depth)))
-  else if (top) out.push(symbol(name, varKind === 'const' ? SK.Constant : SK.Variable, node, nameNode, []))
-}
-function statement(s: AnyNode, out: languages.DocumentSymbol[], depth: number, top: boolean): void {
-  switch (s.type) {
-    case 'FunctionDeclaration': out.push(symbol(s.id ? s.id.name : 'default', SK.Function, s, s.id, inner(s, depth))); break
-    case 'ClassDeclaration': out.push(symbol(s.id ? s.id.name : 'default', SK.Class, s, s.id, members(s, depth))); break
-    case 'VariableDeclaration':
-      for (const d of s.declarations) if (d.id.type === 'Identifier') valueSymbol(d.id.name, s.kind, d, d.id, d.init, depth, top, out)
-      break
-    case 'ExportNamedDeclaration': if (s.declaration) statement(s.declaration, out, depth, top); break
-    case 'ExportDefaultDeclaration':
-      if (s.declaration.type === 'FunctionDeclaration' || s.declaration.type === 'ClassDeclaration') statement(s.declaration, out, depth, top)
-      else valueSymbol('default', 'const', s, s, s.declaration, depth, top, out)
-      break
-    case 'ExpressionStatement': {
-      // (a.b = function..., module.exports = {...}, Foo.prototype.bar = function...)
-      const e = s.expression
-      if (e.type === 'AssignmentExpression' && e.operator === '=' && (e.left.type === 'MemberExpression' || e.left.type === 'Identifier')) {
-        const name = source(e.left)
-        if (name && (isFunction(e.right) || e.right.type === 'ClassExpression' || (e.right.type === 'ObjectExpression' && top))) valueSymbol(name, 'var', s, e.left, e.right, depth, false, out)
-      }
-      break
-    }
-  }
-}
-
-function symbols(model: editor.ITextModel): languages.DocumentSymbol[] {
+// ---- the file's symbols (the worker's; while the file does not parse - in the middle of typing - the last symbols
+// that did)
+async function symbols(model: editor.ITextModel): Promise<languages.DocumentSymbol[]> {
   const key = model.uri.toString()
   if (model.getValueLength() > TOO_BIG || /\.jsx$/i.test(model.uri.path)) return lastSymbols.get(key) || []
-  const { program } = parse(model)
-  // (while the file does not parse - in the middle of typing - the last symbols that did)
-  if (!program) return lastSymbols.get(key) || []
-  const out: languages.DocumentSymbol[] = []
-  for (const s of (program as AnyNode).body) statement(s, out, 0, true)
-  lastSymbols.set(key, out)
-  return out
+  const { symbols: found } = await checked(model)
+  if (!found) return lastSymbols.get(key) || []
+  lastSymbols.set(key, found)
+  return found
 }
 
 // ---- definitions, references and renames, within the file: which declaration each name means (JavaScript's scopes:

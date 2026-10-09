@@ -76,6 +76,10 @@ The first build.
   element) - now they are found once when the touch begins, and LinkedLists (gesture targets, commands' handlers,
   keybindings) are gone through with a plain iterator: the command palette's list scrolls at 43-47 ms a frame
   instead of 48-55, and the garbage no longer brings a collection (0.5-0.6 s) into a scroll of the editor.
+- JavaScript's syntax check and the file's symbols (the outline, Go to Symbol) come from a worker of their own: acorn
+  parsed the file on the page's thread in every pause of typing, 0.9-1.4 s for a file of 1,500 lines on the iPad 2,
+  and a key or a touch in that time waited for it. Go to Definition, Find All References and Rename still parse on
+  the page when they are asked. The worker (134 KB) goes after a minute without a request, or when memory runs short.
 - The code is coloured (Monarch) 2.4 times as fast: a file of 1,500 lines in 1.2 s instead of 2.8 on the iPad 2, and a
   file just opened has all its colours a fifth sooner (7.7 s instead of 9.2-11.6, interleaved). Monarch asked each
   rule whether its regex is a RegExp at every try (instanceof, through the lowering's Symbol.hasInstance helper),

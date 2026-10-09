@@ -1,5 +1,6 @@
 // The workbench's web workers for iOS 6, each a classic script of its own (src/workers): the editor's - diffs, word
-// suggestions, links, off the page's thread - and the language services of JSON, CSS and HTML. Vite builds each entry
+// suggestions, links, off the page's thread - the language services of JSON, CSS and HTML, and JavaScript's syntax
+// check and symbols (acorn, asked by src/javascript.ts itself). Vite builds each entry
 // as an IIFE, tools/lower.mjs lowers it to ES5 as it does the workbench, and in front of it goes what a worker of the
 // iOS 6 engine lacks: the engine's polyfills for workers (Promise, Map... - https://ios6-browser.invalid/ is answered
 // by the app's engine only; a desktop browser has its own), the names the Proxy stand-in needs and the helpers of
@@ -14,7 +15,7 @@ import { build } from 'vite'
 const web = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tmp = path.join(web, 'dist', 'workers')
 const out = path.join(web, 'dist', 'assets', 'workers')
-const NAMES = ['editor', 'json', 'css', 'html']
+const NAMES = ['editor', 'json', 'css', 'html', 'javascript']
 fs.rmSync(tmp, { recursive: true, force: true })
 fs.mkdirSync(tmp, { recursive: true })
 fs.mkdirSync(out, { recursive: true })
