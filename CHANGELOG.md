@@ -51,6 +51,15 @@ The first build.
   checks a value (the default settings 0.27 s -> 0.07 s). Opened again, it no longer asks for the installed extensions
   (0.45-0.55 s) - only after one was installed, removed or changed. And a setting changed while the editor was closed
   (in settings.json, by a command) shows its new value when it opens again: the row on the screen kept the old one.
+- A file's text shows 0.3-0.6 s sooner when it opens (measured on the iPad 2, interleaved: README.md 1.63 -> 1.05 s,
+  hello.js opened again 0.93 -> 0.63 s): the editor drew its lines at the next animation frame after the model was
+  attached - after the workbench's own work for the opening and a paint of the editor without them; now at the end
+  of opening the file, with its scroll position and options in place, so the first paint has the text.
+- Scrolling: the first scroll of a file 10-15 % quicker (119 ms a frame instead of 131-140 on the iPad 2), the rest
+  ~2 %. The engine's grid pass - after every change of the page has settled, every 150-300 ms while scrolling -
+  queried the whole page nine times for the modal editor's grid, which never shows here (workbench.editor.useModal
+  is off); and every line on the screen was laid out again at every frame through setTop/setHeight/setLineHeight,
+  each making its "Npx" text before finding the value unchanged: the same value now returns at once.
 - A keystroke allocates ~17 % less (an edit 150-180 KB -> 125-150 KB, measured with the engine's heap report): fewer
   garbage collections (0.35-0.5 s each) in and after typing. The window's timers no longer go through VS Code's
   wrapper for auxiliary windows (~30 timers are put off again at every key; Kodium has the one window), the log's

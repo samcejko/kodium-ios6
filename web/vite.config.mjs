@@ -766,6 +766,38 @@ function lighterTyping() {
   ])
 }
 
+// A file opened is drawn with the editor's state it opens with: the text editor drew its lines at the next animation
+// frame after the model was attached - after the workbench's own work for the opening (the tab, the listeners of the
+// active editor, ~200 ms on the iPad 2) and a paint of the editor without them; drawn at the end of its setInput (the
+// view state restored, the options applied), the first paint has the text. The frame then finds nothing to draw.
+function soonerFirstLines() {
+  return patchModules('kodium-sooner-first-lines', [
+    ['/vs/workbench/contrib/files/browser/editors/textFileEditor.js', [
+      ['            if (control.handleInitialized) {\n                control.handleInitialized();\n            }\n',
+       '            if (control.handleInitialized) {\n                control.handleInitialized();\n            }\n            control.render();\n']]]
+  ])
+}
+// The editor lays out every line on the screen at every frame of a scroll - its view lines, its overlays, its margin:
+// setTop, setHeight and setLineHeight of each, ~400 calls a frame - and FastDomNode made the value's "Npx" string
+// before it found it unchanged (it nearly always is: a line keeps its place in the content while the content moves).
+// The value it was given last is kept as well: the same value returns at once (the string is that of the value).
+function fasterDomNode() {
+  return {
+    name: 'kodium-faster-dom-node',
+    transform(code, id) {
+      if (!id.replace(/\\/g, '/').endsWith('/vs/base/browser/fastDomNode.js')) return null
+      let n = 0
+      const out = code.replace(/    (set\w+)\((_\w+)\) \{\n        const (\w+) = numberAsPixels\(\2\);\n/g, (all, name, raw, value) => {
+        n++
+        return '    ' + name + '(' + raw + ') {\n        if (' + raw + ' === this.kdLast_' + value + ') {\n            return;\n        }\n' +
+          '        this.kdLast_' + value + ' = ' + raw + ';\n        const ' + value + ' = numberAsPixels(' + raw + ');\n'
+      })
+      if (n < 10) this.error('kodium-faster-dom-node: fastDomNode.js has another form (' + n + ' setters)')
+      return { code: out, map: null }
+    }
+  }
+}
+
 // What the workbench lets go of when the iPad runs short of memory (web/src/memory.ts, asked by src/KDAppDelegate.m):
 // an editor group keeps the pane of every kind of editor it has shown (EditorPanes) - kdDropHiddenPanes(keep) disposes
 // those not on the screen whose id keep() does not want; the language services' workers (JSON, CSS, HTML) are listed
@@ -789,6 +821,41 @@ function memoryRelief() {
        '    }\n' +
        '    closeEditor(editor) {\n']]],
     workerManager('json'), workerManager('css'), workerManager('html')
+  ])
+}
+
+// A build for measuring the opening of a file (KODIUM_OPEN_TIMERS=1 .\web\build.ps1): self.__kdMark(name) along the
+// way from the editor service to the editor's model and view, when a measuring script has set it.
+function openTimers() {
+  if (!process.env.KODIUM_OPEN_TIMERS) return null
+  const m = (n) => 'self.__kdMark && self.__kdMark("' + n + '");\n'
+  return patchModules('kodium-open-timers', [
+    ['/vs/workbench/services/editor/browser/editorService.js', [
+      ['    async openEditor(editor, optionsOrPreferredGroup, preferredGroup) {\n        let typedEditor = undefined;\n',
+       '    async openEditor(editor, optionsOrPreferredGroup, preferredGroup) {\n        ' + m('editorService.openEditor') + '        let typedEditor = undefined;\n'],
+      ['            typedEditor = isEditorInput(editor) ? editor : await this.textEditorService.resolveTextEditor(editor);\n',
+       '            typedEditor = isEditorInput(editor) ? editor : await this.textEditorService.resolveTextEditor(editor);\n            ' + m('input made')]]],
+    ['/vs/workbench/browser/parts/editor/editorGroupView.js', [
+      ['    async doOpenEditor(editor, options, internalOptions) {\n', '    async doOpenEditor(editor, options, internalOptions) {\n        ' + m('group.doOpenEditor')],
+      ['        const showEditorResult = this.doShowEditor(openedEditor, {', '        ' + m('group model opened') + '        const showEditorResult = this.doShowEditor(openedEditor, {'],
+      ['        if (!internalOptions?.skipTitleUpdate) {\n            this.titleControl.openEditor(editor, internalOptions);',
+       '        ' + m('pane opening started') + '        if (!internalOptions?.skipTitleUpdate) {\n            this.titleControl.openEditor(editor, internalOptions);\n            ' + m('title control')],
+      ['                if (changed) {\n                    this._onDidActiveEditorChange.fire({',
+       '                ' + m('pane opened') + '                if (changed) {\n                    this._onDidActiveEditorChange.fire({'],
+      ['                if (error) {\n                    this._onDidOpenEditorFail.fire(editor);', '                ' + m('active editor change fired') + '                if (error) {\n                    this._onDidOpenEditorFail.fire(editor);']]],
+    ['/vs/workbench/contrib/files/browser/editors/textFileEditor.js', [
+      ['        mark("code/willSetInputToTextFileEditor");\n        await super.setInput(input, options, context, token);\n',
+       '        ' + m('textFileEditor.setInput') + '        mark("code/willSetInputToTextFileEditor");\n        await super.setInput(input, options, context, token);\n        ' + m('super.setInput')],
+      ['            const resolvedModel = await input.resolve(options);\n', '            const resolvedModel = await input.resolve(options);\n            ' + m('model resolved')],
+      ['            control.setModel(textFileModel.textEditorModel);\n', '            control.setModel(textFileModel.textEditorModel);\n            ' + m('setModel done')],
+      ['        mark("code/didSetInputToTextFileEditor");\n', '        ' + m('setInput done') + '        mark("code/didSetInputToTextFileEditor");\n']]],
+    ['/vs/editor/browser/widget/codeEditor/codeEditorWidget.js', [
+      ['            const detachedModel = this._detachModel();\n            this._attachModel(model);\n',
+       '            ' + m('setModel: will detach') + '            const detachedModel = this._detachModel();\n            ' + m('detached') + '            this._attachModel(model);\n            ' + m('attached (view made)')],
+      ['            this._onDidChangeModel.fire(e);\n            this._postDetachModelCleanup(detachedModel);\n',
+       '            ' + m('will fire onDidChangeModel') + '            this._onDidChangeModel.fire(e);\n            ' + m('onDidChangeModel fired') + '            this._postDetachModelCleanup(detachedModel);\n'],
+      ['            this._contributionsDisposable = this._contributions.onAfterModelAttached();\n',
+       '            this._contributionsDisposable = this._contributions.onAfterModelAttached();\n            ' + m('contributions after attach')]]]
   ])
 }
 
@@ -1538,7 +1605,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), memoryRelief(), lighterTyping(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

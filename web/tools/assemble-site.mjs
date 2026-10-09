@@ -181,9 +181,14 @@ if (!result || typeof result.out !== 'string' || !result.out.length) throw new E
 // minimum width of the code action menu with a header, no bullets for Markdown's task items, the actions of extensions'
 // trees when scrolled sideways, a wider filter of the panel while it has the focus, the compact command center): 3 ms
 // of the 7 ms of every pass, and a pass after nearly every key.
+// (and of the grids, the modal editor's: workbench.editor.useModal is off, it never shows - its nine rules had the grid
+// pass query the whole page nine times for nothing, the pass that runs after every change of the page has settled,
+// every 150-300 ms while the editor scrolls: 450 of the 740 ms of querySelectorAll in a profiled scroll. The extension
+// page's "More Info" grid stays.)
 result.out = result.out.replace(/\/\*br-manifest:([\s\S]*?)\*\/(\s*)$/, (all, json, tail) => {
   const m = JSON.parse(json)
   for (const kind of ['mk', 'cv', 'has']) if (Array.isArray(m[kind])) m[kind] = []
+  if (Array.isArray(m.gd)) m.gd = m.gd.filter((e) => !(Array.isArray(e.s) && e.s.length && e.s.every((s) => s.indexOf('.monaco-modal-editor-block') >= 0)))
   return '/*br-manifest:' + JSON.stringify(m) + '*/' + tail
 })
 // The rewriter writes flex-direction: *-reverse as -webkit-box-direction: reverse too, which the iOS 6 engine inherits
