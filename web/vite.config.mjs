@@ -499,7 +499,12 @@ function quickerSwitch() {
     ['/vs/workbench/browser/parts/editor/multiEditorTabsControl.js', [
       ['    updateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }',
        '    updateEditorActionsToolbar() {\n' +
-       '        (this.kdToolbarUpdater || (this.kdToolbarUpdater = this._register(new RunOnceScheduler(() => this.kdUpdateEditorActionsToolbar(), 0)))).schedule();\n' +
+       '        const updater = this.kdToolbarUpdater || (this.kdToolbarUpdater = this._register(new RunOnceScheduler(() => this.kdUpdateEditorActionsToolbar(), 0)));\n' +
+       // (after the next frame: an editor opened or switched to is drawn first, its actions come after it - they
+       // came before, 75 ms of menus and context keys between the editor's lines and the screen)
+       '        if (updater.isScheduled() || this.kdToolbarFrame) {\n            return;\n        }\n' +
+       '        this.kdToolbarFrame = true;\n' +
+       '        requestAnimationFrame(() => {\n            this.kdToolbarFrame = false;\n            updater.schedule();\n        });\n' +
        '    }\n' +
        '    kdUpdateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }']]],
     ['/vs/workbench/browser/parts/titlebar/windowTitle.js', [
@@ -770,11 +775,34 @@ function lighterTyping() {
 // frame after the model was attached - after the workbench's own work for the opening (the tab, the listeners of the
 // active editor, ~200 ms on the iPad 2) and a paint of the editor without them; drawn at the end of its setInput (the
 // view state restored, the options applied), the first paint has the text. The frame then finds nothing to draw.
+// The status bar's entries for the editor (cursor position, indentation, encoding, language...) are updated after
+// the frame, not in it: 50 ms of the first frame of an opening, and a part of every key's.
 function soonerFirstLines() {
   return patchModules('kodium-sooner-first-lines', [
     ['/vs/workbench/contrib/files/browser/editors/textFileEditor.js', [
       ['            if (control.handleInitialized) {\n                control.handleInitialized();\n            }\n',
-       '            if (control.handleInitialized) {\n                control.handleInitialized();\n            }\n            control.render();\n']]]
+       '            if (control.handleInitialized) {\n                control.handleInitialized();\n            }\n            control.render();\n']]],
+    ['/vs/workbench/browser/parts/editor/editorStatus.js', [
+      ['            this.delayedRender.value = runAtThisOrScheduleAtNextAnimationFrame(getWindowById(this.targetWindowId, true).window, () => {\n' +
+       '                this.delayedRender.clear();\n' +
+       '                const toRender = this.toRender;\n' +
+       '                this.toRender = undefined;\n' +
+       '                if (toRender) {\n' +
+       '                    this.doRenderNow();\n' +
+       '                }\n' +
+       '            });',
+       '            const kdWindow = getWindowById(this.targetWindowId, true).window;\n' +
+       '            this.delayedRender.value = runAtThisOrScheduleAtNextAnimationFrame(kdWindow, () => {\n' +
+       '                const kdHandle = kdWindow.setTimeout(() => {\n' +
+       '                    this.delayedRender.clear();\n' +
+       '                    const toRender = this.toRender;\n' +
+       '                    this.toRender = undefined;\n' +
+       '                    if (toRender) {\n' +
+       '                        this.doRenderNow();\n' +
+       '                    }\n' +
+       '                }, 0);\n' +
+       '                this.delayedRender.value = { dispose: () => kdWindow.clearTimeout(kdHandle) };\n' +
+       '            });']]]
   ])
 }
 // The editor lays out every line on the screen at every frame of a scroll - its view lines, its overlays, its margin:
@@ -800,7 +828,8 @@ function fasterDomNode() {
 
 // What the workbench lets go of when the iPad runs short of memory (web/src/memory.ts, asked by src/KDAppDelegate.m):
 // an editor group keeps the pane of every kind of editor it has shown (EditorPanes) - kdDropHiddenPanes(keep) disposes
-// those not on the screen whose id keep() does not want; the language services' workers (JSON, CSS, HTML) are listed
+// those not on the screen whose id keep() does not want (kdPreparePane(typeId) makes one ahead, for the warm-up);
+// the language services' workers (JSON, CSS, HTML) are listed
 // for it (self.__kdWorkerManagers), to be stopped before their 45 s without a request (quickerWorkers) are up:
 // settings.json's JSON worker, with the schema of every setting, took 17 MB of the iPad 2's memory.
 function memoryRelief() {
@@ -818,6 +847,25 @@ function memoryRelief() {
        '            try {\n                pane.getContainer()?.remove();\n                this._store.delete(pane);\n            } catch (error) {\n                this.logService.error(error);\n            }\n' +
        '        }\n' +
        '        return dropped.length;\n' +
+       '    }\n' +
+       // (and the warm-up's: a kind of editor pane made before anything is shown in it, its editor's contributions
+       // all made too - web/src/warmup.ts, for the text file editor every file is shown in)
+       '    kdPreparePane(typeId) {\n' +
+       '        if (this.editorPanes.some(pane => pane.getId() === typeId)) {\n            return false;\n        }\n' +
+       '        const descriptor = this.editorPanesRegistry.getEditorPaneByType(typeId);\n' +
+       '        if (!descriptor) {\n            return false;\n        }\n' +
+       '        const editorPane = this.doInstantiateEditorPane(descriptor);\n' +
+       '        if (!editorPane.getContainer()) {\n' +
+       '            const editorPaneContainer = $(".editor-instance");\n' +
+       '            this.editorPanesParent.appendChild(editorPaneContainer);\n' +
+       '            try {\n                editorPane.create(editorPaneContainer);\n            } finally {\n' +
+       '                editorPaneContainer.remove();\n                hide(editorPaneContainer);\n            }\n' +
+       '        }\n' +
+       '        const contributions = editorPane.getControl?.()?._contributions;\n' +
+       '        if (typeof contributions?._instantiateSome === "function") {\n' +
+       '            for (const phase of [1, 2, 3]) {\n                contributions._instantiateSome(phase);\n            }\n' +
+       '        }\n' +
+       '        return true;\n' +
        '    }\n' +
        '    closeEditor(editor) {\n']]],
     workerManager('json'), workerManager('css'), workerManager('html')
@@ -848,14 +896,52 @@ function openTimers() {
        '        ' + m('textFileEditor.setInput') + '        mark("code/willSetInputToTextFileEditor");\n        await super.setInput(input, options, context, token);\n        ' + m('super.setInput')],
       ['            const resolvedModel = await input.resolve(options);\n', '            const resolvedModel = await input.resolve(options);\n            ' + m('model resolved')],
       ['            control.setModel(textFileModel.textEditorModel);\n', '            control.setModel(textFileModel.textEditorModel);\n            ' + m('setModel done')],
+      ['            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n',
+       '            ' + m('view state restored') + '            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n            ' + m('readonly options')],
       ['        mark("code/didSetInputToTextFileEditor");\n', '        ' + m('setInput done') + '        mark("code/didSetInputToTextFileEditor");\n']]],
+    ['/vs/workbench/services/textfile/common/textFileEditorModel.js', [
+      ['        mark("code/willResolveTextFileEditorModel");\n', '        mark("code/willResolveTextFileEditorModel");\n        ' + m('model.resolve')],
+      ['            const resolvedFromBackup = await this.resolveFromBackup(options);\n', '            const resolvedFromBackup = await this.resolveFromBackup(options);\n            ' + m('backup looked for')],
+      ['            this.setOrphaned(false);\n            if (currentVersionId !== this.versionId) {', '            ' + m('read') + '            this.setOrphaned(false);\n            if (currentVersionId !== this.versionId) {'],
+      ['        const textModel = this.createTextEditorModel(value, resource, this.preferredLanguageId);\n        this.installModelListeners(textModel);\n        this.autoDetectLanguage();\n',
+       '        ' + m('createTextEditorModel') + '        const textModel = this.createTextEditorModel(value, resource, this.preferredLanguageId);\n        ' + m('text model made') + '        this.installModelListeners(textModel);\n        this.autoDetectLanguage();\n        ' + m('language detected')],
+      ['        this.setDirty(!!dirty);\n        this._onDidResolve.fire(options?.reason ?? TextFileResolveReason.OTHER);\n',
+       '        this.setDirty(!!dirty);\n        ' + m('will fire onDidResolve') + '        this._onDidResolve.fire(options?.reason ?? TextFileResolveReason.OTHER);\n        ' + m('onDidResolve fired')]]],
     ['/vs/editor/browser/widget/codeEditor/codeEditorWidget.js', [
       ['            const detachedModel = this._detachModel();\n            this._attachModel(model);\n',
        '            ' + m('setModel: will detach') + '            const detachedModel = this._detachModel();\n            ' + m('detached') + '            this._attachModel(model);\n            ' + m('attached (view made)')],
       ['            this._onDidChangeModel.fire(e);\n            this._postDetachModelCleanup(detachedModel);\n',
        '            ' + m('will fire onDidChangeModel') + '            this._onDidChangeModel.fire(e);\n            ' + m('onDidChangeModel fired') + '            this._postDetachModelCleanup(detachedModel);\n'],
       ['            this._contributionsDisposable = this._contributions.onAfterModelAttached();\n',
-       '            this._contributionsDisposable = this._contributions.onAfterModelAttached();\n            ' + m('contributions after attach')]]]
+       '            this._contributionsDisposable = this._contributions.onAfterModelAttached();\n            ' + m('contributions after attach')],
+      // (which code editors are made, and where)
+      ['        this._contributions.initialize(this, contributions, this._instantiationService);\n',
+       '        this._contributions.initialize(this, contributions, this._instantiationService);\n' +
+       '        self.__kdMark && self.__kdMark("code editor #" + this._id + " made in " + String(domElement.className || "").slice(0, 40) + " < " + String(domElement.parentNode && domElement.parentNode.className || "").slice(0, 40) + (codeEditorWidgetOptions.isSimpleWidget ? " (simple)" : "") + " | " + String(new Error().stack || "").split("\\n").slice(1, 9).join(" | "));\n']]],
+    ['/vs/workbench/services/textfile/browser/textFileService.js', [
+      ['            bufferStream = await this.fileService.readFileStream(resource, options, cts.token);\n',
+       '            bufferStream = await this.fileService.readFileStream(resource, options, cts.token);\n            ' + m('stream (stat) ready')],
+      ['            const decoder = await this.doGetDecodedStream(resource, bufferStream.value, options);\n',
+       '            const decoder = await this.doGetDecodedStream(resource, bufferStream.value, options);\n            ' + m('decoder ready')],
+      ['            value: await createTextBufferFactoryFromStream(decoder.stream)\n',
+       '            value: await createTextBufferFactoryFromStream(decoder.stream).then(kdV => { self.__kdMark && self.__kdMark("text buffer made"); return kdV; })\n']]],
+    ['/vs/platform/files/common/fileService.js', [
+      ['    async validateReadFile(resource, options) {\n        const stat = await this.resolve(resource, {\n            resolveMetadata: true\n        });\n',
+       '    async validateReadFile(resource, options) {\n        const stat = await this.resolve(resource, {\n            resolveMetadata: true\n        });\n        ' + m('stat resolved')]]],
+    // every context key set: self.__kdCtx(key, changed, ms of its change event's listeners, listeners)
+    ['/vs/platform/contextkey/browser/contextKeyService.js', [
+      ['        if (myContext.setValue(key, value)) {\n            this._onDidChangeContext.fire(( new SimpleContextKeyChangeEvent(key)));\n        }',
+       '        const kdT = self.__kdCtx ? Date.now() : 0;\n' +
+       '        if (myContext.setValue(key, value)) {\n            this._onDidChangeContext.fire(( new SimpleContextKeyChangeEvent(key)));\n' +
+       '            kdT && self.__kdCtx(key, true, Date.now() - kdT, this._onDidChangeContext._size);\n' +
+       '        } else if (kdT) self.__kdCtx(key, false, 0, 0);']]],
+    // what the timers and animation frames of VS Code's own schedulers ran: self.__kdTask(kind, runner, ms)
+    ['/vs/base/common/async.js', [
+      ['    onTimeout() {\n        this.timeoutToken = undefined;\n        if (this.runner) {\n            this.doRun();\n        }\n    }',
+       '    onTimeout() {\n        this.timeoutToken = undefined;\n        if (this.runner) {\n            const kdT = Date.now();\n            this.doRun();\n            self.__kdTask && self.__kdTask("scheduler", this.runner, Date.now() - kdT);\n        }\n    }']]],
+    ['/vs/base/browser/dom.js', [
+      ['        try {\n            this._runner();\n        } catch (e) {',
+       '        try {\n            const kdT = Date.now();\n            this._runner();\n            self.__kdTask && self.__kdTask("frame item", this._runner, Date.now() - kdT);\n        } catch (e) {']]]
   ])
 }
 

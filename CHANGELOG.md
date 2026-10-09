@@ -55,6 +55,15 @@ The first build.
   hello.js opened again 0.93 -> 0.63 s): the editor drew its lines at the next animation frame after the model was
   attached - after the workbench's own work for the opening and a paint of the editor without them; now at the end
   of opening the file, with its scroll position and options in place, so the first paint has the text.
+- The first file opened after the start has its lines there 0.5 s sooner (0.63 s instead of 0.74-1.34 on the iPad 2,
+  interleaved): files have an editor pane of their own (the text file editor), which the warm-up's untitled document
+  did not make - that pane's editor and all of the editor's contributions were made at the first file. The warm-up
+  makes them now, without a file. Any file opened has its lines there 0.13-0.2 s sooner (README.md 1.34 -> 1.13 s,
+  hello.js opened again 0.66 -> 0.52 s): a small file (64 KB or less) read on its own is read synchronously - a stat
+  and a read of 5-8 ms each that the page waits for, where the asynchronous ones came back only after everything else
+  the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
+  editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
+  go the asynchronous way.
 - Scrolling: the first scroll of a file 10-15 % quicker (119 ms a frame instead of 131-140 on the iPad 2), the rest
   ~2 %. The engine's grid pass - after every change of the page has settled, every 150-300 ms while scrolling -
   queried the whole page nine times for the modal editor's grid, which never shows here (workbench.editor.useModal
@@ -113,8 +122,8 @@ The first build.
   pause in typing. Auto save now comes after 5 s of pause instead of 2: every save made the next key make the file
   changed again - its tab, the Open Editors view and the editor's toolbar redrawn, 0.2-0.3 s more for that key on the
   iPad 2.
-- The warm-up also opens and closes an editor of its own (an untitled document, nothing typed): the editor pane every
-  file is shown in is made then, and the first two files open 0.16-0.18 s sooner.
+- The warm-up also opens and closes an editor of its own (an untitled document, nothing typed): the editor pane of
+  untitled documents is made then (and the first two files opened 0.16-0.18 s sooner: what it compiled).
 - The views' title bars (Explorer, Open Editors, Outline, Timeline) make their toolbars again only when their actions
   change: the first file opened had all of them made anew though they came out the same.
 - Every key does ~10 % less (in the profiler 80-100 ms inside a key instead of 97-120): whether the key should indent

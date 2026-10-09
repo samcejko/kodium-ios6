@@ -44,6 +44,24 @@ function call(root: Root, op: string, params: Record<string, string>, body?: Uin
   })
 }
 
+// The same, synchronously: the request's answer as text (bytes as x-user-defined characters with binary)
+function callSync(root: Root, op: string, params: Record<string, string>, binary = false): XMLHttpRequest {
+  const xhr = new XMLHttpRequest()
+  const all: Record<string, string> = root === 'documents' ? params : { ...params, root }
+  xhr.open('GET', API + op + '?' + Object.keys(all).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(all[k])).join('&'), false)
+  // (no response type for a synchronous request of a page)
+  if (binary) xhr.overrideMimeType('text/plain; charset=x-user-defined')
+  xhr.send(null)
+  return xhr
+}
+
+// A file read on its own (none in the last 0.3 s) and small (64 KB or less) is read synchronously: a stat and a read
+// of 5-8 ms each that the page waits for. Asynchronously they came back only once the WebThread had done everything
+// else the opening of a file had for it (the tab, the editor drawn empty...): 110-140 ms on the iPad 2. Many reads in a
+// row (a search) go the asynchronous way, as big files do, and the page goes on between them.
+const SYNC_MAX = 64 * 1024
+const SYNC_GAP = 300
+
 function check(xhr: XMLHttpRequest, resource: URI): void {
   if (xhr.status === 200) return
   const code = xhr.status === 404 ? FileSystemProviderErrorCode.FileNotFound
@@ -51,6 +69,11 @@ function check(xhr: XMLHttpRequest, resource: URI): void {
     : xhr.status === 403 ? FileSystemProviderErrorCode.NoPermissions
     : FileSystemProviderErrorCode.Unknown
   throw FileSystemProviderError.create(resource.toString() + ' (' + xhr.status + ')', code)
+}
+
+function toStat(json: string): IStat {
+  const s = JSON.parse(json) as { type: number, size: number, mtime: number, ctime: number }
+  return { type: s.type === 2 ? FileType.Directory : FileType.File, size: s.size, mtime: s.mtime, ctime: s.ctime }
 }
 
 function notHere(resource: URI): never {
@@ -65,6 +88,9 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   private readonly changes = new Emitter<readonly IFileChange[]>()
   readonly onDidChangeFile = this.changes.event
   readonly onDidChangeCapabilities = new Emitter<void>().event
+  // (when the last synchronous read was; the stat it made, for the file service's stat that follows it)
+  private lastSyncRead = 0
+  private lastStat: { path: string, stat: IStat, at: number } | null = null
 
   constructor(
     private readonly root: Root,
@@ -77,15 +103,17 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   }
 
   private changed(...changes: IFileChange[]): void {
+    this.lastStat = null
     if (this.reportChanges) this.changes.fire(changes)
   }
 
   async stat(resource: URI): Promise<IStat> {
     const path = this.toPath(resource) ?? notHere(resource)
+    const last = this.lastStat
+    if (last && last.path === path && Date.now() - last.at < 1000) return last.stat
     const xhr = await call(this.root, 'stat', { path })
     check(xhr, resource)
-    const s = JSON.parse(xhr.responseText) as { type: number, size: number, mtime: number, ctime: number }
-    return { type: s.type === 2 ? FileType.Directory : FileType.File, size: s.size, mtime: s.mtime, ctime: s.ctime }
+    return toStat(xhr.responseText)
   }
 
   async readdir(resource: URI): Promise<[string, FileType][]> {
@@ -97,9 +125,35 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
 
   async readFile(resource: URI): Promise<Uint8Array> {
     const path = this.toPath(resource) ?? notHere(resource)
+    const now = Date.now()
+    if (now - this.lastSyncRead > SYNC_GAP) {
+      this.lastSyncRead = now
+      const bytes = this.readSmall(path)
+      if (bytes) return bytes
+    } else this.lastSyncRead = now
     const xhr = await call(this.root, 'read', { path }, undefined, true)
     check(xhr, resource)
     return new Uint8Array(xhr.response as ArrayBuffer)
+  }
+
+  // a small file's bytes, read synchronously; null for anything else (a big file, a folder, an error: the
+  // asynchronous way says what it is)
+  private readSmall(path: string): Uint8Array | null {
+    try {
+      const statXhr = callSync(this.root, 'stat', { path })
+      if (statXhr.status !== 200) return null
+      const stat = toStat(statXhr.responseText)
+      if (stat.type !== FileType.File || stat.size > SYNC_MAX) return null
+      const xhr = callSync(this.root, 'read', { path }, true)
+      if (xhr.status !== 200) return null
+      const text = xhr.responseText
+      const bytes = new Uint8Array(text.length)
+      for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 0xff
+      this.lastStat = { path, stat: { ...stat, size: bytes.length }, at: Date.now() }
+      return bytes
+    } catch {
+      return null
+    }
   }
 
   async writeFile(resource: URI, content: Uint8Array, opts: IFileWriteOptions): Promise<void> {

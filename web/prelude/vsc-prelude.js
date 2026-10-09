@@ -128,7 +128,10 @@
                 if (it.off) continue;
                 var overdue = it.until && now >= it.until;
                 if (!ready && !overdue) { queue.push(it); continue; }
+                // (G.__kdTask(kind, callback, ms): a measuring script's, see web/vite.config.mjs openTimers)
+                var t0 = G.__kdTask ? Date.now() : 0;
                 try { it.cb(ready ? idle : late); } catch (e) { setTimeout(function () { throw e; }, 0); }
+                if (t0) G.__kdTask(ready ? 'idle' : 'idle (overdue)', it.cb, Date.now() - t0);
             }
             if (queue.length) schedule(quiet ? 10 : undefined);
             else calm = 0;

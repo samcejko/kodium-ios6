@@ -9,8 +9,10 @@
 // out: what the first time costs.)
 // Measured on the iPad 2 (first actions after the splash, with and without, interleaved): an editor of its own typed
 // into (an untitled document: suggestions, find) made the editor's first actions no quicker and took 12.7 s - it is
-// only opened and closed now, which makes the editor pane every file is shown in (the first two files open 0.16-0.18 s
-// sooner). The Settings editor, made and its tree built, opens in 1.2-1.5 s instead of 4.7, for 4.5 s more at every
+// only opened and closed now, which makes the pane of untitled documents; files have a pane of their own (the text
+// file editor), made here without a file: the first file opened shows its lines 0.5 s sooner (0.63 s instead of
+// 1.1-1.3: its editor and all that editor's contributions were made then). The Settings editor, made and its tree
+// built, opens in 1.2-1.5 s instead of 4.7, for 4.5 s more at every
 // start (it was only 0.7 s sooner while a setting registered "eventually" - window.newWindowProfile, at 40 s - came
 // after it and had its tree built again: vite.config.mjs quickerSettings).
 // The compiled code has to stay for that: Surfari's engine keeps it once the start's code was thrown away - which
@@ -27,6 +29,7 @@ import { Parts } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services
 import { IPaneCompositePartService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/panecomposite/browser/panecomposite.service'
 import { ViewContainerLocation } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/views'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
+import { IEditorGroupsService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorGroupsService.service'
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
 
 // (while it runs: files from other apps wait - share.ts - and the splash says how far it is)
@@ -91,6 +94,7 @@ export async function warmUp(): Promise<void> {
     const layout = await getService(IWorkbenchLayoutService)
     const panes = await getService(IPaneCompositePartService)
     const editors = await getService(IEditorService)
+    const groups = await getService(IEditorGroupsService)
     const run = (id: string, ...args: unknown[]) => commands.executeCommand(id, ...args).catch(() => undefined)
 
     // what to come back to
@@ -143,18 +147,22 @@ export async function warmUp(): Promise<void> {
         await until(() => shown('.explorer-folders-view'), 3000)
       },
       // an editor of its own (an untitled JavaScript document, nothing typed, never saved): the editor pane and its
-      // editor, which every file opened later is shown in, made now
+      // editor which untitled documents are shown in, made now; and the one for files (the text file editor, its own
+      // kind), made without a file: the first file opened has it there
       async () => {
         const pane = await editors.openEditor({ resource: URI.from({ scheme: 'untitled', path: 'kodium-warm-up.js' }), languageId: 'javascript', options: { pinned: false } })
         const input = pane?.input
-        if (!pane || !input) return
-        try {
-          const control = pane.getControl() as { getDomNode?(): HTMLElement | null } | undefined
-          await until(() => !!control?.getDomNode?.()?.querySelector('.view-line'), 5000)
-        } finally {
-          await input.revert(pane.group.id).catch(() => undefined)
-          await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
+        if (pane && input) {
+          try {
+            const control = pane.getControl() as { getDomNode?(): HTMLElement | null } | undefined
+            await until(() => !!control?.getDomNode?.()?.querySelector('.view-line'), 5000)
+          } finally {
+            await input.revert(pane.group.id).catch(() => undefined)
+            await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
+          }
         }
+        const group = groups.activeGroup as unknown as { editorPane?: { kdPreparePane?(typeId: string): boolean } }
+        try { group.editorPane?.kdPreparePane?.('workbench.editors.files.textFileEditor') } catch { /* made at the first file then */ }
       },
       // the Settings editor, its tree built (unless one is open already - restored): opened again, it shows that tree
       async () => {
