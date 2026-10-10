@@ -58,7 +58,8 @@ function callSync(root: Root, op: string, params: Record<string, string>, binary
 // A file read on its own (none in the last 0.3 s) and small (64 KB or less) is read synchronously: a stat and a read
 // of 5-8 ms each that the page waits for. Asynchronously they came back only once the WebThread had done everything
 // else the opening of a file had for it (the tab, the editor drawn empty...): 110-140 ms on the iPad 2. Many reads in a
-// row (a search) go the asynchronous way, as big files do, and the page goes on between them.
+// row (a search) go the asynchronous way, as big files do, and the page goes on between them. (1 MB measured no
+// quicker for a file of 70 KB - its decoding, not its reading, is what takes the time.)
 const SYNC_MAX = 64 * 1024
 const SYNC_GAP = 300
 

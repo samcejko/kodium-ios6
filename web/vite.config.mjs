@@ -491,6 +491,39 @@ function smootherEditor() {
     ['/vs/editor/contrib/bracketMatching/browser/bracketMatching.js', [
       ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'kdAfterFrame(new RunOnceScheduler(() => this._updateBrackets(), 300))'],
       ['class BracketMatchingController extends Disposable {', AFTER_FRAME + 'class BracketMatchingController extends Disposable {']]],
+    // (the bracket highlight - the bracket matching the one at the cursor, or the brackets around it - is looked for in
+    // the tokens around the cursor, VS Code's search from before the brackets' tree, unless the tree is there already
+    // (bracket pair colours or guides make it): the tree of the whole file was built for it right after every opening,
+    // 430-570 ms for a file of 1,500 lines on the iPad 2, while one meant to read or type - now 25-32. A typed closing
+    // bracket's outdent finds its opening bracket the same way (checked with fast and slow typing: brackcheck.js,
+    // electric.js); auto-closing's question whether a closing bracket is missing, below, builds the tree in small files.)
+    // (a line up to two after the first one whose tokens are out of date - the line Enter just made - counts as cheap to
+    // tokenize when they are short: a closing bracket typed right after Enter outdented only once the background
+    // tokenizer had caught up, which Kodium lets wait for a pause of 0.2 s - typed sooner, it stayed where it was)
+    ['/vs/editor/common/model/textModelTokens.js', [
+      ['        if (lineNumber === firstInvalidLineNumber && this._textModel.getLineLength(lineNumber) < Constants.CHEAP_TOKENIZATION_LENGTH_LIMIT) {\n            return true;\n        }\n        return false;\n    }',
+       '        if (lineNumber === firstInvalidLineNumber && this._textModel.getLineLength(lineNumber) < Constants.CHEAP_TOKENIZATION_LENGTH_LIMIT) {\n            return true;\n        }\n' +
+       '        if (lineNumber <= firstInvalidLineNumber + 2) {\n' +
+       '            for (let kdLine = firstInvalidLineNumber; kdLine <= lineNumber; kdLine++) {\n' +
+       '                if (this._textModel.getLineLength(kdLine) >= Constants.CHEAP_TOKENIZATION_LENGTH_LIMIT) {\n                    return false;\n                }\n' +
+       '            }\n' +
+       '            return true;\n' +
+       '        }\n' +
+       '        return false;\n    }']]],
+    ['/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js', [
+      ['    findMatchingBracketUp(_bracket, _position, maxDuration) {\n        const position = this.textModel.validatePosition(_position);\n        const languageId = this.textModel.getLanguageIdAtPosition(position.lineNumber, position.column);\n        if (this.canBuildAST) {',
+       '    findMatchingBracketUp(_bracket, _position, maxDuration) {\n        const position = this.textModel.validatePosition(_position);\n        const languageId = this.textModel.getLanguageIdAtPosition(position.lineNumber, position.column);\n        if (this.canBuildAST && this.bracketPairsTree.value) {'],
+      ['    matchBracket(position, maxDuration) {\n        if (this.canBuildAST) {',
+       '    matchBracket(position, maxDuration) {\n        if (this.canBuildAST && this.bracketPairsTree.value) {'],
+      // (and the brackets around the cursor, which the bracket highlight shows when the cursor is at none)
+      ['    findEnclosingBrackets(_position, maxDuration) {\n        const position = this.textModel.validatePosition(_position);\n        if (this.canBuildAST) {',
+       '    findEnclosingBrackets(_position, maxDuration) {\n        const position = this.textModel.validatePosition(_position);\n        if (this.canBuildAST && this.bracketPairsTree.value) {'],
+      // (an opening bracket typed in a file of more than 20,000 characters without the tree auto-closes as it did before
+      // the tree - without asking whether a closing bracket is missing after it, which built the tree in that key: 0.4 s
+      // for 70 KB. In smaller files, and once the tree is there, the question is asked as before.)
+      ['        this.bracketsRequested = true;\n        this.updateBracketPairsTree();\n        return this.bracketPairsTree.value?.object.hasUnmatchedClosingBracketAfter(position, openingBracketInfo) ?? false;',
+       '        if (!this.bracketPairsTree.value && this.textModel.getValueLength() > 20000) {\n            return false;\n        }\n' +
+       '        this.bracketsRequested = true;\n        this.updateBracketPairsTree();\n        return this.bracketPairsTree.value?.object.hasUnmatchedClosingBracketAfter(position, openingBracketInfo) ?? false;']]],
     // The symbols in the breadcrumbs (off by Kodium's default, main.ts): with them off, no outline of the file is kept for
     // the breadcrumbs - it was worked out again at every pause in typing (0.35 s) and followed every move of the cursor
     ['/vs/workbench/browser/parts/editor/breadcrumbsModel.js', [
@@ -1041,7 +1074,21 @@ function smootherScroll() {
        '            if (kdLines) {\n                kdLines.html[lineNumber] = output[lineIndex];\n                kdLines.count++;\n            }']]],
     ['/vs/editor/common/viewModel/viewModelLines.js', [
       ['                const viewLineEndIndex = line.getViewLineNumberOfModelPosition(0, this.model.getLineMaxColumn(modelLineIndex + 1));',
-       '                const viewLineEndIndex = line.getViewLineCount() === 1 ? 0 : line.getViewLineNumberOfModelPosition(0, this.model.getLineMaxColumn(modelLineIndex + 1));']]],
+       '                const viewLineEndIndex = line.getViewLineCount() === 1 ? 0 : line.getViewLineNumberOfModelPosition(0, this.model.getLineMaxColumn(modelLineIndex + 1));'],
+      // (a file's lines are projected for the view at every opening and switch: each line's injected text - inlay
+      // hints, ghost text - was looked for in the decorations' tree, 1,500 searches for a file of 1,500 lines, and its
+      // text read to work out the wrapping. A model with no injected text at all - the usual one - answers none at
+      // once; see also monospaceLineBreaksComputer.js below)
+      ['        const context = _context ?? {\n            getLineContent: lineNumber => {\n                return this.model.getLineContent(lineNumber);\n            },\n            getLineInjectedText: lineNumber => {\n                return this.model.getLineInjectedText(lineNumber, this._editorId);\n            }\n        };',
+       '        const kdNoInjectedText = !_context && this.model.getInjectedTextDecorations(this._editorId).length === 0;\n' +
+       '        const context = _context ?? {\n            getLineContent: lineNumber => {\n                return this.model.getLineContent(lineNumber);\n            },\n            getLineInjectedText: lineNumber => {\n                return kdNoInjectedText ? [] : this.model.getLineInjectedText(lineNumber, this._editorId);\n            }\n        };']]],
+    // (without wrapping, a line with nothing injected has no line breaks - createLineBreaks answers null for it: its
+    // text is not read for that now)
+    ['/vs/editor/common/viewModel/monospaceLineBreaksComputer.js', [
+      ['                    const injectedText = context.getLineInjectedText(lineNumber);\n                    const lineText = context.getLineContent(lineNumber);\n',
+       '                    const injectedText = context.getLineInjectedText(lineNumber);\n' +
+       '                    if (wrappingColumn === -1 && !(injectedText && injectedText.length)) {\n                        result[i] = null;\n                        continue;\n                    }\n' +
+       '                    const lineText = context.getLineContent(lineNumber);\n']]],
     ['/vs/editor/browser/view.js', [
       ['                const viewportData = ( new ViewportData(\n                    this._selections,\n                    partialViewportData,',
        '                const viewportData = ( new ViewportData(\n                    this._selections,\n                    this.kdRenderedLines(partialViewportData),'],

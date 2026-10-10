@@ -110,6 +110,20 @@ The first build.
   for its tabs at once: the editor got the whole height first, then at the first frame the tabs' height and a second
   layout and drawing (40-70 ms of that frame; now 8-18). And a file's details are read synchronously too, as its text
   already was (15-19 ms from asking to the answer instead of 25-33).
+- Long files open quicker and can be worked in at once (a file of 1,500 lines, two interleaved rounds on the iPad 2):
+  the bracket highlight - the bracket matching the one at the cursor, or the brackets around it - built the tree of
+  all the file's brackets right after every opening, 430-570 ms in which a tap or a key waited; it looks in the
+  tokens around the cursor now, as VS Code did before that tree, unless the tree is there already (bracket pair colours
+  or guides make it), 25-32 ms - and so does a typed closing bracket for the line to outdent to. An opening bracket
+  typed in a file of more than 20,000 characters auto-closes without asking the tree whether a closing bracket is
+  missing after it (the tree was built in that key: 0.4 s for 70 KB; smaller files ask as before). And the file's
+  lines were projected for the view one by one with a search of the decorations' tree for injected text (inlay hints,
+  ghost text) and a read of each line's text for the wrapping: without wrapping and with no injected text in the file
+  - the usual case - that is skipped (the view made in 43-122 ms instead of 130-200). First frame 0.99-1.47 s instead
+  of 1.16-1.59.
+- A closing bracket typed right after Enter is outdented to its opening bracket's line again: the line counted as too
+  costly to tokenize until the background tokenizer had caught up - which waits for a pause of 0.2 s - so typed sooner
+  it stayed where Enter had put it.
 - No more slow moments every 20-30 s while one works: JavaScriptCore throws all compiled code away whenever its pool of
   executable memory is more than half full (at every entry into JavaScript), and with the workbench's code compiled
   after ~7 calls a function, its ~8 MB filled in 20-30 s of work - the next two actions then ran 2-3 times slower at
