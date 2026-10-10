@@ -1799,11 +1799,16 @@ function fewerRowWrites() {
        '            kdNode.classList.toggle("drop-target", !!item.dropTarget);\n' +
        '        }\n' +
        '    }\n']]],
+    // (and a label looked for its icon path node - which only this method makes - with querySelector at every
+    // render, a list's row's label at every row drawn: now only when it may have one)
     ['/vs/base/browser/ui/iconLabel/iconLabel.js', [
       ['        this.domNode.element.setAttribute("aria-label", ariaLabel);\n',
        '        if (this.domNode.element.getAttribute("aria-label") !== ariaLabel) {\n' +
        '            this.domNode.element.setAttribute("aria-label", ariaLabel);\n' +
-       '        }\n']]],
+       '        }\n'],
+      ['        const existingIconNode = this.domNode.element.querySelector(".monaco-icon-label-iconpath");\n',
+       '        const existingIconNode = options?.iconPath || this.kdIconPath ? this.domNode.element.querySelector(".monaco-icon-label-iconpath") : null;\n' +
+       '        this.kdIconPath = !!options?.iconPath;\n']]],
     // (a label's matched letters - the suggestions', the palette's, quick open's at every key - into the text and the
     // highlight spans it has: they were all taken out and made again, each element attached and styled anew)
     ['/vs/base/browser/ui/highlightedlabel/highlightedLabel.js', [

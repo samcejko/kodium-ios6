@@ -89,6 +89,8 @@
     // only on the iOS 6 engine) - once 12 MB were allocated since the last collection: a collection takes 0.35-0.5 s on
     // the iPad 2 however little was allocated (the workbench's 49 MB are gone through), and every one is a chance for
     // the next touch to come in the middle of it; the heap has 25-40 MB free that the allocations fill first (it was 4).
+    // (24 MB: typing 200 keys in bursts, 3-4 collections instead of 9 and fewer slow keys, but 16 MB more resident -
+    // the garbage's high water mark stays - on a device that runs into memory warnings; kept at 12)
     (function () {
         var last = 0, queue = [], timer = null, nextId = 1, pause = null, due = 0, onTime = false;
         var arm = function (ms) { due = Date.now() + ms; pause = setTimeout(paused, ms); };
