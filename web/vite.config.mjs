@@ -1900,6 +1900,85 @@ function fewerRowWrites() {
   ])
 }
 
+// Keys typed in a row while the suggestions are open: each key's new list was drawn in that key's own frame - its rows,
+// the widget's layout and two forced layouts of the page, 300-350 ms of the ~420 a key took to show on the iPad 2
+// (against ~95 without the list). A key that comes less than 300 ms after the previous one now leaves the list as it
+// is, and the list is drawn once the typing pauses for 300 ms. Whatever reads the list - accepting (Enter, Tab), moving
+// in it, the details, a commit character of an item that has them - draws the waiting list first, so that it acts on
+// the right item; hiding the list drops it.
+function suggestPause() {
+  const flushFirst = (method) => ['    ' + method + ' {\n', '    ' + method + ' {\n        this.kdFlush();\n']
+  return patchModules('kodium-suggest-pause', [
+    ['/vs/editor/contrib/suggest/browser/suggestWidget.js', [
+      ['    showSuggestions(completionModel, selectionIndex, isFrozen, isAuto, noFocus) {\n        this._contentWidget.setPosition(this.editor.getPosition());\n',
+       '    showSuggestions(completionModel, selectionIndex, isFrozen, isAuto, noFocus) {\n' +
+       // (a list that came empty is not kept waiting: it closes the widget, and an Enter meanwhile has to be a new line)
+       '        const kdNow = Date.now(), kdInARow = kdNow - (this.kdLastShow || 0) < 300;\n' +
+       '        if (!this.kdFlushing) {\n            this.kdLastShow = kdNow;\n        }\n' +
+       '        if (kdInARow && !this.kdFlushing && !isFrozen && this._state === State.Open && this._completionModel && completionModel.items.length > 0) {\n' +
+       '            this.kdPending = [completionModel, selectionIndex, isFrozen, isAuto, noFocus];\n' +
+       '            self.__kdSuggestWaiting = this;\n' +
+       '            clearTimeout(this.kdPendingTimer);\n' +
+       '            this.kdPendingTimer = setTimeout(() => this.kdFlush(), 300);\n' +
+       '            return;\n' +
+       '        }\n' +
+       '        this.kdDrop();\n' +
+       '        this._contentWidget.setPosition(this.editor.getPosition());\n'],
+      ['    focusSelected() {\n',
+       '    kdFlush() {\n' +
+       '        const pending = this.kdPending;\n' +
+       '        this.kdDrop();\n' +
+       '        if (pending && this._state !== State.Hidden) {\n' +
+       '            this.kdFlushing = true;\n' +
+       '            try {\n                this.showSuggestions(...pending);\n            } finally {\n                this.kdFlushing = false;\n            }\n' +
+       '        }\n' +
+       '    }\n' +
+       '    kdDrop() {\n' +
+       '        clearTimeout(this.kdPendingTimer);\n' +
+       '        this.kdPendingTimer = undefined;\n' +
+       '        this.kdPending = undefined;\n' +
+       '        if (self.__kdSuggestWaiting === this) {\n            self.__kdSuggestWaiting = undefined;\n        }\n' +
+       '    }\n' +
+       '    kdFlushIfCommitCharacters() {\n' +
+       '        const pending = this.kdPending;\n' +
+       '        if (!pending) {\n            return;\n        }\n' +
+       '        const model = pending[0];\n' +
+       '        if (model.kdCommits === undefined) {\n' +
+       '            model.kdCommits = model.items.some(item => !!(item.completion.commitCharacters && item.completion.commitCharacters.length));\n' +
+       '        }\n' +
+       '        if (model.kdCommits) {\n            this.kdFlush();\n        }\n' +
+       '    }\n' +
+       '    focusSelected() {\n        this.kdFlush();\n'],
+      flushFirst('selectNextPage()'),
+      flushFirst('selectNext()'),
+      flushFirst('selectLast()'),
+      flushFirst('selectPreviousPage()'),
+      flushFirst('selectPrevious()'),
+      flushFirst('selectFirst()'),
+      flushFirst('getFocusedItem()'),
+      flushFirst('toggleDetailsFocus()'),
+      flushFirst('toggleDetails(focused = false)'),
+      flushFirst('toggleExplainMode()'),
+      ['    hideWidget() {\n', '    hideWidget() {\n        this.kdDrop();\n'],
+      ['    showTriggered(auto, delay) {\n', '    showTriggered(auto, delay) {\n        this.kdDrop();\n'],
+      // (a key that the keybindings may give to the list - Enter, Tab, the arrows, Page Up/Down - draws the waiting
+      // list before they are looked up: its context keys, "makes a text edit" for Enter, are the new list's then)
+      ['export { SuggestContentWidget, SuggestWidget, editorSuggestWidgetFocusOutline,',
+       'if (typeof document !== "undefined") {\n' +
+       '    document.addEventListener("keydown", e => {\n' +
+       '        const k = e.keyCode;\n' +
+       '        if (self.__kdSuggestWaiting && (k === 9 || k === 13 || k === 33 || k === 34 || k === 38 || k === 40)) {\n' +
+       '            self.__kdSuggestWaiting.kdFlush();\n' +
+       '        }\n' +
+       '    }, true);\n' +
+       '}\n' +
+       'export { SuggestContentWidget, SuggestWidget, editorSuggestWidgetFocusOutline,']]],
+    ['/vs/editor/contrib/suggest/browser/suggestCommitCharacters.js', [
+      ['        this._disposables.add(editor.onWillType(text => {\n',
+       '        this._disposables.add(editor.onWillType(text => {\n            widget.kdFlushIfCommitCharacters?.();\n']]]
+  ])
+}
+
 // The start: Kodium registers monaco's 31 Monarch languages one by one (src/languages.ts), and every registration had
 // the languages' registry made again from all languages so far and the settings' schema told of all of them as
 // override identifiers - 651 language merges and 31 schema updates (0.9 s of a profiled start). Registered together
@@ -2323,7 +2402,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
