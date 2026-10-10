@@ -2075,6 +2075,18 @@ const LEFT_OUT = [
   // (the stylesheet of the floating panels - an experimental setting, off: 81 rules under .floating-panels, which the
   // old WebKit still tried at every style recalculation of the elements their last part names, 38 KB)
   'vs/workbench/browser/media/floatingPanels.css',
+  // (the terminal's parts Kodium's shells cannot serve or the iPad does without - 1.3 MB of 2.1: the accessible view of
+  // its buffer, voice input with chat's speech service, completions, history, quick fixes, sticky scroll and command
+  // guide - these four need VS Code's shell integration scripts, which the Kodium Shell daemon's bash does not run -,
+  // type-ahead echo for slow remote shells, notifications, chat hints, telemetry, developer commands, external terminals
+  // and the WSL hint of Windows)
+  ...['accessibility/browser/terminal.accessibility', 'voice/browser/terminal.voice', 'suggest/browser/terminal.suggest',
+      'typeAhead/browser/terminal.typeAhead', 'history/browser/terminal.history', 'quickFix/browser/terminal.quickFix',
+      'stickyScroll/browser/terminal.stickyScroll', 'notification/browser/terminal.notification',
+      'inlineHint/browser/terminal.initialHint', 'developer/browser/terminal.developer', 'telemetry/browser/terminal.telemetry',
+      'wslRecommendation/browser/terminal.wslRecommendation', 'commandGuide/browser/terminal.commandGuide']
+    .map((name) => 'vs/workbench/contrib/terminalContrib/' + name + '.contribution.js'),
+  'vs/workbench/contrib/externalTerminal/browser/externalTerminal.contribution.js',
   ...['EditorTabs', 'Comments', 'Testing', 'Task', 'TerminalService', 'TerminalShellIntegration', 'DebugService', 'SCM',
       'CLICommands', 'TunnelService', 'Speech', 'ManagedSockets', 'DataChannels', 'Browsers']
     .map((name) => 'vs/workbench/api/browser/mainThread' + name + '.js')
@@ -2961,7 +2973,9 @@ export default defineConfig({
   base: './',
   plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
-  resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
+  resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
+    // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)
+    { find: /^@xterm\/addon-(webgl|image|ligatures)(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/xterm-addon.js') }] },
   build: {
     target: 'es2022',
     outDir: 'dist',

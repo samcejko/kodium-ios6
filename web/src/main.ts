@@ -81,6 +81,7 @@ import { registerEmmet } from './emmet'
 import { registerMarkdown } from './markdown'
 import { registerPython } from './python'
 import { DOCUMENTS, registerAppFolders } from './files'
+import { getTerminalOverride } from './terminal'
 // (URI from VS Code's base, not the 'vscode' extension API: that brought the extension host's API and the extensions
 // service with it, a seventh of the bundle, for one Uri.file)
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
@@ -185,7 +186,12 @@ async function start() {
       // 12 s at the first after a start (every description cut into terms by a \p{Letter} expression, which the iOS 6
       // engine runs lowered), and the matching settings already found waited for it to reach the screen. The search
       // still looks in the names, ids, descriptions and values; the setting turns the other back on.
-      'workbench.settings.enableNaturalLanguageSearch': false
+      'workbench.settings.enableNaturalLanguageSearch': false,
+      // The terminal (web/src/terminal.ts): xterm.js draws with the DOM - iOS 6's web view has no WebGL; the shells are
+      // the Kodium Shell daemon's, which VS Code's shell integration scripts and persistent sessions do not reach
+      'terminal.integrated.gpuAcceleration': 'off',
+      'terminal.integrated.shellIntegration.enabled': false,
+      'terminal.integrated.enablePersistentSessions': false
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
@@ -236,6 +242,7 @@ async function start() {
       ...getOutlineServiceOverride(),
       ...getTimelineServiceOverride(),
       ...getStatusBarServiceOverride(),
+      ...getTerminalOverride(),
       ...getExtensionGalleryServiceOverride({ webOnly: true }),
       ...getWorkbenchServiceOverride(),
       ...getQuickAccessServiceOverride({

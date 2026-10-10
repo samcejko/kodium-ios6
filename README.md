@@ -21,6 +21,11 @@ extensions are the next big step (see the plan below).
   rewriter that makes modern stylesheets work on the 2012 WebKit, the page polyfills and shims, and the JIT inside
   the web view (the `dynamic-codesigning` entitlement). The workbench is served from the app at
   `https://kodium.invalid/` (`src/KDSiteProtocol.m`); its stylesheet is rewritten once and kept.
+- **The terminal** is VS Code's (xterm.js), its shells the iPad's own: iOS lets an app of `/var/mobile/Applications`
+  start no process, so the package **Kodium Shell** (`shell/`, `Kodium-shell-<version>.deb`) has launchd run
+  `kodium-shelld` for each connection to `127.0.0.1:47070`: a login shell (bash) on a pseudo terminal, as the user
+  mobile. It answers only Kodium - a connection has to name the token Kodium writes into its container at every start
+  (`src/KDTerminal.m`, `web/src/terminal.ts`). Install it once, as root: `dpkg -i Kodium-shell-<version>.deb`.
 
 ## Plan
 
@@ -33,8 +38,8 @@ extensions are the next big step (see the plan below).
 
 No Mac is needed: `.github/workflows/build.yml` builds on Ubuntu with Theos, the iOS 9.3 SDK (deployment target 6.0)
 and an LLVM toolchain, fetches what the engine needs (Mbed TLS, woff2, brotli, libwebp, the CA bundle, the polyfills),
-builds the workbench (`web/`) and makes `Kodium-<version>.ipa` (with the JIT), `Kodium-<version>-nojit.ipa` and
-`Kodium-<version>.deb` as Actions artifacts.
+builds the workbench (`web/`) and makes `Kodium-<version>.ipa` (with the JIT), `Kodium-<version>-nojit.ipa`,
+`Kodium-<version>.deb` and the terminal's `Kodium-shell-<version>.deb` as Actions artifacts.
 
 On Windows (no git needed):
 

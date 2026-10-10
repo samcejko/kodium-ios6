@@ -263,6 +263,16 @@ jobs:
           make package FINALPACKAGE=1 -j"$(nproc)" 2>&1 | tee build.log
           ls -la .theos/_/Applications/Kodium.app | head -n 60
 
+      # The terminal's shells (shell/kodium-shelld.c): a package of their own - Kodium, an app of /var/mobile/Applications,
+      # may start no process itself
+      - name: Build the shell package
+        run: |
+          set -o pipefail
+          export PATH="$THEOS/toolchain/linux/iphone/bin:$THEOS/bin:$PATH"
+          chmod 755 shell/layout/DEBIAN/postinst shell/layout/DEBIAN/prerm
+          make -C shell clean || true
+          make -C shell package FINALPACKAGE=1 2>&1 | tee -a build.log
+
       - name: Make the IPAs and name the packages
         run: |
           set -e
@@ -295,7 +305,13 @@ jobs:
           for f in Kodium site/index.html site/vsc-prelude.js site/assets/workbench.es5.js site/assets/style.css js/core-js-custom.js js/shims.js cssfix.js jsfix.js cacert.pem; do
             grep -q "Applications/Kodium.app/$f\$" /tmp/deb-files.txt || { echo "::error::$f is not in the .deb"; exit 1; }
           done
-          (cd packages && sha256sum "Kodium-$VERSION.ipa" "Kodium-$VERSION-nojit.ipa" "Kodium-$VERSION.deb" > SHA256SUMS && cat SHA256SUMS)
+          SHELLDEB=$(ls shell/packages/com.samcejko.kodium-shell_*_iphoneos-arm.deb | head -n1)
+          mv "$SHELLDEB" "packages/Kodium-shell-$VERSION.deb"
+          dpkg-deb -c "packages/Kodium-shell-$VERSION.deb" > /tmp/shell-files.txt
+          for f in usr/libexec/kodium-shelld Library/LaunchDaemons/com.samcejko.kodium.shelld.plist; do
+            grep -q "$f\$" /tmp/shell-files.txt || { echo "::error::$f is not in the shell .deb"; exit 1; }
+          done
+          (cd packages && sha256sum "Kodium-$VERSION.ipa" "Kodium-$VERSION-nojit.ipa" "Kodium-$VERSION.deb" "Kodium-shell-$VERSION.deb" > SHA256SUMS && cat SHA256SUMS)
           ls -la packages/
 
       - name: Upload packages

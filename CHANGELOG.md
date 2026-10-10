@@ -177,6 +177,18 @@ The first build.
   text. And the filter's own word matching asked the engine's Set shim whether each character separates words (44,000
   times for "view") and kept its memo in a Map of the shim: plain arrays now. The matching commands show in 0.65 s,
   the first filter after a start in 0.84 (the same rows, checked).
+- A terminal: VS Code's own terminal panel (Ctrl+`, Terminal: New Terminal; xterm.js, drawn with the DOM - iOS 6's
+  web view has no WebGL) with shells of the iPad itself. iOS lets an app of /var/mobile/Applications start no process,
+  so a new package does: Kodium Shell (Kodium-shell-<version>.deb) has launchd start a small daemon for each
+  connection to 127.0.0.1:47070, which runs a login shell (bash) on a pseudo terminal as the user mobile, in the
+  workspace's folder. It answers only Kodium: a connection has to name the token Kodium writes into its container at
+  every start. Without the package the terminal says how to install it. Left out of VS Code's terminal: what needs its
+  shell integration scripts (command history, quick fixes, sticky scroll, completions), voice input, the accessible
+  view and type-ahead echo - 1.3 MB of the 2.1 it brought (the workbench grew by 1.5 MB).
+- The key bar has esc and ctrl: ctrl stays down for the next key, of the bar or of the on-screen keyboard - in the
+  terminal Ctrl+C, Ctrl+D, Ctrl+Z and the like, in the editor its shortcuts (Ctrl+S save, F find, H replace, Z/Y
+  undo/redo, / comment, D next occurrence, G go to line, P go to file, W close). In the terminal Tab, Esc and the arrows
+  are the terminal's keys (a program's modes kept: vim, less).
 - Searching the Settings: 2.3 s at every search on the iPad 2 until the matching settings showed, 10-12 s at the
   first after a start. After the settings matching the words, VS Code looks for "natural language" ones - a TF-IDF of
   all ~680 settings' texts, every description cut into terms by an expression the iOS 6 engine runs lowered, made anew

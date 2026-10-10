@@ -48,6 +48,7 @@
     "@codingame/monaco-vscode-standalone-languages": "37.3.3",
     "@codingame/monaco-vscode-storage-service-override": "37.3.3",
     "@codingame/monaco-vscode-swift-default-extension": "37.3.3",
+    "@codingame/monaco-vscode-terminal-service-override": "37.3.3",
     "@codingame/monaco-vscode-theme-defaults-default-extension": "37.3.3",
     "@codingame/monaco-vscode-theme-service-override": "37.3.3",
     "@codingame/monaco-vscode-theme-seti-default-extension": "^37.3.3",

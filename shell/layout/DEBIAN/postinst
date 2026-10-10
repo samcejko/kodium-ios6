@@ -1,0 +1,5 @@
+#!/bin/sh
+# (the daemon's socket: launchd listens from now on, also after a restart)
+launchctl unload /Library/LaunchDaemons/com.samcejko.kodium.shelld.plist 2>/dev/null
+launchctl load /Library/LaunchDaemons/com.samcejko.kodium.shelld.plist
+exit 0

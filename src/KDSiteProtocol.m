@@ -1,5 +1,7 @@
 #import "KDSiteProtocol.h"
 #import "KDFiles.h"
+#import "KDTerminal.h"
+#import "KDKeyBar.h"
 #import "BRCSSRewriter.h"
 #import "BRCommon.h"
 #import "BRJSEngine.h"
@@ -175,6 +177,19 @@ static NSString *KDStylesheetCacheDirectory(void)
                 [self deliverData:[(done ? @"done" : @"no") dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain" status:200];
             }];
         });
+        return;
+    }
+    // the key bar's ctrl was used for a key (web/src/keybar.ts): it goes up
+    if ([url.path isEqualToString:@"/__kd/app/ctrl-up"]) {
+        [KDKeyBar ctrlReleased];
+        [self deliverData:[NSData data] type:@"text/plain" status:200];
+        return;
+    }
+    // the terminal's shells (KDTerminal; a read may wait for the shell's output)
+    if ([url.path hasPrefix:@"/__kd/term/"]) {
+        [KDTerminal performOperation:[url.path substringFromIndex:11] request:self.request completion:^(NSInteger status, NSData *body, NSString *type) {
+            [self performOnClientThread:^{ [self deliverData:body ?: [NSData data] type:type ?: @"text/plain" status:status]; }];
+        }];
         return;
     }
     // the files of the app's Documents (KDFiles)

@@ -44,6 +44,7 @@ static UIImage *KDKeyImage(BOOL pressed)
 @property (nonatomic, strong) NSTimer *repeat;
 @property (nonatomic, copy) NSString *held;
 @property (nonatomic) BOOL repeated;
+@property (nonatomic, weak) UIButton *ctrlKey;
 @end
 
 @implementation KDKeyBar
@@ -66,8 +67,10 @@ static UIImage *KDKeyImage(BOOL pressed)
 // name, what the key shows (nil: the name itself)
 + (NSArray *)keys
 {
-    // (suggest: the editor's suggestions and snippets where the caret is, as Ctrl+Space - the on-screen keyboard has none)
-    return @[ @[@"tab", L(@"tab")], @[@"suggest", L(@"suggest")], @[@"left", @"←"], @[@"right", @"→"], @[@"up", @"↑"], @[@"down", @"↓"],
+    // (suggest: the editor's suggestions and snippets where the caret is, as Ctrl+Space - the on-screen keyboard has none;
+    // esc and ctrl - for the terminal, and ctrl for the editor's shortcuts: it stays down for the next key, any keyboard's)
+    return @[ @[@"tab", L(@"tab")], @[@"esc", @"esc"], @[@"ctrl", @"ctrl"], @[@"suggest", L(@"suggest")],
+              @[@"left", @"←"], @[@"right", @"→"], @[@"up", @"↑"], @[@"down", @"↓"],
               @[@"{"], @[@"}"], @[@"("], @[@")"], @[@"["], @[@"]"], @[@"<"], @[@">"], @[@"="], @[@";"], @[@":"], @[@"\""], @[@"'"],
               @[@"/"], @[@"\\"], @[@"|"], @[@"&"], @[@"!"], @[@"?"], @[@"+"], @[@"-"], @[@"*"], @[@"_"], @[@"$"], @[@"#"],
               @[@"%"], @[@"`"], @[@"~"], @[@"^"], @[@"@"], @[@"undo", L(@"undo")], @[@"redo", L(@"redo")] ];
@@ -106,6 +109,9 @@ static UIImage *KDKeyImage(BOOL pressed)
         b.frame = CGRectMake(x, (KDBarHeight - KDKeyHeight) / 2 + 1, width, KDKeyHeight);
         [b setBackgroundImage:up forState:UIControlStateNormal];
         [b setBackgroundImage:down forState:UIControlStateHighlighted];
+        [b setBackgroundImage:down forState:UIControlStateSelected];
+        [b setBackgroundImage:down forState:UIControlStateSelected | UIControlStateHighlighted];
+        if ([name isEqualToString:@"ctrl"]) self.ctrlKey = b;
         [b setTitle:title forState:UIControlStateNormal];
         [b setTitleColor:[UIColor colorWithWhite:0.18 alpha:1] forState:UIControlStateNormal];
         [b setTitleShadowColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -162,7 +168,14 @@ static UIImage *KDKeyImage(BOOL pressed)
     NSString *name = self.held;
     BOOL repeated = self.repeated;
     [self keyLeft:button];
+    // (ctrl stays down until the next key: the workbench lets it go, see ctrlReleased)
+    if ([name isEqualToString:@"ctrl"]) button.selected = !button.selected;
     if (name && !repeated && self.onKey) self.onKey(name);
+}
+
++ (void)ctrlReleased
+{
+    dispatch_async(dispatch_get_main_queue(), ^{ KDSharedBar.ctrlKey.selected = NO; });
 }
 
 - (void)keyLeft:(UIButton *)button

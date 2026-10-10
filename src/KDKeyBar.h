@@ -11,5 +11,7 @@
 
 // The bar in place of WebKit's for every web view of the app (once, at the start)
 + (void)installWithHandler:(void (^)(NSString *key))handler;
+// ctrl, which stays down once tapped, up again: the workbench used it for a key (https://kodium.invalid/__kd/app/ctrl-up)
++ (void)ctrlReleased;
 
 @end

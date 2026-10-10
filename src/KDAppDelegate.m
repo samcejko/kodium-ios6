@@ -3,6 +3,7 @@
 #import "KDSiteProtocol.h"
 #import "KDRedirectProtocol.h"
 #import "KDFiles.h"
+#import "KDTerminal.h"
 #import "BRURLProtocol.h"
 #import "BRHTTPRequest.h"
 #import "BRSettings.h"
@@ -274,6 +275,8 @@ static void KDKeepCodeOnMemoryPressure(void)
     [KDSiteProtocol registerProtocol];
     // (Open VSX's assets, which redirect: see KDRedirectProtocol)
     [KDRedirectProtocol registerProtocol];
+    // (the terminal's token for the shell daemon of the Kodium Shell package: a new one at every start, see KDTerminal)
+    [KDTerminal prepareToken];
     [BRMemory start];
     // Light relief: every 20 s while the app holds more than 200 MB, the memory WebKit's allocator keeps free (27 MB of
     // it once the workbench had worked a while) goes back to the system - no garbage collection, which the engine's

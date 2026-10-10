@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Shells for Kodium's terminal: launchd listens on 127.0.0.1:47070 only and starts kodium-shelld as mobile for each
+     connection, the connection on its stdin and stdout (as sshd's plist does) -->
+<dict>
+	<key>Label</key>
+	<string>com.samcejko.kodium.shelld</string>
+	<key>Program</key>
+	<string>/usr/libexec/kodium-shelld</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/libexec/kodium-shelld</string>
+	</array>
+	<key>UserName</key>
+	<string>mobile</string>
+	<key>Sockets</key>
+	<dict>
+		<key>Listeners</key>
+		<dict>
+			<key>SockNodeName</key>
+			<string>127.0.0.1</string>
+			<key>SockServiceName</key>
+			<string>47070</string>
+		</dict>
+	</dict>
+	<key>inetdCompatibility</key>
+	<dict>
+		<key>Wait</key>
+		<false/>
+	</dict>
+	<key>StandardErrorPath</key>
+	<string>/dev/null</string>
+</dict>
+</plist>

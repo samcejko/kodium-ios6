@@ -1,0 +1,15 @@
+Package: com.samcejko.kodium-shell
+Name: Kodium Shell
+Version: 0.1.0
+Architecture: iphoneos-arm
+Description: Shells for Kodium's terminal
+ iOS does not let an app of the App Store kind start processes, Kodium
+ neither: this package's small daemon, started by launchd for each
+ connection on 127.0.0.1:47070 only, runs a login shell (bash) on a pseudo
+ terminal as the user mobile for Kodium's terminal panel. It answers only
+ Kodium: a connection has to name the token Kodium keeps in its container.
+Maintainer: samcejko
+Author: samcejko
+Homepage: https://github.com/samcejko/kodium-ios6
+Section: Terminal_Support
+Depends: firmware (>= 6.0)
