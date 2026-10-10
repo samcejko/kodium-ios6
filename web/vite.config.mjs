@@ -1386,6 +1386,13 @@ function suggestTimers() {
       // (inside fewerRowWrites' condition: this plugin comes after it)
       ['this._list.splice(index, 1, [item]);',
        '{ const kdT_resolvedrow = Date.now(); this._list.splice(index, 1, [item]); self.__kdAdd && self.__kdAdd("resolved row", Date.now() - kdT_resolvedrow); }']]],
+    // (the documents' words: when the worker was asked, when it answered, how long it took itself)
+    ['/vs/editor/browser/services/editorWorkerService.js', [
+      ['        const client = await this._workerManager.withWorker();\n        const data = await client.textualSuggest(models, word?.word, wordDefRegExp);\n',
+       '        self.__kdMark && self.__kdMark("words asked");\n' +
+       '        const client = await this._workerManager.withWorker();\n        self.__kdMark && self.__kdMark("words: worker ready");\n' +
+       '        const data = await client.textualSuggest(models, word?.word, wordDefRegExp);\n' +
+       '        self.__kdMark && self.__kdMark("words: " + (data ? data.words.length + " in " + data.duration + " ms in the worker" : "none"));\n']]],
     ['/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js', [
       ['    renderElement(element, index, data) {\n', '    renderElement(element, index, data) {\n        const kdT0 = Date.now();\n'],
       ['\n    }\n    disposeTemplate(templateData) {', '\n        self.__kdAdd && self.__kdAdd("row render", Date.now() - kdT0);\n    }\n    disposeTemplate(templateData) {']]]

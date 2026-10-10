@@ -64,14 +64,20 @@ const quickerWords = {
        '                    break outer;\n' +
        '                }\n' +
        '            }\n',
+       // (each word looked up in a plain object first - the worker's Set is a polyfill, 9,000 adds for 345 words -
+       // and Number() asked only of what can be a number: a digit, "-", "." or "I"nfinity first)
        '            let kdFull = false;\n' +
        '            model.kdEachWord(wordDefRegExp, word => {\n' +
-       '                if (word === leadingWord || !isNaN(Number(word))) {\n                    return true;\n                }\n' +
+       '                if (word === leadingWord || kdSeen[word] !== undefined) {\n                    return true;\n                }\n' +
+       '                const kdFirst = word.charCodeAt(0);\n' +
+       '                if ((kdFirst >= 48 && kdFirst <= 57 || kdFirst === 45 || kdFirst === 46 || kdFirst === 73) && !isNaN(Number(word))) {\n                    kdSeen[word] = 2;\n                    return true;\n                }\n' +
+       '                kdSeen[word] = 1;\n' +
        '                seen.add(word);\n' +
        '                if (seen.size > EditorWorker._suggestionsLimit) {\n                    kdFull = true;\n                    return false;\n                }\n' +
        '                return true;\n' +
        '            });\n' +
-       '            if (kdFull) {\n                break outer;\n            }\n']
+       '            if (kdFull) {\n                break outer;\n            }\n'],
+      ['        const seen = ( new Set());\n        outer:\n', '        const seen = ( new Set());\n        const kdSeen = Object.create(null);\n        outer:\n']
     ] : null
     if (!edits) return null
     for (const [find, replace] of edits) {

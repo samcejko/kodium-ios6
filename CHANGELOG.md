@@ -86,10 +86,12 @@ The first build.
   ones are as wide as they would grow now. A list writes a row's attributes and styles only when they change (the old
   WebKit restyles an element and what is in it for a value written again), and so do the suggestions for their rows'
   font styles, icons and labels, which they wrote anew at every key.
-- The suggestions come ~0.3 s sooner: the words of the open documents (the suggestions' "abc" items), which the
-  editor's worker gathers at every list, came out of a generator - lowered to ES5 for iOS 6, the regenerator
-  runtime's machinery ran for every word: 430-480 ms for a file of 1,500 lines on the iPad 2, now 260-370 (a plain
-  loop over the lines and the word regex's matches).
+- The suggestions come ~0.4 s sooner: the words of the open documents (the suggestions' "abc" items), which the
+  editor's worker gathers at every list, took it 430-480 ms for a file of 1,500 lines on the iPad 2, now 91-97: they came
+  out of a generator (lowered to ES5 for iOS 6, the regenerator runtime's machinery ran for every word) and each of
+  them - 9,000 for 345 different words - went into a Set, a polyfill in the worker. Now a plain loop over the lines
+  and the word regex's matches, a word looked up in a plain object first, and Number() asked only of what can be a
+  number. The list shows 1.55 s after the key there (of which 1 s is quickSuggestionsDelay) instead of 1.9-2.3.
 - Keys typed while the suggestions are open another ~10 % sooner (423 ms instead of 467 to the frame with 12 rows in
   the list, a file of 1,500 lines, interleaved): a label's matched letters - the suggestions' at every key, the
   palette's and quick open's as one types the filter - go into the text and highlight spans it has, where all of them
