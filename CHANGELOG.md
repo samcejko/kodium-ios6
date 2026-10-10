@@ -110,6 +110,13 @@ The first build.
   for its tabs at once: the editor got the whole height first, then at the first frame the tabs' height and a second
   layout and drawing (40-70 ms of that frame; now 8-18). And a file's details are read synchronously too, as its text
   already was (15-19 ms from asking to the answer instead of 25-33).
+- No more slow moments every 20-30 s while one works: WebKit answers the kernel's memory pressure notices - which the
+  iPad 2 sends Kodium (250-290 MB of its 512) every 20-30 s of work - with a release that also threw away all the
+  workbench's compiled code, and the next actions ran 2-3 times slower while everything was parsed and compiled again
+  (a switch of editors 0.95-1.1 s instead of 0.45, every step of it slower; a canary function's next call 48 ms
+  instead of 2; a minute of switching spent 2.7 % of the WebThread on compiling again). The engine's code keeper only
+  held JavaScriptCore's own minute rule back. WebKit's discard now goes through only when memory is critical (the
+  engine throws the code away itself then); the rest of its release stays as it was.
 - And sooner again (the same measure, three interleaved rounds, all twelve pairs quicker: hello.js 0.93 s instead of
   0.94, README.md 1.41 instead of 1.62, opened again 0.63 instead of 0.65 and 0.61 instead of 0.63): the group's
   context keys for the editor that became active - a dozen (its kind, resource, whether it can be split, reverted...) -

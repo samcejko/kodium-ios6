@@ -46,6 +46,42 @@ static void KDWriteResult(NSString *name, NSString *text)
     [text ?: @"" writeToFile:[NSTemporaryDirectory() stringByAppendingPathComponent:name] atomically:YES encoding:NSUTF8StringEncoding error:NULL];
 }
 
+// WebKit answers the kernel's memory pressure notices (+[WebView registerForMemoryNotifications]: a dispatch source on
+// DISPATCH_VM_PRESSURE, and WebCore's MemoryPressureHandler) with a release that also throws away all the compiled
+// JavaScript (WebCore::GCController::discardAllCompiledCode). With the workbench - 250-290 MB of the iPad 2's 512 - such
+// notices came every 20-30 s while one worked, and each time the next actions ran 2-3 times slower while everything
+// was parsed and compiled again: a switch of editors 0.95-1.1 s instead of 0.45 (a canary function's next call took 48
+// ms instead of 2; the WebThread spent 2.7 % of a minute of switching on compiling again). The engine's code keeper
+// (BRJSCKeepCode) only holds JavaScriptCore's own minute rule back. The WebCore call goes through only when memory is
+// critical now (the engine throws the code away itself then, and its relief does it directly); the rest of WebKit's
+// release stays as it was.
+static void (*KDDiscardAllCompiledCode)(void *controller);
+static NSUInteger KDDiscardsKept;
+
+static void KDDiscardOnlyWhenCritical(void *controller)
+{
+    if ([BRMemory level] >= BRMemoryLevelCritical) {
+        BRLog(@"WebKit's memory pressure release: compiled code thrown away (%ld MB available)", [BRMemory availableMB]);
+        KDDiscardAllCompiledCode(controller);
+        return;
+    }
+    KDDiscardsKept++;
+    // (the first few in the log, then every tenth)
+    if (KDDiscardsKept <= 3 || KDDiscardsKept % 10 == 0)
+        BRLog(@"WebKit's memory pressure release: compiled code kept (%lu so far, %ld MB available)", (unsigned long)KDDiscardsKept, [BRMemory availableMB]);
+}
+
+static void KDKeepCodeOnMemoryPressure(void)
+{
+    void (*hook)(void *, void *, void **) = (void (*)(void *, void *, void **))dlsym(RTLD_DEFAULT, "MSHookFunction");
+    void *target = dlsym(RTLD_DEFAULT, "_ZN7WebCore12GCController22discardAllCompiledCodeEv");
+    if (!hook || !target) {
+        BRLog(@"WebKit's memory pressure release left as it is (%@)", !hook ? @"no MSHookFunction" : @"WebCore's discard not found");
+        return;
+    }
+    hook(target, (void *)KDDiscardOnlyWhenCritical, (void **)&KDDiscardAllCompiledCode);
+}
+
 @interface KDAppDelegate ()
 // (the few seconds asked for the saves when the app goes to the background)
 @property (nonatomic) UIBackgroundTaskIdentifier saveTask;
@@ -244,6 +280,8 @@ static void KDWriteResult(NSString *name, NSString *text)
     // last did, and the first action after a pause compiled again whatever it ran (a switch of editors 1.8 s instead
     // of 1.3). Surfari's engine keeps it (BRJSCKeepCode) and throws it away itself when memory gets critical (40 MB).
     [BRJSEngine keepPageCode];
+    // (and WebKit's answer to the kernel's memory pressure notices keeps it too, unless memory is critical)
+    KDKeepCodeOnMemoryPressure();
     // (the warm-up has the start's code thrown away once the engine can tell: KDSiteProtocol /__kd/app/keepcode)
     [KDSiteProtocol noteCodeKeeperStarted];
     self.saveTask = UIBackgroundTaskInvalid;
