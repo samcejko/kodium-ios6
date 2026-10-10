@@ -179,8 +179,61 @@ function inlineMarkdown() {
 // went one by one through the engine's stylesheet rewriter - a synchronous request to the app each. A rule with
 // nothing the iOS 6 engine lacks goes in as it is; one with something modern (a variable, flex, transforms, newer
 // selectors and functions...) still goes through the rewriter.
+// The editor's own rules made at run time (DynamicCssRules: a colour's swatch in CSS, inlay hints' styles) were a <style>
+// element each, put into the page and then given its text: two rebuilds of the old WebKit's rule sets from all of the
+// page's 570 KB of CSS, ~80 ms each on the iPad 2 - and they went 1 s after the editor stopped using them, so every
+// switch to a CSS file made its colours' rules again (four colours: 0.65 s of a 1.6 s switch). A rule with nothing
+// modern goes into one shared sheet now, natively (the rule sets are made again once, at the next frame), and a rule
+// no longer used stays for 5 minutes.
 function plainRules() {
   return patchModules('kodium-plain-rules', [
+    ['/vs/editor/browser/editorDom.js', [
+      ['        this._garbageCollectionScheduler = ( new RunOnceScheduler(() => this.garbageCollect(), 1000));',
+       '        this._garbageCollectionScheduler = ( new RunOnceScheduler(() => this.garbageCollect(), 5 * 60 * 1000));'],
+      ['            existingRule = ( new RefCountedCssRule(\n', '            existingRule = ( kdCssRule(RefCountedCssRule,\n']],
+     'let kdSharedStyle;\n' +
+     'function kdSharedSheet() {\n' +
+     '    if (!kdSharedStyle || !kdSharedStyle.sheet || !kdSharedStyle.parentNode) {\n' +
+     '        kdSharedStyle = document.createElement("style");\n' +
+     '        kdSharedStyle.textContent = "/*br*/";\n' +
+     '        document.head.appendChild(kdSharedStyle);\n' +
+     '    }\n' +
+     '    return kdSharedStyle.sheet;\n' +
+     '}\n' +
+     'const kdModernRule = /var\\(|--[\\w-]+\\s*:|calc\\(|\\b(?:min|max|clamp)\\(|:(?:is|where|has|not)\\(|#[0-9a-f]{4}\\b|#[0-9a-f]{8}\\b|rgba?\\([^)]*\\/|flex|transform|transition|animation|grid|\\bmask|\\bfilter\\s*:|appearance|color-mix|\\binset\\s*:|-content\\b|text-decoration-(?:color|style|thickness)/i;\n' +
+     'class KdSharedCssRule {\n' +
+     '    constructor(key, className, properties, text, insert) {\n' +
+     '        this.key = key;\n' +
+     '        this.className = className;\n' +
+     '        this.properties = properties;\n' +
+     '        this._referenceCount = 0;\n' +
+     '        const sheet = kdSharedSheet();\n' +
+     '        insert.call(sheet, text, sheet.cssRules.length);\n' +
+     '        this._selector = "." + className;\n' +
+     '    }\n' +
+     '    dispose() {\n' +
+     '        const sheet = kdSharedStyle && kdSharedStyle.sheet;\n' +
+     '        const rules = sheet ? sheet.cssRules : [];\n' +
+     '        for (let i = rules.length - 1; i >= 0; i--) {\n' +
+     '            if (rules[i].selectorText === this._selector) {\n                sheet.deleteRule(i);\n                break;\n            }\n' +
+     '        }\n' +
+     '    }\n' +
+     '    increaseRefCount() {\n        this._referenceCount++;\n    }\n' +
+     '    decreaseRefCount() {\n        this._referenceCount--;\n    }\n' +
+     '    hasReferences() {\n        return this._referenceCount > 0;\n    }\n' +
+     '}\n' +
+     'function kdCssRule(Original, key, className, container, properties) {\n' +
+     '    const insert = typeof window !== "undefined" ? window.__brNativeInsertRule : undefined;\n' +
+     '    if (!container && insert && typeof document !== "undefined" && document.head && typeof window.__kd_plainStyle === "function") {\n' +
+     // (what vsc-prelude's __kd_plainStyle gives as plain - the theme's variables resolved, the rewriter's mark first)
+     '        const plain = window.__kd_plainStyle(Original.prototype.getCssText.call(undefined, className, properties));\n' +
+     '        const text = typeof plain === "string" && plain.slice(0, 6) === "/*br*/" ? plain.slice(6).replace(/\\/\\*[\\s\\S]*?\\*\\//g, "").trim() : "";\n' +
+     '        if (text && !kdModernRule.test(text) && /^\\.[\\w-]+\\s*\\{[^{}]*\\}$/.test(text)) {\n' +
+     '            try {\n                return new KdSharedCssRule(key, className, properties, text, insert);\n            } catch (e) {}\n' +
+     '        }\n' +
+     '    }\n' +
+     '    return new Original(key, className, container, properties);\n' +
+     '}\n'],
     ['/vs/base/browser/domStylesheets.js', [
       ['    style.sheet?.insertRule(`${selector} {${cssText}}`, 0);', '    __kdInsertRule(style.sheet, `${selector} {${cssText}}`);']],
      'const __kdModernCSS = /var\\(|--[\\w-]+\\s*:|calc\\(|\\b(?:min|max|clamp)\\(|:(?:is|where|has|not)\\(|focus-(?:visible|within)|#[0-9a-f]{4}\\b|#[0-9a-f]{8}\\b|' +
@@ -557,13 +610,17 @@ const AFTER_FRAME =
 //   activity bar), whose menus are only seen when it opens: they are made then, if something changed since
 // - the editor's toolbar (run, preview, split, more...) was made twice per switch: once for the editor that was going
 //   (VS Code redraws the tabs before the new editor has its model) and again when its contexts changed: now once, as
-//   the switch is done
+//   the switch is done - and not at all when its actions come out the same (a file's first change after a save); its
+//   menu is kept while the editor's context is the same (it was made anew at every update)
+// - a switch redrew every tab (label, icon, hover, close button, colours: 5-10 ms a tab); with the same tabs and labels
+//   only their active, selected and dirty states are drawn again
 // - the window's title (which iOS does not show) is put together when nothing is being typed or touched (it was at
 //   every switch, and twice per autosave while typing: "dirty")
 // - the editor's settings for the file were worked out twice per switch (the model, then the input): once
 // - opening a file: the Explorer's Open Editors list is made again after the first frame, not before it, and a file
 //   opened into an empty group is laid out for the tabs it brings at once (not again at the first frame); the
-//   group's context keys for the new editor reach the workbench's context as one change, not a dozen
+//   group's context keys for the new editor reach the workbench's context as one change, not a dozen; a file's
+//   language by its name is worked out once, not 7-9 times (tab icon, breadcrumbs, model, its listeners...)
 function quickerSwitch() {
   return patchModules('kodium-quicker-switch', [
     ['/vs/workbench/browser/parts/titlebar/menubarControl.js', [
@@ -607,6 +664,33 @@ function quickerSwitch() {
        '            this.dimensions.used = new Dimension(this.dimensions.container.width, this.computeHeight());\n' +
        '            this.groupView.relayout();\n' +
        '        }\n'],
+      // (a switch to another tab - the same tabs, the same labels - redrew every tab: its label, icon, hover, close
+      // button, classes and colours, 5-10 ms a tab on the iPad 2; what changed is which one is active: the tabs' active,
+      // selected and dirty states are drawn again, as VS Code does when the group's activation changes)
+      ['        let didChange = false;\n        if (\n        activeEditorChanged || oldTabLabels.length !== this.tabLabels.length || ( oldTabLabels.some(\n            (label, index) => !this.equalsEditorInputLabel(label, this.tabLabels.at(index))\n        ))) {\n',
+       '        let didChange = false;\n' +
+       '        const kdLabelsChanged = oldTabLabels.length !== this.tabLabels.length || oldTabLabels.some(\n            (label, index) => !this.equalsEditorInputLabel(label, this.tabLabels.at(index))\n        );\n' +
+       '        if (activeEditorChanged && !kdLabelsChanged && this.kdSameTabs()) {\n' +
+       '            const isGroupActive = this.groupsView.activeGroup === this.groupView;\n' +
+       '            this.forEachTab((editor, tabIndex, tabContainer, tabLabelWidget, tabLabel, tabActionBar) => {\n' +
+       '                this.redrawTabSelectedActiveAndDirty(isGroupActive, editor, tabContainer, tabActionBar);\n' +
+       '            });\n' +
+       '            this.updateEditorActionsToolbar();\n' +
+       '            this.layout(this.dimensions, {\n                forceRevealActiveTab: true\n            });\n' +
+       '            didChange = true;\n' +
+       '        }\n' +
+       '        else if (activeEditorChanged || kdLabelsChanged) {\n'],
+      ['    redraw(options) {\n        if (this.tabsAndActionsContainer) {',
+       '    kdSameTabs() {\n' +
+       '        const drawn = this.kdDrawnTabs;\n' +
+       '        const editors = this.tabsModel.getEditors(EditorsOrder.SEQUENTIAL);\n' +
+       '        if (!drawn || drawn.length !== editors.length || this.tabCount !== editors.length) {\n            return false;\n        }\n' +
+       '        for (let i = 0; i < editors.length; i++) {\n            if (drawn[i] !== editors[i]) {\n                return false;\n            }\n        }\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    redraw(options) {\n' +
+       '        this.kdDrawnTabs = this.tabsModel.getEditors(EditorsOrder.SEQUENTIAL).slice();\n' +
+       '        if (this.tabsAndActionsContainer) {'],
       ['    updateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }',
        '    updateEditorActionsToolbar() {\n' +
        '        const updater = this.kdToolbarUpdater || (this.kdToolbarUpdater = this._register(new RunOnceScheduler(() => this.kdUpdateEditorActionsToolbar(), 0)));\n' +
@@ -631,12 +715,84 @@ function quickerSwitch() {
       ['        this._register(this.onDidModelChange(e => updateGroupContextKeys(e)));\n        this._register(this.onDidActiveEditorChange(() => observeActiveEditor()));\n',
        '        this._register(this.onDidModelChange(e => kdBufferedKeys(this.editorPartsView, () => updateGroupContextKeys(e))));\n' +
        '        this._register(this.onDidActiveEditorChange(() => kdBufferedKeys(this.editorPartsView, observeActiveEditor)));\n'],
+      // (the editor toolbar's menu kept while the editor pane's context is the same - it was made anew at every update of
+      // the toolbar: each switch, each change of a context key its items look at, a file's first change after a save)
+      ['    createEditorActions(disposables, menuId = MenuId.EditorTitle) {\n',
+       '    kdTitleMenu(menuId, contextKeyService) {\n' +
+       '        const menus = this.kdTitleMenus || (this.kdTitleMenus = new Map());\n' +
+       '        const kept = menus.get(menuId);\n' +
+       '        if (kept && kept.service === contextKeyService) {\n            return kept.menu;\n        }\n' +
+       '        kept?.menu.dispose();\n' +
+       '        const menu = this.menuService.createMenu(menuId, contextKeyService, {\n            emitEventsForSubmenuChanges: true,\n            eventDebounceDelay: 0\n        });\n' +
+       '        menus.set(menuId, { service: contextKeyService, menu });\n' +
+       '        if (!this.kdTitleMenusKept) {\n' +
+       '            this.kdTitleMenusKept = true;\n' +
+       '            this._register(toDisposable(() => {\n                for (const entry of menus.values()) {\n                    entry.menu.dispose();\n                }\n                menus.clear();\n            }));\n' +
+       '        }\n' +
+       '        return menu;\n' +
+       '    }\n' +
+       '    createEditorActions(disposables, menuId = MenuId.EditorTitle) {\n'],
+      ['            const editorTitleMenu = disposables.add(this.menuService.createMenu(menuId, editorScopedContextKeyService, {\n                emitEventsForSubmenuChanges: true,\n                eventDebounceDelay: 0\n            }));',
+       '            const editorTitleMenu = this.kdTitleMenu(menuId, editorScopedContextKeyService);'],
       ['let EditorGroupView = EditorGroupView_1 = class EditorGroupView extends Themable {',
        'function kdBufferedKeys(parts, fn) {\n' +
        '    const keys = parts && parts.contextKeyService;\n' +
        '    if (keys && typeof keys.bufferChangeEvents === "function") {\n        keys.bufferChangeEvents(fn);\n    } else {\n        fn();\n    }\n' +
        '}\n' +
        'let EditorGroupView = EditorGroupView_1 = class EditorGroupView extends Themable {']]],
+    // (a file's language by its name - the ~200 registered extensions and names gone through, by the tab's icon, the
+    // breadcrumbs', the model's language selection, its first listener...: 7-9 times per file opened, ~14 % of the
+    // opening in the profiler - worked out once per name until the associations change)
+    ['/vs/editor/common/services/languagesAssociations.js', [
+      ['function _registerLanguageAssociation(association, userConfigured, warnOnOverwrite) {\n',
+       'function _registerLanguageAssociation(association, userConfigured, warnOnOverwrite) {\n    kdForgetAssociations();\n'],
+      ['function clearPlatformLanguageAssociations() {\n', 'function clearPlatformLanguageAssociations() {\n    kdForgetAssociations();\n'],
+      ['function clearConfiguredLanguageAssociations() {\n', 'function clearConfiguredLanguageAssociations() {\n    kdForgetAssociations();\n'],
+      ['function getAssociations(resource, firstLine) {\n    let path;', 'function kdGetAssociations(resource, firstLine) {\n    let path;']],
+     'let kdAssociations = Object.create(null), kdAssociationsCount = 0;\n' +
+     'function kdForgetAssociations() {\n    kdAssociations = Object.create(null);\n    kdAssociationsCount = 0;\n}\n' +
+     'function getAssociations(resource, firstLine) {\n' +
+     '    if (!resource || typeof resource.toString !== "function" || (firstLine && firstLine.length > 200)) {\n' +
+     '        return kdGetAssociations(resource, firstLine);\n' +
+     '    }\n' +
+     '    const key = resource.toString() + "\\u0001" + (firstLine || "");\n' +
+     '    let found = kdAssociations[key];\n' +
+     '    if (!found) {\n' +
+     '        if (kdAssociationsCount >= 500) {\n            kdForgetAssociations();\n        }\n' +
+     '        found = kdAssociations[key] = kdGetAssociations(resource, firstLine);\n' +
+     '        kdAssociationsCount++;\n' +
+     '    }\n' +
+     '    return found;\n' +
+     '}\n'],
+    // (the editor's toolbars made again only when their actions are others: a file's first change after a save -
+    // "dirty" - had the toolbar's menu tell a change, and the same buttons were made anew after the key's frame, a
+    // 100 ms stall before the next key in the profiler)
+    ['/vs/workbench/browser/parts/editor/editorTabsControl.js', [
+      ['        editorActionsToolbar.setActions(prepareActions(primary), prepareActions(secondary));',
+       '        kdSetToolbarActions(editorActionsToolbar, this.groupView.activeEditor, prepareActions(primary), prepareActions(secondary));'],
+      ['        this.editorLayoutActionsToolbar.setActions(prepareActions(primary), prepareActions(secondary));',
+       '        kdSetToolbarActions(this.editorLayoutActionsToolbar, this.groupView.activeEditor, prepareActions(primary), prepareActions(secondary));'],
+      ['        editorActionsToolbar.setActions([], []);', '        kdSetToolbarActions(editorActionsToolbar, undefined, [], []);'],
+      ['        this.editorLayoutActionsToolbar?.setActions([], []);',
+       '        if (this.editorLayoutActionsToolbar) {\n            kdSetToolbarActions(this.editorLayoutActionsToolbar, undefined, [], []);\n        }']],
+     'function kdToolbarKey(actions) {\n' +
+     '    let key = "";\n' +
+     '    for (let i = 0; i < actions.length; i++) {\n' +
+     '        const a = actions[i];\n' +
+     '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0001" +\n' +
+     '            (a.hideActions ? a.hideActions.isHidden : "") + "\\u0001" + (a.alt ? a.alt.id + "/" + a.alt.enabled : "") + "\\u0001" +\n' +
+     '            (a._options && a._options.arg ? String(a._options.arg) : "") + "\\u0002";\n' +
+     '        if (a.actions && a.actions.length) {\n            key += "[" + kdToolbarKey(a.actions) + "]";\n        }\n' +
+     '    }\n' +
+     '    return key;\n' +
+     '}\n' +
+     'function kdSetToolbarActions(toolbar, editor, primary, secondary) {\n' +
+     '    const key = kdToolbarKey(primary) + "||" + kdToolbarKey(secondary);\n' +
+     '    if (toolbar.kdKey === key && toolbar.kdEditor === editor) {\n        return;\n    }\n' +
+     '    toolbar.kdKey = key;\n' +
+     '    toolbar.kdEditor = editor;\n' +
+     '    toolbar.setActions(primary, secondary);\n' +
+     '}\n'],
     ['/vs/workbench/browser/parts/titlebar/windowTitle.js', [
       ['this.titleUpdater = this._register(( new RunOnceScheduler(() => this.doUpdateTitle(), 0)));',
        'this.titleUpdater = this._register(( new RunOnceScheduler(() => {\n' +
@@ -666,7 +822,10 @@ function quickerSwitch() {
 // And at every change of a context key (dozens when an editor opens or a tab is switched), every scoped context key
 // service below it - one per editor, view, list, widget: dozens - copied its whole context (a spread of all its keys)
 // and made a Set of the copy's keys, to ask whether the change touched only keys of its own: on iOS 6 Set is the
-// engine's shim, slow to fill. The keys are asked of the context itself now.
+// engine's shim, slow to fill. The keys are asked of the context itself now. And every menu (dozens) asked each change
+// whether it touched its keys - three Sets of the shim, asked about every key of the change, the keys a view reset and
+// set again counted twice: a menu's keys answer from an object, and the changes told at once come as one list of keys,
+// each once (a file's first change after a save: 98 ms of context changes in the profiler).
 function quickerMenus() {
   // (the registry tells of its changes in a microtask: a version number counts them at once, and a menu's kept items
   // are good for one version)
@@ -685,7 +844,33 @@ function quickerMenus() {
        'function allEventKeysInContext(event, context) {\n' +
        '    return event.allKeysContainedIn({ has: key => Object.prototype.hasOwnProperty.call(context, key) });\n}'],
       ['            const thisContextValues = thisContainer.value;\n            if (!allEventKeysInContext(e, thisContextValues)) {',
-       '            const thisContextValues = thisContainer._value || thisContainer.value;\n            if (!allEventKeysInContext(e, thisContextValues)) {']]],
+       '            const thisContextValues = thisContainer._value || thisContainer.value;\n            if (!allEventKeysInContext(e, thisContextValues)) {'],
+      ['    affectsSome(keys) {\n        for (const key of this.keys) {\n            if (( keys.has(key))) {\n                return true;\n            }\n        }\n        return false;\n    }',
+       '    affectsSome(keys) {\n        const own = this.keys;\n        for (let i = 0; i < own.length; i++) {\n            if (keys.has(own[i])) {\n                return true;\n            }\n        }\n        return false;\n    }'],
+      ['    affectsSome(keys) {\n        for (const e of this.events) {\n            if (e.affectsSome(keys)) {\n                return true;\n            }\n        }\n        return false;\n    }',
+       '    affectsSome(keys) {\n        const events = this.events;\n        for (let i = 0; i < events.length; i++) {\n            if (events[i].affectsSome(keys)) {\n                return true;\n            }\n        }\n        return false;\n    }'],
+      ['            merge: input => ( new CompositeContextKeyChangeEvent(input))', '            merge: input => kdMergeKeyEvents(input)']],
+     // (the changes a buffered or paused context tells at once - a view's reset and set of the same keys - as one list
+     // of their keys, each once: every menu below asks each change about each of its keys)
+     'function kdMergeKeyEvents(input) {\n' +
+     '    const seen = Object.create(null), keys = [];\n' +
+     '    const walk = e => {\n' +
+     '        if (typeof e.key === "string") {\n' +
+     '            if (seen[e.key] !== true) {\n                seen[e.key] = true;\n                keys.push(e.key);\n            }\n' +
+     '        } else if (Array.isArray(e.keys)) {\n' +
+     '            for (let i = 0; i < e.keys.length; i++) {\n' +
+     '                if (seen[e.keys[i]] !== true) {\n                    seen[e.keys[i]] = true;\n                    keys.push(e.keys[i]);\n                }\n' +
+     '            }\n' +
+     '        } else if (Array.isArray(e.events)) {\n' +
+     '            for (let i = 0; i < e.events.length; i++) {\n                if (!walk(e.events[i])) {\n                    return false;\n                }\n            }\n' +
+     '        } else {\n            return false;\n        }\n' +
+     '        return true;\n' +
+     '    };\n' +
+     '    for (let i = 0; i < input.length; i++) {\n' +
+     '        if (!walk(input[i])) {\n            return new CompositeContextKeyChangeEvent(input);\n        }\n' +
+     '    }\n' +
+     '    return new ArrayContextKeyChangeEvent(keys);\n' +
+     '}\n'],
     ['/vs/base/browser/ui/menu/menu.js', [
       ['        this.styleSheet.textContent = __kdPlain(getMenuWidgetCSS(style, isInShadowDOM(container)));',
        '        const kdCss = getMenuWidgetCSS(style, isInShadowDOM(container));\n' +
@@ -698,7 +883,21 @@ function quickerMenus() {
       ['    _sort(menuItems) {\n        return menuItems;\n    }',
        '    _sort(menuItems) {\n        return menuItems;\n    }\n    _kdItems() {\n        return this._sort(MenuRegistry.getMenuItems(this._id));\n    }'],
       ['        this._contextKeyService = _contextKeyService;\n        this.refresh();\n    }\n    createActionGroups(options) {',
-       '        this._contextKeyService = _contextKeyService;\n    }\n    _kdItems() {\n        return __kdSortedMenuItems(this._id, () => this._sort(MenuRegistry.getMenuItems(this._id)));\n    }\n    createActionGroups(options) {']],
+       '        this._contextKeyService = _contextKeyService;\n    }\n    _kdItems() {\n        return __kdSortedMenuItems(this._id, () => this._sort(MenuRegistry.getMenuItems(this._id)));\n    }\n    createActionGroups(options) {'],
+      ['        this._structureContextKeys = ( new Set());\n        this._preconditionContextKeys = ( new Set());\n        this._toggledContextKeys = ( new Set());',
+       '        this._structureContextKeys = __kdKeySet();\n        this._preconditionContextKeys = __kdKeySet();\n        this._toggledContextKeys = __kdKeySet();']],
+     // (a menu's context keys: a Set that answers has() from an object - the engine's Set shim was most of the time of
+     // a context change, every menu asking it about every changed key)
+     'function __kdKeySet() {\n' +
+     '    const set = new Set();\n' +
+     '    let known = Object.create(null);\n' +
+     '    const add = set.add, remove = set.delete, clear = set.clear;\n' +
+     '    set.add = function (key) {\n        known[key] = true;\n        return add.call(this, key);\n    };\n' +
+     '    set.delete = function (key) {\n        delete known[key];\n        return remove.call(this, key);\n    };\n' +
+     '    set.clear = function () {\n        known = Object.create(null);\n        return clear.call(this);\n    };\n' +
+     '    set.has = key => known[key] === true;\n' +
+     '    return set;\n' +
+     '}\n' +
      'const __kdSorted = new Map();\n' +
      'function __kdSortedMenuItems(id, make) {\n' +
      '    const version = MenuRegistry.kdVersion || 0;\n' +
@@ -1726,7 +1925,7 @@ function leaveOut() {
 // first key in a file opened for a look pins it - redraws the row, which has the list tell its focus anew (twice): at
 // each, the view reset its 13 context keys (the focused file's name, folder, language...) and set them again, every
 // change told to every menu - 0.35 s of such a key's 0.55 in the profiler. The keys change now when what the focused
-// row stands for does, in one change.
+// row stands for does, in one change - and when only whether its file is saved changed, only the key that says so.
 // The views' title bars (the Explorer's New File..., Open Editors', the Outline's, the Timeline's) made their toolbars
 // anew whenever a context key their menus look at changed - opening a file, switching tabs - though the actions came
 // out the same: a toolbar is made again when its actions (what they show and whether they are on) are others. The
@@ -1745,7 +1944,8 @@ function quickerViews() {
      'function kdActionsKey(actions) {\n' +
      '    let key = "";\n' +
      '    for (const a of actions) {\n' +
-     '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0002";\n' +
+     '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0001" +\n' +
+     '            (a.hideActions ? a.hideActions.isHidden : "") + "\\u0002";\n' +
      '        if (a.actions && a.actions.length) {\n            key += "[" + kdActionsKey(a.actions) + "]";\n        }\n' +
      '    }\n' +
      '    return key;\n' +
@@ -1754,13 +1954,19 @@ function quickerViews() {
       ['        this._register(this.list.onDidChangeFocus(e => {\n            resourceContext.reset();\n' +
        '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +
        '            const element = e.elements.length ? e.elements[0] : undefined;\n',
-       '        let kdFocused;\n' +
+       '        let kdFocused, kdFocusedRow;\n' +
        '        this._register(this.list.onDidChangeFocus(e => {\n' +
        '            const kdElement = e.elements.length ? e.elements[0] : undefined;\n' +
-       '            const kdNow = kdElement instanceof OpenEditor ? "e" + String(kdElement.getResource()) + "|" + (kdElement.editor.isDirty() && !kdElement.editor.isSaving()) + "|" + !!kdElement.editor.isReadonly()\n' +
+       '            const kdRow = kdElement instanceof OpenEditor ? "e" + String(kdElement.getResource()) + "|" + !!kdElement.editor.isReadonly()\n' +
        '                : kdElement ? "g" + kdElement.id : "";\n' +
+       '            const kdDirty = kdElement instanceof OpenEditor && kdElement.editor.isDirty() && !kdElement.editor.isSaving();\n' +
+       '            const kdNow = kdRow + "|" + kdDirty;\n' +
        '            if (kdNow === kdFocused) {\n                return;\n            }\n' +
+       // (the same row, only saved or changed: the one key that says so)
+       '            const kdOnlyDirty = kdFocused !== undefined && kdRow === kdFocusedRow;\n' +
        '            kdFocused = kdNow;\n' +
+       '            kdFocusedRow = kdRow;\n' +
+       '            if (kdOnlyDirty) {\n                dirtyEditorFocusedContext.set(kdDirty);\n                return;\n            }\n' +
        '            this.contextKeyService.bufferChangeEvents(() => {\n' +
        '            resourceContext.reset();\n' +
        '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +

@@ -225,7 +225,9 @@ if (!Array.isArray(messages) || messages.length < 1000) throw new Error('assembl
 // strings in the page's heap, all the time. Each one left out is a 0, for which VS Code takes its English text.
 const bundleCode = fs.readFileSync(path.join(out, 'assets', 'workbench.es5.js'), 'utf8')
 const asked = new Set()
-for (const m of bundleCode.matchAll(/[\w$]\((\d{1,5}),/g)) asked.add(+m[1])
+// (the bundle is in lines of ~1000 characters: a line may end right after the call's "(" - a dozen texts of every build
+// came out in English, others in each build)
+for (const m of bundleCode.matchAll(/[\w$]\(\s*(\d{1,5})\s*,/g)) asked.add(+m[1])
 // (two buttons of the "trust the publisher?" question came out as "Důvěřovat vydavateli &> Nainstalovat" in the
 // translation: the "&&" of an ampersand gone wrong)
 const kept = messages.map((text, i) => asked.has(i) && typeof text === 'string' ? text.replace(/ &> Nainstalovat$/, ' a nainstalovat') : 0)

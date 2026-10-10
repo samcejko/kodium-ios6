@@ -145,6 +145,34 @@ The first build.
   The Explorer selects the file of the active editor after its first frame, not before it (25-35 ms), and the
   highlight of the brackets at the cursor is worked out 0.3 s after the next frame instead of 0.3 s after the cursor
   moved - an opened file's cursor, model and focus set it going, and it fell before the file's first frame.
+- The first key after a save no longer stalls - with the auto save 5 s after a pause in typing, that is the first key
+  after every such pause, the one that makes the file "changed" again: 0.15 s to its frame instead of 0.17-0.23 (the
+  medians of two interleaved rounds on the iPad 2; a key that changes nothing more takes ~0.07). The Open Editors
+  view reset its 13 context keys and set them again when only whether the focused file is saved had changed: only
+  that key changes now. Every change of context keys went to every menu - dozens - each asking three Sets (on iOS 6
+  the engine's shim, slow) about every changed key, and the keys a view reset and set again counted twice: a menu's
+  keys answer from an object now, and the changes told at once come as one list of keys, each once. And after the
+  key's frame the editor's toolbar was made again - a new menu, new buttons, the same ones: it is made again only
+  when its buttons are others, and its menu is kept while the editor's context is the same.
+- Switching tabs: a switch redrew every tab - its label, icon, hover, close button, classes and colours - though
+  only which one is active had changed; with the same tabs and labels only their active, selected and changed states
+  are drawn again now, as VS Code does when a group becomes active (six tabs, 30 switches in two interleaved rounds:
+  27 quicker, by 10-17 ms at the median, ~0.5 s each). A file's language by its name - ~200 registered extensions
+  and names gone through - was worked out 7-9 times for each file opened (the tab's icon, the breadcrumbs', the model's
+  language and its listeners): once per name now, until the registered associations change.
+- Switching to or from a CSS file took 1.55-1.6 s (other files ~0.5 s): the swatch before each colour is coloured by a
+  rule the editor makes at run time, and each such rule was a <style> element of its own, put into the page and then
+  given its text - two rebuilds of the old WebKit's rule sets from all of the page's 570 KB of CSS, ~80 ms each on
+  the iPad 2 - and the rules went 1 s after the editor stopped showing the file, so every switch to it made them all
+  again (four colours: 0.65 s of the switch, and their removal stalled the next action). A rule with nothing the iOS 6
+  engine lacks goes into one shared sheet now (natively: the rule sets are made again once, in the next frame), and
+  a rule no longer used stays for 5 minutes. A switch to t1.css (four colours) 0.63-0.65 s instead of 1.54-1.55, from
+  it 0.58 instead of 1.6, the first opening the same (1.1 s); the swatches keep their colours (checked, a colour typed
+  in too). The same goes for the editor's other rules made at run time (inlay hints' styles and the like).
+- Some forty texts of the Czech interface came out in English (Close Editor, Select All, New Window, Tab actions,
+  Group 4...): the app keeps only the Czech texts its code asks for, found by the calls' numbers in the bundle - and
+  a call whose number fell on the next of the bundle's ~1000-character lines was not counted (other texts in every
+  build). Such a call counts now: 7,979 texts instead of 7,926-7,935.
 - Typing on while the suggestions are open: a key that comes less than 300 ms after the previous one no longer
   waits for the list to be drawn again - the list catches up once the typing pauses for 300 ms. Each key's new list
   was drawn in that key's own frame (its rows, the widget's layout, two forced layouts of the page: 300-350 ms of the
