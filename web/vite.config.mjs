@@ -459,6 +459,11 @@ function smootherEditor() {
     ['/vs/editor/browser/viewParts/viewLines/viewLines.js', [
       ['    onDecorationsChanged(e) {\n        const rendStartLineNumber = this._visibleLines.getStartLineNumber();\n',
        '    onDecorationsChanged(e) {\n        if (e.kdEditOnly) {\n            return false;\n        }\n        const rendStartLineNumber = this._visibleLines.getStartLineNumber();\n']]],
+    // (the regions by indentation read the file line by line from the end, each line looked up in the text's piece
+    // tree on its own: now its lines at once - 22 -> 8 ms for 1,500 lines on the iPad 2, in every pause of typing)
+    ['/vs/editor/contrib/folding/browser/indentRangeProvider.js', [
+      ['    for (let line = model.getLineCount(); line > 0; line--) {\n        const lineContent = model.getLineContent(line);\n',
+       '    const kdLines = model.getLinesContent();\n    for (let line = model.getLineCount(); line > 0; line--) {\n        const lineContent = kdLines[line - 1];\n']]],
     // (the folding regions worked out again in every pause of typing replaced all their decorations - and a change of
     // decorations has the view build every drawn line's rendering again to compare: ~0.6 MB of garbage per pause in a
     // file of 1,500 lines - though typing in a line changes none of them: when the new regions, all unfolded, are the
@@ -1428,6 +1433,12 @@ function suggestTimers() {
       // (inside fewerRowWrites' condition: this plugin comes after it)
       ['this._list.splice(index, 1, [item]);',
        '{ const kdT_resolvedrow = Date.now(); this._list.splice(index, 1, [item]); self.__kdAdd && self.__kdAdd("resolved row", Date.now() - kdT_resolvedrow); }']]],
+    // (the folding regions by indentation, each computation timed)
+    ['/vs/editor/contrib/folding/browser/indentRangeProvider.js', [
+      ['function computeRanges(model, offSide, markers, foldingRangesLimit = foldingRangesLimitDefault) {\n',
+       'function computeRanges(model, offSide, markers, foldingRangesLimit = foldingRangesLimitDefault) {\n    const kdT0 = Date.now();\n'],
+      ['    return result.toIndentRanges(model);\n}',
+       '    const kdRanges = result.toIndentRanges(model);\n    self.__kdAdd && self.__kdAdd("fold ranges", Date.now() - kdT0);\n    return kdRanges;\n}']]],
     // (the documents' words: when the worker was asked, when it answered, how long it took itself)
     ['/vs/editor/browser/services/editorWorkerService.js', [
       ['        const client = await this._workerManager.withWorker();\n        const data = await client.textualSuggest(models, word?.word, wordDefRegExp);\n',
