@@ -32,13 +32,63 @@ const leanerWorker = {
   }
 }
 
+// (the words of the open documents for the suggestions came out of a generator - lowered to ES5, the regenerator
+// runtime's machinery for every word: ~450 ms on the iPad 2 for a file of 1,500 lines at every list of suggestions;
+// now a plain loop over the lines and the word regex's matches)
+const quickerWords = {
+  name: 'kodium-quicker-words',
+  transform(code, id) {
+    const p = id.replace(/\\/g, '/')
+    const edits = p.endsWith('/vs/editor/common/services/textModelSync/textModelSync.impl.js') ? [
+      ['    getLineWords(lineNumber, wordDefinition) {\n',
+       '    kdEachWord(wordDefinition, fn) {\n' +
+       '        const lines = this._lines;\n' +
+       '        for (let i = 0; i < lines.length; i++) {\n' +
+       '            const text = lines[i];\n' +
+       '            let match;\n' +
+       '            wordDefinition.lastIndex = 0;\n' +
+       '            while (match = wordDefinition.exec(text)) {\n' +
+       '                if (match[0].length === 0) {\n                    break;\n                }\n' +
+       '                if (fn(match[0]) === false) {\n                    return;\n                }\n' +
+       '            }\n' +
+       '        }\n' +
+       '    }\n' +
+       '    getLineWords(lineNumber, wordDefinition) {\n']
+    ] : p.endsWith('/vs/editor/common/services/editorWebWorker.js') ? [
+      ['            for (const word of model.words(wordDefRegExp)) {\n' +
+       '                if (word === leadingWord || !isNaN(Number(word))) {\n' +
+       '                    continue;\n' +
+       '                }\n' +
+       '                seen.add(word);\n' +
+       '                if (seen.size > EditorWorker._suggestionsLimit) {\n' +
+       '                    break outer;\n' +
+       '                }\n' +
+       '            }\n',
+       '            let kdFull = false;\n' +
+       '            model.kdEachWord(wordDefRegExp, word => {\n' +
+       '                if (word === leadingWord || !isNaN(Number(word))) {\n                    return true;\n                }\n' +
+       '                seen.add(word);\n' +
+       '                if (seen.size > EditorWorker._suggestionsLimit) {\n                    kdFull = true;\n                    return false;\n                }\n' +
+       '                return true;\n' +
+       '            });\n' +
+       '            if (kdFull) {\n                break outer;\n            }\n']
+    ] : null
+    if (!edits) return null
+    for (const [find, replace] of edits) {
+      if (code.split(find).length !== 2) this.error('kodium-quicker-words: ' + p + ' has another form')
+      code = code.replace(find, () => replace)
+    }
+    return { code, map: null }
+  }
+}
+
 for (const name of NAMES) {
   const t0 = Date.now()
   await build({
     configFile: false,
     root: web,
     logLevel: 'warn',
-    plugins: [leanerWorker],
+    plugins: [leanerWorker, quickerWords],
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     build: {
       target: 'es2022',

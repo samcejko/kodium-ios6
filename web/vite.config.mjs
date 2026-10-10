@@ -1365,8 +1365,15 @@ function suggestTimers() {
   return patchModules('kodium-suggest-timers', [
     ['/vs/editor/contrib/suggest/browser/suggestModel.js', [
       ['            if (!editorIsComposing && this._triggerState !== undefined) {\n                this._refilterCompletionItems();\n',
-       '            if (!editorIsComposing && this._triggerState !== undefined) {\n' + t('refilter', '                this._refilterCompletionItems();\n')]]],
+       '            if (!editorIsComposing && this._triggerState !== undefined) {\n' + t('refilter', '                this._refilterCompletionItems();\n')],
+      // (and the way to the first list: self.__kdMark at the trigger, when the providers answered - with their times)
+      ['    trigger(options) {\n', '    trigger(options) {\n        self.__kdMark && self.__kdMark("suggest trigger");\n'],
+      ['        Promise.all([completions, wordDistance]).then(async ([completions, wordDistance]) => {\n',
+       '        Promise.all([completions, wordDistance]).then(async ([completions, wordDistance]) => {\n' +
+       '            self.__kdMark && self.__kdMark("suggest answers " + JSON.stringify(completions.durations));\n']]],
     ['/vs/editor/contrib/suggest/browser/suggestWidget.js', [
+      ['    showSuggestions(completionModel, selectionIndex, isFrozen, isAuto, noFocus) {\n',
+       '    showSuggestions(completionModel, selectionIndex, isFrozen, isAuto, noFocus) {\n        self.__kdMark && self.__kdMark("showSuggestions");\n'],
       ['        const visibleCount = this._completionModel.items.length;\n',
        t('items', '        const visibleCount = this._completionModel.items.length;\n')],
       ['            this._list.splice(0, this._list.length, this._completionModel.items);\n            this._setState(isFrozen ? State.Frozen : State.Open);\n',
