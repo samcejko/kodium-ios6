@@ -76,6 +76,16 @@ The first build.
   element) - now they are found once when the touch begins, and LinkedLists (gesture targets, commands' handlers,
   keybindings) are gone through with a plain iterator: the command palette's list scrolls at 43-47 ms a frame
   instead of 48-55, and the garbage no longer brings a collection (0.5-0.6 s) into a scroll of the editor.
+- The rows of lists keep their own icons: iOS 6 has no classList.value, with which VS Code clears a label's classes
+  before it sets them, so a row used again kept the classes of everything it had shown (the command palette's rows had
+  a CSS file's icon after Go to File, a row of the explorer could have another file's icon) and its list of classes
+  grew. And rows come into a list a fifth sooner - the command palette scrolled by a finger at 51-57 ms a frame instead
+  of 68-69 (a row a frame) and 35-39 instead of 43-53 (an ordinary scroll), keys typed while the suggestions are open
+  ~10 % sooner (interleaved, iPad 2): the engine makes VS Code's flex rows old flexboxes, which lay all their children
+  out once more whenever a flexible child has to grow, and five of them are nested in a row of the palette - its outer
+  ones are as wide as they would grow now. A list writes a row's attributes and styles only when they change (the old
+  WebKit restyles an element and what is in it for a value written again), and so do the suggestions for their rows'
+  font styles, icons and labels, which they wrote anew at every key.
 - A key reaches the screen a quarter sooner in a big file (144 ms instead of 199 to its frame in a file of 1,500 lines,
   interleaved), and Enter a little sooner (296 instead of 322). Every move of the cursor set its transition style to
   the same value - a change of the page in the key's own handling, which the engine's style setter took ~20 ms over

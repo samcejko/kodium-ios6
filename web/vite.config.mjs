@@ -1679,6 +1679,142 @@ function nativeSelects() {
   ])
 }
 
+// classList.value is newer than the iOS 6 engine (nor does its polyfill have it): VS Code's "classList.value = ''" before
+// adding a label's classes was only an expando there, so a recycled row's icon label kept the classes of every file it
+// had shown (the command palette's rows had a CSS file's icon classes after Go to File, the explorer's rows the file
+// icons of other files - whichever rule came last won) and the lists grew longer with each. The class attribute set at
+// once instead, and the label's container only when it changes (an attribute written again restyles its subtree in
+// the old WebKit, the same value or not). (vsc-prelude has a value property for the rest.)
+function oldTokenLists() {
+  return patchModules('kodium-old-token-lists', [
+    ['/vs/base/browser/ui/iconLabel/iconLabel.js', [
+      ['        this._element.classList.value = "";\n        this._element.classList.add(...classNames);\n',
+       '        this._element.className = classNames.join(" ");\n'],
+      ['        this.labelContainer.classList.value = "";\n        this.labelContainer.classList.add(...containerClasses);\n',
+       '        const kdContainerClasses = containerClasses.join(" ");\n' +
+       '        if (this.labelContainer.className !== kdContainerClasses) {\n            this.labelContainer.className = kdContainerClasses;\n        }\n']]],
+    ['/vs/base/browser/ui/button/button.js', [
+      ['        this._iconElement.classList.value = "";\n        this._iconElement.classList.add(...ThemeIcon.asClassNameArray(icon));\n',
+       '        this._iconElement.className = ThemeIcon.asClassNameArray(icon).join(" ");\n']]]
+  ])
+}
+
+// A list's rows written only where something changed. The old WebKit restyles an element's whole subtree for an
+// attribute or inline style written again with the same value, and a list writes nine of them per row at every render
+// of it: the suggestions' list renders all its rows again at every key typed while it is open (the same items at the
+// same places, only the matched letters differ), and its renderer set eleven font styles per row each time.
+function fewerRowWrites() {
+  const updateItem =
+    '    updateItemInDOM(item, index) {\n' +
+    '        item.row.domNode.style.top = `${this.elementTop(index)}px`;\n' +
+    '        if (this.setRowHeight) {\n' +
+    '            item.row.domNode.style.height = `${item.size}px`;\n' +
+    '        }\n' +
+    '        if (this.setRowLineHeight) {\n' +
+    '            item.row.domNode.style.lineHeight = `${item.size}px`;\n' +
+    '        }\n' +
+    '        item.row.domNode.setAttribute("data-index", `${index}`);\n' +
+    '        item.row.domNode.setAttribute("data-last-element", index === this.length - 1 ? "true" : "false");\n' +
+    '        item.row.domNode.setAttribute("data-parity", index % 2 === 0 ? "even" : "odd");\n' +
+    '        item.row.domNode.setAttribute(\n' +
+    '            "aria-setsize",\n' +
+    '            String(this.accessibilityProvider.getSetSize(item.element, index, this.length))\n' +
+    '        );\n' +
+    '        item.row.domNode.setAttribute(\n' +
+    '            "aria-posinset",\n' +
+    '            String(this.accessibilityProvider.getPosInSet(item.element, index))\n' +
+    '        );\n' +
+    '        item.row.domNode.setAttribute("id", this.getElementDomId(index));\n' +
+    '        item.row.domNode.classList.toggle("drop-target", item.dropTarget);\n' +
+    '    }\n'
+  return patchModules('kodium-fewer-row-writes', [
+    ['/vs/base/browser/ui/list/listView.js', [
+      ['const DefaultOptions = {',
+       'function kdSetAttribute(node, name, value) {\n' +
+       '    if (node.getAttribute(name) !== value) {\n        node.setAttribute(name, value);\n    }\n' +
+       '}\n' +
+       'function kdSetStyle(style, name, value) {\n' +
+       '    if (style[name] !== value) {\n        style[name] = value;\n    }\n' +
+       '}\n' +
+       'const DefaultOptions = {'],
+      ['        item.row.domNode.setAttribute("role", role);\n', '        kdSetAttribute(item.row.domNode, "role", role);\n'],
+      ['        item.row.domNode.draggable = !!uri;\n',
+       '        if (item.row.domNode.draggable !== !!uri) {\n            item.row.domNode.draggable = !!uri;\n        }\n'],
+      [updateItem,
+       '    updateItemInDOM(item, index) {\n' +
+       '        const kdNode = item.row.domNode;\n' +
+       '        kdSetStyle(kdNode.style, "top", `${this.elementTop(index)}px`);\n' +
+       '        if (this.setRowHeight) {\n            kdSetStyle(kdNode.style, "height", `${item.size}px`);\n        }\n' +
+       '        if (this.setRowLineHeight) {\n            kdSetStyle(kdNode.style, "lineHeight", `${item.size}px`);\n        }\n' +
+       '        kdSetAttribute(kdNode, "data-index", `${index}`);\n' +
+       '        kdSetAttribute(kdNode, "data-last-element", index === this.length - 1 ? "true" : "false");\n' +
+       '        kdSetAttribute(kdNode, "data-parity", index % 2 === 0 ? "even" : "odd");\n' +
+       '        kdSetAttribute(kdNode, "aria-setsize", String(this.accessibilityProvider.getSetSize(item.element, index, this.length)));\n' +
+       '        kdSetAttribute(kdNode, "aria-posinset", String(this.accessibilityProvider.getPosInSet(item.element, index)));\n' +
+       '        kdSetAttribute(kdNode, "id", this.getElementDomId(index));\n' +
+       '        if (kdNode.classList.contains("drop-target") !== !!item.dropTarget) {\n' +
+       '            kdNode.classList.toggle("drop-target", !!item.dropTarget);\n' +
+       '        }\n' +
+       '    }\n']]],
+    ['/vs/base/browser/ui/iconLabel/iconLabel.js', [
+      ['        this.domNode.element.setAttribute("aria-label", ariaLabel);\n',
+       '        if (this.domNode.element.getAttribute("aria-label") !== ariaLabel) {\n' +
+       '            this.domNode.element.setAttribute("aria-label", ariaLabel);\n' +
+       '        }\n']]],
+    ['/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js', [
+      ['            const letterSpacingPx = `${letterSpacing}px`;\n',
+       '            const letterSpacingPx = `${letterSpacing}px`;\n' +
+       '            const kdFont = [fontSizePx, fontWeight, letterSpacingPx, fontFamily, fontFeatureSettings, fontVariationSettings, lineHeightPx].join("|");\n' +
+       '            if (root.kdFont === kdFont) {\n                return;\n            }\n' +
+       '            root.kdFont = kdFont;\n'],
+      ['        data.colorspan.style.backgroundColor = "";\n',
+       '        if (data.colorspan.style.backgroundColor) {\n            data.colorspan.style.backgroundColor = "";\n        }\n'],
+      ['            data.icon.className = "icon hide";\n' +
+       '            data.iconContainer.className = "";\n' +
+       '            data.iconContainer.classList.add(\n' +
+       '                "suggest-icon",\n' +
+       '                ...ThemeIcon.asClassNameArray(CompletionItemKinds.toIcon(completion.kind))\n' +
+       '            );\n',
+       '            if (data.icon.className !== "icon hide") {\n                data.icon.className = "icon hide";\n            }\n' +
+       '            const kdIconClasses = ["suggest-icon", ...ThemeIcon.asClassNameArray(CompletionItemKinds.toIcon(completion.kind))].join(" ");\n' +
+       '            if (data.iconContainer.className !== kdIconClasses) {\n                data.iconContainer.className = kdIconClasses;\n            }\n'],
+      ['            data.parametersLabel.textContent = "";\n' +
+       '            data.detailsLabel.textContent = stripNewLines(completion.detail || "");\n',
+       '            kdText(data.parametersLabel, "");\n' +
+       '            kdText(data.detailsLabel, stripNewLines(completion.detail || ""));\n'],
+      ['            data.parametersLabel.textContent = stripNewLines(completion.label.detail || "");\n' +
+       '            data.detailsLabel.textContent = stripNewLines(completion.label.description || "");\n',
+       '            kdText(data.parametersLabel, stripNewLines(completion.label.detail || ""));\n' +
+       '            kdText(data.detailsLabel, stripNewLines(completion.label.description || ""));\n'],
+      ['        if (this._editor.getOption(EditorOption.suggest).showInlineDetails) {\n' +
+       '            show(data.detailsLabel);\n' +
+       '        } else {\n' +
+       '            hide(data.detailsLabel);\n' +
+       '        }\n',
+       '        kdDisplay(data.detailsLabel, this._editor.getOption(EditorOption.suggest).showInlineDetails ? "" : "none");\n'],
+      ['            data.right.classList.remove("can-expand-details");\n' +
+       '            hide(data.readMore);\n' +
+       '            data.readMore.onmousedown = null;\n' +
+       '            data.readMore.onclick = null;\n',
+       '            if (data.right.classList.contains("can-expand-details")) {\n                data.right.classList.remove("can-expand-details");\n            }\n' +
+       '            kdDisplay(data.readMore, "none");\n' +
+       '            if (data.readMore.onmousedown) {\n                data.readMore.onmousedown = null;\n            }\n' +
+       '            if (data.readMore.onclick) {\n                data.readMore.onclick = null;\n            }\n'],
+      ['function stripNewLines(str) {',
+       'function kdText(node, text) {\n' +
+       '    if (node.textContent !== text) {\n        node.textContent = text;\n    }\n' +
+       '}\n' +
+       // (show() and hide() as in dom.js, aria-hidden too)
+       'function kdDisplay(node, display) {\n' +
+       '    if (node.style.display !== display) {\n' +
+       '        node.style.display = display;\n' +
+       '        if (display) {\n            node.setAttribute("aria-hidden", "true");\n        } else {\n            node.removeAttribute("aria-hidden");\n        }\n' +
+       '    }\n' +
+       '}\n' +
+       'function stripNewLines(str) {']]]
+  ])
+}
+
 // The start: Kodium registers monaco's 31 Monarch languages one by one (src/languages.ts), and every registration had
 // the languages' registry made again from all languages so far and the settings' schema told of all of them as
 // override identifiers - 651 language merges and 31 schema updates (0.9 s of a profiled start). Registered together
@@ -2102,7 +2238,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

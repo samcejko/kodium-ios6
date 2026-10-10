@@ -119,6 +119,29 @@
 .monaco-workbench .statusbar-item.kd-pressed { background-color: var(--vscode-statusBarItem-activeBackground) !important; }
 .monaco-workbench .monaco-button.kd-pressed, .monaco-workbench .monaco-text-button.kd-pressed { opacity: 0.8; }
 
+/* The quick input's rows (the palette, Go to File...). The engine makes VS Code's flex rows old flexboxes (display:
+   -webkit-box), and an old flexbox with a flexible child that has to grow lays all its children out once more - five
+   of them nested in a row, so a row's text was laid out up to 32 times. The three outer flexible children are as wide
+   as their box from the start, so that none has to grow: a row scrolled into the palette 18 % sooner (iPad 2, a row a
+   frame: 66 -> 54 ms a frame). (The inner two, the label beside its keybinding, measured no better.) */
+.quick-input-widget .quick-input-list .monaco-tl-contents,
+.quick-input-widget .quick-input-list .quick-input-list-label {
+  width: 100%;
+}
+.quick-input-widget .quick-input-list .quick-input-list-rows {
+  width: 100%;
+  margin-left: 0;
+  padding-left: 5px;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+/* (the suggestions' rows likewise: their contents beside the hidden icon) */
+.monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents {
+  width: 100%;
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+
 /* A composited layer for each part that changes while one works. After a change, the iOS 6 engine maps the repaint
    rectangle of every box it laid out through all of its ancestors, up to the nearest composited layer - without
    these the root of the page, 30 levels up in VS Code's DOM (and the old flexbox lays a row's children out more than

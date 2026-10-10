@@ -276,6 +276,24 @@
         vv.removeEventListener = function (type, fn, opts) { if (type === 'resize' || type === 'scroll') G.removeEventListener(type, fn, opts); };
     })();
 
+    // classList.value (newer than the engine and its polyfill): written, it was a mere expando, and code that cleared an
+    // element's classes with it kept them all (the label edits in vite.config.mjs oldTokenLists are the busy ones).
+    (function () {
+        var TL = G.DOMTokenList && G.DOMTokenList.prototype;
+        if (!TL || 'value' in TL) return;
+        try {
+            Object.defineProperty(TL, 'value', {
+                configurable: true,
+                get: function () { var a = []; for (var i = 0; i < this.length; i++) a.push(this[i]); return a.join(' '); },
+                set: function (v) {
+                    for (var i = this.length - 1; i >= 0; i--) this.remove(this[i]);
+                    var parts = String(v).split(/\s+/);
+                    for (var j = 0; j < parts.length; j++) if (parts[j]) this.add(parts[j]);
+                }
+            });
+        } catch (e) {}
+    })();
+
     // The clipboard as VS Code uses it on WebKit: at every click and key it gets navigator.clipboard.write() of a
     // ClipboardItem ready, with a promise of the text that its next copy fulfils. The engine has no ClipboardItem (a
     // ReferenceError at every click and key) and only writeText (to the app's pasteboard), so a copy from VS Code's
