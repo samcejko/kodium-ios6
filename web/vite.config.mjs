@@ -509,6 +509,8 @@ function smootherEditor() {
 // - the window's title (which iOS does not show) is put together when nothing is being typed or touched (it was at
 //   every switch, and twice per autosave while typing: "dirty")
 // - the editor's settings for the file were worked out twice per switch (the model, then the input): once
+// - opening a file: the Explorer's Open Editors list is made again after the first frame, not before it, and a file
+//   opened into an empty group is laid out for the tabs it brings at once (not again at the first frame)
 function quickerSwitch() {
   return patchModules('kodium-quicker-switch', [
     ['/vs/workbench/browser/parts/titlebar/menubarControl.js', [
@@ -544,6 +546,14 @@ function quickerSwitch() {
       ['    showCustomMenu(menuIndex, selectFirst = true) {\n',
        '    showCustomMenu(menuIndex, selectFirst = true) {\n        if (this.options.kdBeforeShow?.()) {\n            this.updateOverflowAction();\n        }\n']]],
     ['/vs/workbench/browser/parts/editor/multiEditorTabsControl.js', [
+      // (a file opened into an empty group: its tabs appear, the group is laid out for them now - the editor got the
+      // whole height first, then at the first frame the tabs' height and so a second layout and drawing: 40-70 ms)
+      ['    handleOpenedEditors() {\n        this.updateTabsControlVisibility();\n',
+       '    handleOpenedEditors() {\n        const kdWasEmpty = !!this.tabsAndActionsContainer?.classList.contains("empty");\n        this.updateTabsControlVisibility();\n' +
+       '        if (kdWasEmpty && this.visible && this.dimensions.container && (!this.dimensions.used || this.dimensions.used.height !== this.computeHeight())) {\n' +
+       '            this.dimensions.used = new Dimension(this.dimensions.container.width, this.computeHeight());\n' +
+       '            this.groupView.relayout();\n' +
+       '        }\n'],
       ['    updateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }',
        '    updateEditorActionsToolbar() {\n' +
        '        const updater = this.kdToolbarUpdater || (this.kdToolbarUpdater = this._register(new RunOnceScheduler(() => this.kdUpdateEditorActionsToolbar(), 0)));\n' +
@@ -554,6 +564,25 @@ function quickerSwitch() {
        '        requestAnimationFrame(() => {\n            this.kdToolbarFrame = false;\n            updater.schedule();\n        });\n' +
        '    }\n' +
        '    kdUpdateEditorActionsToolbar() {\n        super.updateEditorActionsToolbar();\n        this.layout(this.dimensions);\n    }']]],
+    // (the Explorer's Open Editors list, made again whenever an editor opens or closes - its rows, the focus and the
+    // selection with their context keys, and a new height for the views around it: 25-200 ms - waits for the next frame
+    // too: it came right after the opening, before the new editor reached the screen)
+    ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
+      ['        }, this.structuralRefreshDelay)));\n        this.updateSize();\n',
+       '        }, this.structuralRefreshDelay)));\n        kdAfterFrame(this.listRefreshScheduler);\n        this.updateSize();\n'],
+      ['let OpenEditorsView = class OpenEditorsView extends ViewPane {',
+       'function kdAfterFrame(scheduler) {\n' +
+       '    const schedule = scheduler.schedule;\n' +
+       '    scheduler.schedule = function (delay = this.timeout) {\n' +
+       '        this.cancel();\n' +
+       // (scheduled meanwhile - isScheduled() - as the view's listeners want it: they leave the list to the refresh then)
+       '        const token = this.timeoutToken = { kdFrame: true };\n' +
+       '        requestAnimationFrame(() => {\n' +
+       '            if (this.timeoutToken === token) {\n                this.timeoutToken = undefined;\n                schedule.call(this, delay);\n            }\n' +
+       '        });\n' +
+       '    };\n' +
+       '}\n' +
+       'let OpenEditorsView = class OpenEditorsView extends ViewPane {']]],
     ['/vs/workbench/browser/parts/titlebar/windowTitle.js', [
       ['this.titleUpdater = this._register(( new RunOnceScheduler(() => this.doUpdateTitle(), 0)));',
        'this.titleUpdater = this._register(( new RunOnceScheduler(() => {\n' +

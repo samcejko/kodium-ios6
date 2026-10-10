@@ -88,8 +88,9 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   private readonly changes = new Emitter<readonly IFileChange[]>()
   readonly onDidChangeFile = this.changes.event
   readonly onDidChangeCapabilities = new Emitter<void>().event
-  // (when the last synchronous read was; the stat it made, for the file service's stat that follows it)
+  // (when the last synchronous read and stat were; the stat last made, for the read or the stat that follows it)
   private lastSyncRead = 0
+  private lastSyncStat = 0
   private lastStat: { path: string, stat: IStat, at: number } | null = null
 
   constructor(
@@ -110,7 +111,21 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   async stat(resource: URI): Promise<IStat> {
     const path = this.toPath(resource) ?? notHere(resource)
     const last = this.lastStat
-    if (last && last.path === path && Date.now() - last.at < 1000) return last.stat
+    const now = Date.now()
+    if (last && last.path === path && now - last.at < 1000) return last.stat
+    // (a stat on its own, as the opening of a file begins with, synchronously too: 5 ms instead of 22-33 - its answer
+    // came back after the WebThread's other work; the read that follows takes it from lastStat)
+    if (now - this.lastSyncStat > SYNC_GAP) {
+      this.lastSyncStat = now
+      let xhr: XMLHttpRequest | null = null
+      try { xhr = callSync(this.root, 'stat', { path }) } catch { xhr = null }
+      if (xhr) {
+        check(xhr, resource)
+        const stat = toStat(xhr.responseText)
+        this.lastStat = { path, stat, at: Date.now() }
+        return stat
+      }
+    } else this.lastSyncStat = now
     const xhr = await call(this.root, 'stat', { path })
     check(xhr, resource)
     return toStat(xhr.responseText)
@@ -140,9 +155,14 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   // asynchronous way says what it is)
   private readSmall(path: string): Uint8Array | null {
     try {
-      const statXhr = callSync(this.root, 'stat', { path })
-      if (statXhr.status !== 200) return null
-      const stat = toStat(statXhr.responseText)
+      const last = this.lastStat
+      let stat: IStat
+      if (last && last.path === path && Date.now() - last.at < 1000) stat = last.stat
+      else {
+        const statXhr = callSync(this.root, 'stat', { path })
+        if (statXhr.status !== 200) return null
+        stat = toStat(statXhr.responseText)
+      }
       if (stat.type !== FileType.File || stat.size > SYNC_MAX) return null
       const xhr = callSync(this.root, 'read', { path }, true)
       if (xhr.status !== 200) return null

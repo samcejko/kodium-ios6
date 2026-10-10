@@ -99,7 +99,17 @@ The first build.
   same); and a file's backup - its whole text encoded and written to the backup store - was made 1 s after every pause,
   though the auto save writes the file 5 s after one: now 1 s before the auto save (untitled files and files the auto
   save leaves alone keep it at 1 s). iOS's memory warning, a few seconds before it may close the app, saves the
-  changed files at once.
+  changed files at once. And the regions themselves are worked out from the file's lines read at once instead of one
+  by one from its piece tree: 8 ms instead of 22 for 1,500 lines.
+- A file opened reaches the screen sooner (its first frame, the median of three interleaved rounds on the iPad 2, a
+  collection before each: hello.js 1.02 s instead of 1.06, README.md 1.54 instead of 1.77, opened again 0.71 instead
+  of 0.77 and 0.62 instead of 0.70): the Explorer's Open Editors list, made again whenever an editor opens or closes -
+  its rows, the focus and the selection with their context keys, and a new height for the views around it: 25-200 ms
+  - came right after the opening, before the new editor was drawn; it waits for the next frame now, as the editor's
+  toolbar does. A file opened into an empty group (the first one, or after all were closed) has the group laid out
+  for its tabs at once: the editor got the whole height first, then at the first frame the tabs' height and a second
+  layout and drawing (40-70 ms of that frame; now 8-18). And a file's details are read synchronously too, as its text
+  already was (15-19 ms from asking to the answer instead of 25-33).
 - Typing on while the suggestions are open: a key that comes less than 300 ms after the previous one no longer
   waits for the list to be drawn again - the list catches up once the typing pauses for 300 ms. Each key's new list
   was drawn in that key's own frame (its rows, the widget's layout, two forced layouts of the page: 300-350 ms of the
