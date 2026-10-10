@@ -1,13 +1,15 @@
 name: Build Kodium (iOS 6, armv7)
 
-# Pushes to main build the packages (Actions artifacts, kept 14 days).
+# Pushes to main build the packages (Actions artifacts, kept 3 days; when the account's artifact storage is full,
+# the pre-release ci-latest of this private repository, replaced by each such build).
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # (write: the ci-latest pre-release, see the packages' upload)
+  contents: write
 
 # Pinned inputs, as in Surfari's build (the engine and its libraries are Surfari's, see tools/sync-engine.ps1)
 env:
@@ -297,6 +299,8 @@ jobs:
           ls -la packages/
 
       - name: Upload packages
+        id: upload
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Kodium-packages
@@ -308,8 +312,24 @@ jobs:
           # (~17 MB a build: kept 14 days they filled the account's artifact storage within three days of builds)
           retention-days: 3
 
+      # (when the account's artifact storage is full the upload above fails - from 2026-10-09, 89 builds of 17 MB:
+      # the packages go to the pre-release ci-latest of this private repository instead, made again for each such
+      # build, so that its tag is the build's commit; release files do not count against the artifact storage)
+      - name: Packages to the ci-latest pre-release (artifact storage full)
+        if: steps.upload.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          gh release delete ci-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create ci-latest packages/*.ipa packages/*.deb packages/SHA256SUMS --repo "$GITHUB_REPOSITORY" \
+            --prerelease --target "$GITHUB_SHA" --title "CI build $GITHUB_RUN_NUMBER" \
+            --notes "Run $GITHUB_RUN_ID (build $GITHUB_RUN_NUMBER), commit $GITHUB_SHA - the Actions artifact storage was full."
+
       - name: Upload build log
         if: always()
+        # (the log is not worth a failed build when the artifact storage is full)
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: build-log

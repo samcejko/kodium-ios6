@@ -124,10 +124,28 @@ if (-not $Download) { exit 0 }
 
 $arts = Invoke-GH GET "/actions/runs/$($run.id)/artifacts"
 $pkg = $arts.artifacts | Where-Object { $_.name -eq 'Kodium-packages' } | Select-Object -First 1
-if (-not $pkg) { throw "No Kodium-packages artifact" }
-$zip = Join-Path $OutDir "$($pkg.name)-$($run.id).zip"
-Download-GH "$Api/actions/artifacts/$($pkg.id)/zip" $zip
 # (a folder of its own per run: nothing of an earlier download is overwritten)
 $extract = Join-Path $OutDir "run-$($run.id)"
-Expand-Archive -Path $zip -DestinationPath $extract -Force
+if ($pkg) {
+    $zip = Join-Path $OutDir "$($pkg.name)-$($run.id).zip"
+    Download-GH "$Api/actions/artifacts/$($pkg.id)/zip" $zip
+    Expand-Archive -Path $zip -DestinationPath $extract -Force
+} else {
+    # no artifact when the account's artifact storage was full: the build put its packages into the pre-release
+    # ci-latest instead (build.yml), whose notes name the run
+    $rel = $null
+    try { $rel = Invoke-GH GET "/releases/tags/ci-latest" } catch {}
+    if (-not $rel -or "$($rel.body)" -notlike "Run $($run.id) *") { throw "No Kodium-packages artifact, nor this run's packages in the ci-latest pre-release" }
+    New-Item -ItemType Directory -Force -Path $extract | Out-Null
+    foreach ($asset in $rel.assets) {
+        $dest = Join-Path $extract $asset.name
+        for ($i = 1; $i -le 6; $i++) {
+            & curl.exe -sSL -f -H "Authorization: Bearer $Token" -H "Accept: application/octet-stream" -o $dest "$Api/releases/assets/$($asset.id)"
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($i -eq 6) { throw "download failed: $($asset.name)" }
+            Start-Sleep -Seconds (3 * $i)
+        }
+    }
+    Write-Host "(from the ci-latest pre-release: the artifact storage was full)"
+}
 Get-ChildItem $extract -File -Recurse | ForEach-Object { Write-Host "Downloaded: $($_.FullName) ($([math]::Round($_.Length/1KB)) KB)" }

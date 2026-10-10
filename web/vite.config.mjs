@@ -1356,6 +1356,34 @@ function openTimers() {
   ])
 }
 
+// A build for measuring keys typed while the suggestions are open (KODIUM_SUGGEST_TIMERS=1 .\web\build.ps1):
+// self.__kdAdd(name, ms) around the refilter, the widget's steps and each row's render, when a script has set it.
+function suggestTimers() {
+  if (!process.env.KODIUM_SUGGEST_TIMERS) return null
+  const t = (name, code) => 'const kdT_' + name.replace(/\W/g, '') + ' = Date.now();\n' + code +
+    'self.__kdAdd && self.__kdAdd("' + name + '", Date.now() - kdT_' + name.replace(/\W/g, '') + ');\n'
+  return patchModules('kodium-suggest-timers', [
+    ['/vs/editor/contrib/suggest/browser/suggestModel.js', [
+      ['            if (!editorIsComposing && this._triggerState !== undefined) {\n                this._refilterCompletionItems();\n',
+       '            if (!editorIsComposing && this._triggerState !== undefined) {\n' + t('refilter', '                this._refilterCompletionItems();\n')]]],
+    ['/vs/editor/contrib/suggest/browser/suggestWidget.js', [
+      ['        const visibleCount = this._completionModel.items.length;\n',
+       t('items', '        const visibleCount = this._completionModel.items.length;\n')],
+      ['            this._list.splice(0, this._list.length, this._completionModel.items);\n            this._setState(isFrozen ? State.Frozen : State.Open);\n',
+       t('list splice', '            this._list.splice(0, this._list.length, this._completionModel.items);\n') +
+       t('setState', '            this._setState(isFrozen ? State.Frozen : State.Open);\n')],
+      ['            this._list.setFocus(noFocus ? [] : [selectionIndex]);\n',
+       t('setFocus', '            this._list.setFocus(noFocus ? [] : [selectionIndex]);\n')],
+      ['            this._layout(this.element.size);\n            this._details.widget.domNode.classList.remove("focused");\n',
+       t('frame layout', '            this._layout(this.element.size);\n') + '            this._details.widget.domNode.classList.remove("focused");\n'],
+      ['                this._list.splice(index, 1, [item]);\n                this._list.setFocus([index]);\n',
+       t('resolved row', '                this._list.splice(index, 1, [item]);\n                this._list.setFocus([index]);\n')]]],
+    ['/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js', [
+      ['    renderElement(element, index, data) {\n', '    renderElement(element, index, data) {\n        const kdT0 = Date.now();\n'],
+      ['\n    }\n    disposeTemplate(templateData) {', '\n        self.__kdAdd && self.__kdAdd("row render", Date.now() - kdT0);\n    }\n    disposeTemplate(templateData) {']]]
+  ])
+}
+
 // A build for measuring the Settings editor (KODIUM_SETTINGS_TIMERS=1 .\web\build.ps1): marks along its opening -
 // self.__kdMark(name) and self.__kdAdd(name, ms), when a measuring script has set them (renderers' renderTemplate and
 // renderElement, the tree's splice summed) - and self.__kdResets: when the default settings were dropped, for which keys.
@@ -2238,7 +2266,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), suggestTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
