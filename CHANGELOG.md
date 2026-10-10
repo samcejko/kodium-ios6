@@ -86,6 +86,14 @@ The first build.
   ones are as wide as they would grow now. A list writes a row's attributes and styles only when they change (the old
   WebKit restyles an element and what is in it for a value written again), and so do the suggestions for their rows'
   font styles, icons and labels, which they wrote anew at every key.
+- A third less garbage in every pause of typing (1.7-1.9 MB instead of 2.6 in a file of 1,500 lines, so the
+  collection - 0.4-0.5 s on the iPad 2 - comes that much less often): the folding regions, worked out again in each
+  pause, replaced all their decorations even when typing had changed none of them, and every change of decorations has
+  the editor build each drawn line's rendering again to compare (now the decorations stay when the regions are the
+  same); and a file's backup - its whole text encoded and written to the backup store - was made 1 s after every pause,
+  though the auto save writes the file 5 s after one: now 1 s before the auto save (untitled files and files the auto
+  save leaves alone keep it at 1 s). iOS's memory warning, a few seconds before it may close the app, saves the
+  changed files at once.
 - Typing on while the suggestions are open: a key that comes less than 300 ms after the previous one no longer
   waits for the list to be drawn again - the list catches up once the typing pauses for 300 ms. Each key's new list
   was drawn in that key's own frame (its rows, the widget's layout, two forced layouts of the page: 300-350 ms of the

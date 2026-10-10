@@ -439,6 +439,28 @@ function smootherEditor() {
        'const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, null);']]],
     ['/vs/editor/contrib/folding/browser/folding.js', [
       ['            min: 200\n', '            min: 1000\n']]],
+    // (the folding regions worked out again in every pause of typing replaced all their decorations - and a change of
+    // decorations has the view build every drawn line's rendering again to compare: ~0.6 MB of garbage per pause in a
+    // file of 1,500 lines - though typing in a line changes none of them: when the new regions, all unfolded, are the
+    // decorations' lines with the same options, the decorations stay)
+    ['/vs/editor/contrib/folding/browser/foldingModel.js', [
+      ['        this._decorationProvider.changeDecorations(\n            accessor => this._editorDecorationIds = accessor.deltaDecorations(this._editorDecorationIds, newEditorDecorations)\n        );\n',
+       '        if (!kdSameFolding(this._textModel, this._editorDecorationIds, newEditorDecorations, newRegions)) {\n' +
+       '            this._decorationProvider.changeDecorations(\n                accessor => this._editorDecorationIds = accessor.deltaDecorations(this._editorDecorationIds, newEditorDecorations)\n            );\n' +
+       '        }\n'],
+      ['class FoldingModel {',
+       'function kdSameFolding(textModel, ids, decorations, regions) {\n' +
+       '    if (ids.length !== decorations.length) {\n        return false;\n    }\n' +
+       '    for (let i = 0; i < decorations.length; i++) {\n' +
+       '        const range = regions.isCollapsed(i) ? null : textModel.getDecorationRange(ids[i]);\n' +
+       '        const want = decorations[i];\n' +
+       '        if (!range || range.startLineNumber !== want.range.startLineNumber || range.endLineNumber !== want.range.endLineNumber || textModel.getDecorationOptions(ids[i]) !== want.options) {\n' +
+       '            return false;\n' +
+       '        }\n' +
+       '    }\n' +
+       '    return true;\n' +
+       '}\n' +
+       'class FoldingModel {']]],
     ['/vs/editor/contrib/bracketMatching/browser/bracketMatching.js', [
       ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'new RunOnceScheduler(() => this._updateBrackets(), 300)']]],
     // The symbols in the breadcrumbs (off by Kodium's default, main.ts): with them off, no outline of the file is kept for
@@ -1839,6 +1861,17 @@ function fewerRowWrites() {
        '    }\n' +
        '}\n' +
        'class HighlightedLabel extends Disposable {']]],
+    // (a file's backup - the whole text encoded and written to the backup store - 1 s after every pause in typing,
+    // though Kodium's auto save writes the file itself 5 s after one: now 1 s before the auto save. Untitled files and
+    // files the auto save leaves alone keep theirs at 1 s; what a crash could lose is the last 4 s of typing)
+    ['/vs/workbench/services/workingCopy/common/workingCopyBackupTracker.js', [
+      ['            backupScheduleDelay = this.filesConfigurationService.hasShortAutoSaveDelay(workingCopy.resource) ? "delayed" : "default";\n        }\n',
+       '            backupScheduleDelay = this.filesConfigurationService.hasShortAutoSaveDelay(workingCopy.resource) ? "delayed" : "default";\n' +
+       '            const kdAuto = this.filesConfigurationService.getAutoSaveConfiguration(workingCopy.resource);\n' +
+       '            if (backupScheduleDelay === "default" && kdAuto.autoSave === "afterDelay" && kdAuto.autoSaveDelay > 2000 && !kdAuto.isOutOfWorkspace && !kdAuto.autoSaveWhenNoErrors) {\n' +
+       '                return kdAuto.autoSaveDelay - 1000;\n' +
+       '            }\n' +
+       '        }\n']]],
     // (the focused suggestion's row drawn again once the item is resolved - for nothing when its provider has no
     // resolving to do, as the words of the document)
     ['/vs/editor/contrib/suggest/browser/suggestWidget.js', [

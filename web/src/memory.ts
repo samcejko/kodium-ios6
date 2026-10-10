@@ -9,7 +9,9 @@
 //   (made again when opened - their first opening's time again), but the text editor every file is shown in and the
 //   Settings editor the warm-up made; and the language services' workers that are idle (started again when asked; on
 //   their own they stop after 45 s without a request)
-// - level 2 (iOS's memory warning, a few seconds before it closes the app): the Settings editor's pane too
+// - level 2 (iOS's memory warning, a few seconds before it closes the app): the Settings editor's pane too, and the
+//   changed files are saved (their backups wait for 4 s of pause now, see vite.config.mjs: a file typed into just
+//   before iOS closed the app would lose those seconds)
 // Garbage collection and the compiled code are the engine's relief, which comes with it.
 import { getService } from '@codingame/monaco-vscode-api'
 import { IEditorGroupsService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorGroupsService.service'
@@ -34,6 +36,9 @@ export async function watchMemory(): Promise<void> {
       for (const manager of ((self as { __kdWorkerManagers?: IdleWorkers[] }).__kdWorkerManagers || [])) {
         // (one asked for in the last 5 s is in use)
         if (manager._worker && now - manager._lastUsedTime > 5000) { manager._stopWorker(); workers++ }
+      }
+      if (level >= 2) {
+        try { (window as { __kd_saveAll?: () => unknown }).__kd_saveAll?.() } catch { /* saved at the next chance */ }
       }
       console.log('[kodium] memory relief ' + level + ': ' + panes + ' editor panes, ' + workers + ' language workers let go')
     }, 0)
