@@ -110,13 +110,20 @@ The first build.
   for its tabs at once: the editor got the whole height first, then at the first frame the tabs' height and a second
   layout and drawing (40-70 ms of that frame; now 8-18). And a file's details are read synchronously too, as its text
   already was (15-19 ms from asking to the answer instead of 25-33).
-- No more slow moments every 20-30 s while one works: WebKit answers the kernel's memory pressure notices - which the
-  iPad 2 sends Kodium (250-290 MB of its 512) every 20-30 s of work - with a release that also threw away all the
-  workbench's compiled code, and the next actions ran 2-3 times slower while everything was parsed and compiled again
-  (a switch of editors 0.95-1.1 s instead of 0.45, every step of it slower; a canary function's next call 48 ms
-  instead of 2; a minute of switching spent 2.7 % of the WebThread on compiling again). The engine's code keeper only
-  held JavaScriptCore's own minute rule back. WebKit's discard now goes through only when memory is critical (the
-  engine throws the code away itself then); the rest of its release stays as it was.
+- No more slow moments every 20-30 s while one works: JavaScriptCore throws all compiled code away whenever its pool of
+  executable memory is more than half full (at every entry into JavaScript), and with the workbench's code compiled
+  after ~7 calls a function, its ~8 MB filled in 20-30 s of work - the next two actions then ran 2-3 times slower at
+  every step while everything was parsed and compiled again (a switch of editors 0.8-1.1 s instead of 0.45; a canary
+  function's next call 48 ms instead of 2; a minute of switching spent 2.7 % of the WebThread compiling again; the
+  JIT's memory went 3 -> 7 MB and back each time). The baseline JIT now takes a function after ~40 calls (BRJSCWarmUp
+  600): only the code that runs often is compiled, and it fits. 24 switches of editors, two interleaved rounds each:
+  3-4 at 0.8-1 s and a median of 0.47 s before, none and 0.43 s now (all 0.41-0.45); typing in a file of 1,500 lines
+  the same at the median, the slowest tenth of the keys 127-156 ms instead of 160-230, Enter 161-167 instead of
+  172-187. Opening files after a start too - less is compiled on the way, and the second opening no longer compiles
+  most of what the first ran (first frame, two rounds: hello.js 0.63 s instead of 0.92-0.98, README.md 0.80 instead
+  of 0.90-1.42, opened again 0.49 instead of 0.52-0.61 and 0.57 instead of 0.60-1.31). And WebKit's own answer to the
+  kernel's memory pressure notices, which also throws the compiled code away, does that only when memory is critical
+  now (the engine throws it away itself then).
 - And sooner again (the same measure, three interleaved rounds, all twelve pairs quicker: hello.js 0.93 s instead of
   0.94, README.md 1.41 instead of 1.62, opened again 0.63 instead of 0.65 and 0.61 instead of 0.63): the group's
   context keys for the editor that became active - a dozen (its kind, resource, whether it can be split, reverted...) -

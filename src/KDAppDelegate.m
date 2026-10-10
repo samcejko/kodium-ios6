@@ -233,9 +233,6 @@ static void KDKeepCodeOnMemoryPressure(void)
     NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
     BRLog(@"Kodium %@ (%@) starting on %@ (iOS %@)", info[@"CFBundleShortVersionString"] ?: @"?", info[@"CFBundleVersion"] ?: @"?",
           [UIDevice currentDevice].model, [UIDevice currentDevice].systemVersion);
-    // (the engine's own JIT thresholds: compiling sooner - BRJSCWarmUp 30 - made typing slower on the iPad 2)
-    [BRJSEngine applyEngineTiers];
-
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     // An HTTP cache for what comes from the network (the extension gallery), small: the workbench itself is in the app.
     // Its bodies are stored after rewriting, so a new rewriter starts a new cache.
@@ -256,10 +253,20 @@ static void KDKeepCodeOnMemoryPressure(void)
     // the iPad's 50-70 MB left it came every few seconds. It comes only when the system is about to close the app
     // (iOS warns at 40-60 MB available and closes it at 15-25), not for the app's own size; requests to the network
     // wait at 30 MB. WebKit's numbers in the log (they count every object of the page) every two minutes at most.
+    // The baseline JIT takes a function after 600 runs of the interpreter's count instead of JavaScriptCore's 100 (an
+    // entry counts 15: ~40 calls instead of ~7). JavaScriptCore throws ALL compiled code away whenever its pool of
+    // executable memory is more than half full (DynamicGlobalObjectScope at every entry into JavaScript:
+    // ExecutableAllocator::underMemoryPressure) - with the workbench's code compiled at ~7 calls each, the JIT's ~8 MB
+    // filled in 20-30 s of work and everything was parsed and compiled again: the next two actions 2-3 times slower
+    // (24 switches of editors: 3-4 at 0.8-1 s, median 0.47 s; with 600 none, all 0.41-0.45 s, median 0.43; keys in a
+    // file of 1,500 lines the same at the median, the slow tenth 127-156 ms instead of 160-230, Enter 161-167 instead
+    // of 172-187). Compiling sooner - BRJSCWarmUp 30 - had made typing slower.
     [defaults registerDefaults:@{ @"UserAgent": [BRSettings userAgentOverride] ?: [BRHTTPRequest defaultUserAgent],
                                   @"BRAdBlock": @NO, @"BRHideCookieBanners": @NO, @"BRMemoryReliefMB": @0,
                                   @"BRMemoryTightMB": @60, @"BRMemoryCriticalMB": @40, @"BRMemoryEmergencyMB": @30,
-                                  @"BRMemoryReportSeconds": @120, @"BRJSCKeepCode": @YES }];
+                                  @"BRMemoryReportSeconds": @120, @"BRJSCKeepCode": @YES, @"BRJSCWarmUp": @600 }];
+    // (the engine's JIT thresholds, before any script runs)
+    [BRJSEngine applyEngineTiers];
 
     // Every http/https load goes through the engine's TLS stack and rewriters; the app's own site
     // (https://kodium.invalid/) through KDSiteProtocol, registered last so that it is asked first.
