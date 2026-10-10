@@ -86,6 +86,12 @@ The first build.
   ones are as wide as they would grow now. A list writes a row's attributes and styles only when they change (the old
   WebKit restyles an element and what is in it for a value written again), and so do the suggestions for their rows'
   font styles, icons and labels, which they wrote anew at every key.
+- A key reaches the screen another 9 % sooner in a big file (73 ms instead of 80 to its frame, the median of 40 keys,
+  three interleaved rounds alike): every edit told the decorations' listeners that the decorations had changed (they
+  move with the text), and the editor then built each of the ~55 drawn lines' rendering again only to compare it -
+  the lines an edit touches are drawn again for the edit itself, and a decoration that just moved with the text
+  changes no other line. Such a change, an edit's alone, now says so and the other lines are left as they are
+  (checked: find highlights move with the text typed before them and with a line inserted above them).
 - A third less garbage in every pause of typing (1.7-1.9 MB instead of 2.6 in a file of 1,500 lines, so the
   collection - 0.4-0.5 s on the iPad 2 - comes that much less often): the folding regions, worked out again in each
   pause, replaced all their decorations even when typing had changed none of them, and every change of decorations has

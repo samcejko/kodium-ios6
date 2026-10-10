@@ -439,6 +439,26 @@ function smootherEditor() {
        'const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, null);']]],
     ['/vs/editor/contrib/folding/browser/folding.js', [
       ['            min: 200\n', '            min: 1000\n']]],
+    // (an edit tells the decorations' listeners that the decorations changed - they moved with the text - and the view
+    // then built every drawn line's rendering again to compare, ~55 lines at every key: 300-400 KB of garbage and the
+    // most of the frame's own script. The lines an edit touches are drawn again for the edit itself, and a decoration
+    // that only moved with it changes no other line: such a change - an edit's alone, nothing else in the same batch -
+    // now says so, and the drawn lines are left as they are for it)
+    ['/vs/editor/common/model/textModel.js', [
+      ['    checkAffectedAndFire(options) {\n', '    checkAffectedAndFire(options) {\n        this.kdOther = true;\n'],
+      ['    fire() {\n        this._affectsMinimap = true;\n        this._affectsOverviewRuler = true;\n        this._affectsGlyphMargin = true;\n        this.tryFire();\n    }\n',
+       '    fire() {\n        this.kdOther = true;\n        this._affectsMinimap = true;\n        this._affectsOverviewRuler = true;\n        this._affectsGlyphMargin = true;\n        this.tryFire();\n    }\n' +
+       '    kdFireForEdit() {\n        this.kdEdit = true;\n        this._affectsMinimap = true;\n        this._affectsOverviewRuler = true;\n        this._affectsGlyphMargin = true;\n        this.tryFire();\n    }\n'],
+      ['            affectsLineNumber: this._affectsLineNumber\n        };\n',
+       '            affectsLineNumber: this._affectsLineNumber,\n            kdEditOnly: !!this.kdEdit && !this.kdOther\n        };\n        this.kdEdit = false;\n        this.kdOther = false;\n'],
+      ['                this._onDidChangeDecorations.fire();\n                const startLineNumber = change.range.startLineNumber;\n',
+       '                this._onDidChangeDecorations.kdFireForEdit();\n                const startLineNumber = change.range.startLineNumber;\n']]],
+    ['/vs/editor/common/viewEvents.js', [
+      ['            this.affectsLineNumber = source.affectsLineNumber;\n        }\n',
+       '            this.affectsLineNumber = source.affectsLineNumber;\n            this.kdEditOnly = !!source.kdEditOnly;\n        }\n']]],
+    ['/vs/editor/browser/viewParts/viewLines/viewLines.js', [
+      ['    onDecorationsChanged(e) {\n        const rendStartLineNumber = this._visibleLines.getStartLineNumber();\n',
+       '    onDecorationsChanged(e) {\n        if (e.kdEditOnly) {\n            return false;\n        }\n        const rendStartLineNumber = this._visibleLines.getStartLineNumber();\n']]],
     // (the folding regions worked out again in every pause of typing replaced all their decorations - and a change of
     // decorations has the view build every drawn line's rendering again to compare: ~0.6 MB of garbage per pause in a
     // file of 1,500 lines - though typing in a line changes none of them: when the new regions, all unfolded, are the
