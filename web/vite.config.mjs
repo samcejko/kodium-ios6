@@ -260,7 +260,9 @@ function plainFigures() {
 //   (another font draws it, 14 px wide against 8.41) - left out of the test.
 // - the folding regions were worked out again 0.2 s after every change, and the matching bracket 0.05 s after every
 //   move of the cursor - each new set of decorations had the editor check every line on the screen again. Now once
-//   typing pauses (1 s, 0.3 s).
+//   typing pauses (1 s, 0.3 s) - the bracket's 0.3 s from the next frame on: an opened file's model, cursor and focus
+//   set it going, and it fell between the opening and the file's first frame (10-50 ms with the brackets' tree of the
+//   whole file built).
 // - ligatures off was the CSS font-feature-settings "liga" off, "calt" off on the editor's lines (and the suggestions'):
 //   any feature settings make the iOS 6 engine set every run of text through Core Text's complex path, which it
 //   otherwise takes only for scripts that need it - a sixth of the time of scrolling. Off is no feature settings now:
@@ -487,7 +489,8 @@ function smootherEditor() {
        '}\n' +
        'class FoldingModel {']]],
     ['/vs/editor/contrib/bracketMatching/browser/bracketMatching.js', [
-      ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'new RunOnceScheduler(() => this._updateBrackets(), 300)']]],
+      ['new RunOnceScheduler(() => this._updateBrackets(), 50)', 'kdAfterFrame(new RunOnceScheduler(() => this._updateBrackets(), 300))'],
+      ['class BracketMatchingController extends Disposable {', AFTER_FRAME + 'class BracketMatchingController extends Disposable {']]],
     // The symbols in the breadcrumbs (off by Kodium's default, main.ts): with them off, no outline of the file is kept for
     // the breadcrumbs - it was worked out again at every pause in typing (0.35 s) and followed every move of the cursor
     ['/vs/workbench/browser/parts/editor/breadcrumbsModel.js', [
@@ -497,6 +500,22 @@ function smootherEditor() {
        '        this._outlineDisposables.add(toDisposable(() => newCts.dispose(true)));\n        if (this._cfgSymbolPath.getValue() === "off") return;\n        this._outlineService.createOutline(']]]
   ])
 }
+
+// kdAfterFrame(scheduler): a RunOnceScheduler whose delay begins after the next frame - for work that came between an
+// editor opened or switched to and the screen (the page draws only once its scripts are done). Meanwhile it counts as
+// scheduled (isScheduled()), as its owners want; cancel() and flush() work as before.
+const AFTER_FRAME =
+  'function kdAfterFrame(scheduler) {\n' +
+  '    const schedule = scheduler.schedule;\n' +
+  '    scheduler.schedule = function (delay = this.timeout) {\n' +
+  '        this.cancel();\n' +
+  '        const token = this.timeoutToken = { kdFrame: true };\n' +
+  '        requestAnimationFrame(() => {\n' +
+  '            if (this.timeoutToken === token) {\n                this.timeoutToken = undefined;\n                schedule.call(this, delay);\n            }\n' +
+  '        });\n' +
+  '    };\n' +
+  '    return scheduler;\n' +
+  '}\n'
 
 // Switching between editors on the iPad 2 (1.3-1.8 s, WebKit's profiler: VS Code's reactions to the new editor, each
 // a little - but some of them done for nothing):
@@ -510,7 +529,8 @@ function smootherEditor() {
 //   every switch, and twice per autosave while typing: "dirty")
 // - the editor's settings for the file were worked out twice per switch (the model, then the input): once
 // - opening a file: the Explorer's Open Editors list is made again after the first frame, not before it, and a file
-//   opened into an empty group is laid out for the tabs it brings at once (not again at the first frame)
+//   opened into an empty group is laid out for the tabs it brings at once (not again at the first frame); the
+//   group's context keys for the new editor reach the workbench's context as one change, not a dozen
 function quickerSwitch() {
   return patchModules('kodium-quicker-switch', [
     ['/vs/workbench/browser/parts/titlebar/menubarControl.js', [
@@ -570,19 +590,20 @@ function quickerSwitch() {
     ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
       ['        }, this.structuralRefreshDelay)));\n        this.updateSize();\n',
        '        }, this.structuralRefreshDelay)));\n        kdAfterFrame(this.listRefreshScheduler);\n        this.updateSize();\n'],
-      ['let OpenEditorsView = class OpenEditorsView extends ViewPane {',
-       'function kdAfterFrame(scheduler) {\n' +
-       '    const schedule = scheduler.schedule;\n' +
-       '    scheduler.schedule = function (delay = this.timeout) {\n' +
-       '        this.cancel();\n' +
-       // (scheduled meanwhile - isScheduled() - as the view's listeners want it: they leave the list to the refresh then)
-       '        const token = this.timeoutToken = { kdFrame: true };\n' +
-       '        requestAnimationFrame(() => {\n' +
-       '            if (this.timeoutToken === token) {\n                this.timeoutToken = undefined;\n                schedule.call(this, delay);\n            }\n' +
-       '        });\n' +
-       '    };\n' +
+      ['let OpenEditorsView = class OpenEditorsView extends ViewPane {', AFTER_FRAME + 'let OpenEditorsView = class OpenEditorsView extends ViewPane {']]],
+    // (a group's context keys for its active editor - a dozen of them, the editor's kind, its resource, whether it can
+    // be split, reverted... - were set one by one on the workbench's context, each change going to every menu and
+    // scoped context: one change now, as the group's own context already had them)
+    ['/vs/workbench/browser/parts/editor/editorGroupView.js', [
+      ['        this._register(this.onDidModelChange(e => updateGroupContextKeys(e)));\n        this._register(this.onDidActiveEditorChange(() => observeActiveEditor()));\n',
+       '        this._register(this.onDidModelChange(e => kdBufferedKeys(this.editorPartsView, () => updateGroupContextKeys(e))));\n' +
+       '        this._register(this.onDidActiveEditorChange(() => kdBufferedKeys(this.editorPartsView, observeActiveEditor)));\n'],
+      ['let EditorGroupView = EditorGroupView_1 = class EditorGroupView extends Themable {',
+       'function kdBufferedKeys(parts, fn) {\n' +
+       '    const keys = parts && parts.contextKeyService;\n' +
+       '    if (keys && typeof keys.bufferChangeEvents === "function") {\n        keys.bufferChangeEvents(fn);\n    } else {\n        fn();\n    }\n' +
        '}\n' +
-       'let OpenEditorsView = class OpenEditorsView extends ViewPane {']]],
+       'let EditorGroupView = EditorGroupView_1 = class EditorGroupView extends Themable {']]],
     ['/vs/workbench/browser/parts/titlebar/windowTitle.js', [
       ['this.titleUpdater = this._register(( new RunOnceScheduler(() => this.doUpdateTitle(), 0)));',
        'this.titleUpdater = this._register(( new RunOnceScheduler(() => {\n' +
@@ -1760,7 +1781,18 @@ function quickerViews() {
        '        }\n' +
        '        if (!this.tree || !this.isBodyVisible()'],
       ['    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n',
-       '    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n            this.kdInputStale = true;\n']]]
+       '    async setTreeInput() {\n        if (!this.isBodyVisible()) {\n            this.kdInputStale = true;\n'],
+      // (the file of the editor opened or switched to is selected in the tree after the next frame: the editor is drawn
+      // first - the tree's reveal, focus and selection came before it, 25-35 ms)
+      ['        this._register(this.editorService.onDidActiveEditorChange(() => {\n            this.selectActiveFile();\n        }));\n',
+       '        this._register(this.editorService.onDidActiveEditorChange(() => {\n' +
+       '            if (this.kdSelectWaits) {\n                return;\n            }\n' +
+       '            this.kdSelectWaits = true;\n' +
+       '            requestAnimationFrame(() => setTimeout(() => {\n' +
+       '                this.kdSelectWaits = false;\n' +
+       '                this.selectActiveFile().catch(() => undefined);\n' +
+       '            }, 0));\n' +
+       '        }));\n']]]
   ])
 }
 

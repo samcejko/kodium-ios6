@@ -110,6 +110,13 @@ The first build.
   for its tabs at once: the editor got the whole height first, then at the first frame the tabs' height and a second
   layout and drawing (40-70 ms of that frame; now 8-18). And a file's details are read synchronously too, as its text
   already was (15-19 ms from asking to the answer instead of 25-33).
+- And sooner again (the same measure, three interleaved rounds, all twelve pairs quicker: hello.js 0.93 s instead of
+  0.94, README.md 1.41 instead of 1.62, opened again 0.63 instead of 0.65 and 0.61 instead of 0.63): the group's
+  context keys for the editor that became active - a dozen (its kind, resource, whether it can be split, reverted...) -
+  were set one by one on the workbench's context, each a change for every menu and scoped context: one change now.
+  The Explorer selects the file of the active editor after its first frame, not before it (25-35 ms), and the
+  highlight of the brackets at the cursor is worked out 0.3 s after the next frame instead of 0.3 s after the cursor
+  moved - an opened file's cursor, model and focus set it going, and it fell before the file's first frame.
 - Typing on while the suggestions are open: a key that comes less than 300 ms after the previous one no longer
   waits for the list to be drawn again - the list catches up once the typing pauses for 300 ms. Each key's new list
   was drawn in that key's own frame (its rows, the widget's layout, two forced layouts of the page: 300-350 ms of the
