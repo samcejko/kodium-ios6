@@ -177,6 +177,18 @@ The first build.
   text. And the filter's own word matching asked the engine's Set shim whether each character separates words (44,000
   times for "view") and kept its memo in a Map of the shim: plain arrays now. The matching commands show in 0.65 s,
   the first filter after a start in 0.84 (the same rows, checked).
+- Searching the Settings: 2.3 s at every search on the iPad 2 until the matching settings showed, 10-12 s at the
+  first after a start. After the settings matching the words, VS Code looks for "natural language" ones - a TF-IDF of
+  all ~680 settings' texts, every description cut into terms by an expression the iOS 6 engine runs lowered, made anew
+  at every search - and the matching settings, already drawn, reached the screen only after it. Kodium turns that off
+  by default (workbench.settings.enableNaturalLanguageSearch: the search still looks in the names, ids, descriptions
+  and values); turned on, its calculator is kept between searches and the matching settings are on the screen before
+  it runs. And a word's match against a setting's name - or a command's label in the palette - is ruled out at once
+  when the word cannot be in it (contiguous: not in it at all; otherwise: its letters not in order in it; checked
+  against VS Code's own matching on 80,000 random cases), instead of trying every word start character by character;
+  the letters and digits of each setting's id are kept instead of worked out by a lowered \p{L}\p{N} expression at
+  every search. A search now shows its settings in 1.9 s, the first after a start in 3.7 s (the same rows, checked),
+  and typing into the command palette in 0.55 s.
 - The command palette opens a little sooner (0.75-0.77 s instead of 0.81-0.84): a tree given its items - the
   palette's ~490 commands, Go to File's files, the Explorer's - went through them with generators (each a state
   machine in iOS 6's JavaScript, 2-3 per item), and the list's focus, selection and anchor were asked about every

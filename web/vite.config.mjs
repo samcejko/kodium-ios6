@@ -1070,8 +1070,62 @@ function quickerPalette() {
        'const alternateCharsCache = ( new Map());\nconst kdAlternateCodes = [];\nfunction getAlternateCodes(code) {\n' +
        '    const kdKnown = kdAlternateCodes[code];\n    if (kdKnown !== undefined) {\n        return kdKnown === null ? undefined : kdKnown;\n    }\n'],
       ['    alternateCharsCache.set(code, result);\n    return result;\n', '    kdAlternateCodes[code] = result === undefined ? null : result;\n    return result;\n'],
-      ['    const memo = ( new Map());\n    while (targetIndex < target.length) {\n', '    const memo = kdMemo();\n    while (targetIndex < target.length) {\n']],
-     'function kdMemo() {\n    const kept = [];\n    return {\n        get(key) {\n            return kept[key];\n        },\n        set(key, value) {\n            kept[key] = value;\n        }\n    };\n}\n']
+      // (a match of a word with no separator and no alternative characters takes its characters as they are: a
+      // contiguous one is the word itself at a word's start in the target, any other its characters in order - not
+      // in the target so, no match, at once: the Settings' search asked every setting's name character by character,
+      // the palette every command's label)
+      ['    const memo = ( new Map());\n    while (targetIndex < target.length) {\n',
+       '    if ((contiguous ? target.indexOf(word) === -1 : !kdInOrder(word, target)) && kdPlainWord(word)) {\n        return null;\n    }\n' +
+       '    const memo = kdMemo();\n    while (targetIndex < target.length) {\n']],
+     'function kdMemo() {\n    const kept = [];\n    return {\n        get(key) {\n            return kept[key];\n        },\n        set(key, value) {\n            kept[key] = value;\n        }\n    };\n}\n' +
+     'function kdPlainWord(word) {\n' +
+     '    for (let i = 0; i < word.length; i++) {\n' +
+     '        const code = word.charCodeAt(i);\n' +
+     '        if (isWordSeparator(code) || getAlternateCodes(code)) {\n            return false;\n        }\n' +
+     '    }\n' +
+     '    return true;\n' +
+     '}\n' +
+     'function kdInOrder(word, target) {\n' +
+     '    let at = 0;\n' +
+     '    for (let i = 0; i < word.length; i++) {\n' +
+     '        at = target.indexOf(word.charAt(i), at);\n' +
+     '        if (at === -1) {\n            return false;\n        }\n' +
+     '        at++;\n' +
+     '    }\n' +
+     '    return true;\n' +
+     '}\n'],
+    // (and when it is on, the settings matching the words reach the screen before it runs: they waited for it - the
+    // page is drawn only when the script is idle)
+    ['/vs/workbench/contrib/preferences/browser/settingsEditor2.js', [
+      ['            if (!localResults || !localResults.exactMatch) {\n                await this.doRemoteSearch(query, searchInProgress.token);\n            }\n',
+       '            if (!localResults || !localResults.exactMatch) {\n' +
+       '                if (this.preferencesSearchService.remoteSearchAllowed) {\n' +
+       '                    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));\n' +
+       '                    if (searchInProgress.token.isCancellationRequested) {\n                        return;\n                    }\n' +
+       '                }\n' +
+       '                await this.doRemoteSearch(query, searchInProgress.token);\n' +
+       '            }\n']]],
+    // (the Settings' "similar settings", if turned on - Kodium's default is off, web/src/main.ts: a TF-IDF calculator of
+    // all the settings' texts, made anew at every search - kept while the settings' documents are the same, as the
+    // provider keeps them)
+    ['/vs/workbench/contrib/preferences/browser/preferencesSearch.js', [
+      ['        const tfIdfCalculator = ( new TfIdfCalculator());\n        tfIdfCalculator.updateDocuments(this._documents);\n',
+       '        if (this.kdCalculatorFor !== this._documents) {\n' +
+       '            this.kdCalculator = ( new TfIdfCalculator()).updateDocuments(this._documents);\n' +
+       '            this.kdCalculatorFor = this._documents;\n' +
+       '        }\n' +
+       '        const tfIdfCalculator = this.kdCalculator;\n'],
+      // (and the letters and digits of the search and of each setting's id - a \p{L}\p{N} expression, lowered for iOS 6
+      // into a class of 5 KB - kept by text: twice per setting at every search)
+      ['    _toAlphaNumeric(s) {\n        return s.replace(/[^\\p{L}\\p{N}]+/gu, "");\n    }',
+       '    _toAlphaNumeric(s) {\n' +
+       '        if (kdAlphaNumericCount > 5000) {\n            kdAlphaNumeric = Object.create(null);\n            kdAlphaNumericCount = 0;\n        }\n' +
+       '        const kept = kdAlphaNumeric["k" + s];\n' +
+       '        if (kept !== undefined) {\n            return kept;\n        }\n' +
+       '        kdAlphaNumericCount++;\n' +
+       '        return kdAlphaNumeric["k" + s] = s.replace(/[^\\p{L}\\p{N}]+/gu, "");\n' +
+       '    }']],
+     'let kdAlphaNumeric = Object.create(null), kdAlphaNumericCount = 0;\n']
   ])
 }
 

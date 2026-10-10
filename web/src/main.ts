@@ -179,7 +179,13 @@ async function start() {
       // Settings, Keyboard Shortcuts and an extension's page open as tabs, not over the workbench: the overlay is an
       // editor area of its own, made at every opening and thrown away at closing with the editor in it - the Settings
       // editor took 7 s every time on the iPad 2; in a tab it stays made
-      'workbench.editor.useModal': 'off'
+      'workbench.editor.useModal': 'off',
+      // The Settings editor's search by "natural language" - after the settings matching the words, the ones whose
+      // descriptions are like the search, by a TF-IDF of all ~680 settings' texts: 2.3 s at every search on the iPad 2,
+      // 12 s at the first after a start (every description cut into terms by a \p{Letter} expression, which the iOS 6
+      // engine runs lowered), and the matching settings already found waited for it to reach the screen. The search
+      // still looks in the names, ids, descriptions and values; the setting turns the other back on.
+      'workbench.settings.enableNaturalLanguageSearch': false
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
