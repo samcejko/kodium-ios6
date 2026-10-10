@@ -82,6 +82,9 @@ The first build.
   and which had the page laid out before the frame that draws the key; it is set when it changes now. An Enter (or a
   deleted line) took the line that left the drawn range out of the page at once, in the key's handling, the same way
   (three of them: the line, its overlay, its number); they go at the start of the frame that draws the change.
+  And a line drawn anew - the one typed in, the numbers below an Enter - keeps its elements: the new text, classes and
+  styles go into those already on the page instead of the line being replaced, each a layer the engine took down and
+  made again (keys another 8 % sooner, 94-97 ms instead of 104 to the frame in that file, Enter 3 %).
 - JavaScript's syntax check and the file's symbols (the outline, Go to Symbol) come from a worker of their own: acorn
   parsed the file on the page's thread in every pause of typing, 0.9-1.4 s for a file of 1,500 lines on the iPad 2,
   and a key or a touch in that time waited for it. Go to Definition, Find All References and Rename still parse on

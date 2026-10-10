@@ -808,7 +808,32 @@ function lighterTyping() {
       ['    onLinesInserted(e) {\n        const deleted = this._linesCollection.onLinesInserted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                lineDomNode?.remove();\n            }\n        }\n',
        '    onLinesInserted(e) {\n        const deleted = this._linesCollection.onLinesInserted(e.fromLineNumber, e.toLineNumber);\n        if (deleted) {\n            for (let i = 0, len = deleted.length; i < len; i++) {\n                const lineDomNode = deleted[i].getDomNode();\n                if (lineDomNode) {\n                    (this.kdLeft || (this.kdLeft = [])).push(lineDomNode);\n                }\n            }\n        }\n'],
       ['    renderLines(viewportData) {\n        const inp = this._linesCollection._get();\n',
-       '    renderLines(viewportData) {\n        this.kdRemoveLeft();\n        const inp = this._linesCollection._get();\n']]],
+       '    renderLines(viewportData) {\n        this.kdRemoveLeft();\n        const inp = this._linesCollection._get();\n'],
+      // (and a line drawn anew - its text, its overlays, its number after an Enter above it - keeps its elements: the
+      // new ones' attributes and text go into those that are already there, of the same tag, instead of the line being
+      // replaced - each replaced line, and its positioned parts, was a layer the engine took down and made again)
+      ['                const source = hugeDomNode.firstChild;\n                const lineDomNode = line.getDomNode();\n                lineDomNode.replaceWith(source);\n                line.setDomNode(source);\n',
+       '                const source = hugeDomNode.firstChild;\n                const lineDomNode = line.getDomNode();\n' +
+       '                if (lineDomNode.tagName === source.tagName) {\n                    kdMorph(lineDomNode, source);\n                    hugeDomNode.removeChild(source);\n                    line.setDomNode(lineDomNode);\n                } else {\n' +
+       '                    lineDomNode.replaceWith(source);\n                    line.setDomNode(source);\n                }\n'],
+      ['class ViewLayerRenderer {',
+       'function kdMorph(target, source) {\n' +
+       '    const attrs = source.attributes;\n' +
+       '    for (let i = 0; i < attrs.length; i++) {\n        const a = attrs[i];\n        if (target.getAttribute(a.name) !== a.value) {\n            target.setAttribute(a.name, a.value);\n        }\n    }\n' +
+       '    const old = target.attributes;\n' +
+       '    for (let i = old.length - 1; i >= 0; i--) {\n        if (!source.hasAttribute(old[i].name)) {\n            target.removeAttribute(old[i].name);\n        }\n    }\n' +
+       '    let t = target.firstChild, s = source.firstChild;\n' +
+       '    while (t && s) {\n' +
+       '        const tNext = t.nextSibling, sNext = s.nextSibling;\n' +
+       '        if (t.nodeType === 3 && s.nodeType === 3) {\n            if (t.nodeValue !== s.nodeValue) {\n                t.nodeValue = s.nodeValue;\n            }\n' +
+       '        } else if (t.nodeType === 1 && s.nodeType === 1 && t.tagName === s.tagName) {\n            kdMorph(t, s);\n' +
+       '        } else {\n            target.replaceChild(s, t);\n        }\n' +
+       '        t = tNext;\n        s = sNext;\n' +
+       '    }\n' +
+       '    while (t) {\n        const next = t.nextSibling;\n        target.removeChild(t);\n        t = next;\n    }\n' +
+       '    while (s) {\n        const next = s.nextSibling;\n        target.appendChild(s);\n        s = next;\n    }\n' +
+       '}\n' +
+       'class ViewLayerRenderer {']]],
     // (and the cursor's transition, set to the same value at every move of the cursor - a change of its style in the
     // key's own handling, the same layout before the frame: set when it changes)
     ['/vs/editor/browser/viewParts/viewCursors/viewCursor.js', [
