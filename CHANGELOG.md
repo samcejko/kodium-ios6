@@ -86,6 +86,12 @@ The first build.
   ones are as wide as they would grow now. A list writes a row's attributes and styles only when they change (the old
   WebKit restyles an element and what is in it for a value written again), and so do the suggestions for their rows'
   font styles, icons and labels, which they wrote anew at every key.
+- Keys typed while the suggestions are open another ~10 % sooner (423 ms instead of 467 to the frame with 12 rows in
+  the list, a file of 1,500 lines, interleaved): a label's matched letters - the suggestions' at every key, the
+  palette's and quick open's as one types the filter - go into the text and highlight spans it has, where all of them
+  were taken out and made again (each element attached and styled anew); and the focused suggestion's row is no
+  longer drawn a second time once the item is "resolved" when its provider has nothing to resolve (the words of the
+  document).
 - A key reaches the screen a quarter sooner in a big file (144 ms instead of 199 to its frame in a file of 1,500 lines,
   interleaved), and Enter a little sooner (296 instead of 322). Every move of the cursor set its transition style to
   the same value - a change of the page in the key's own handling, which the engine's style setter took ~20 ms over

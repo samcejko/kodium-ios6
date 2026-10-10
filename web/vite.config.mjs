@@ -1376,8 +1376,9 @@ function suggestTimers() {
        t('setFocus', '            this._list.setFocus(noFocus ? [] : [selectionIndex]);\n')],
       ['            this._layout(this.element.size);\n            this._details.widget.domNode.classList.remove("focused");\n',
        t('frame layout', '            this._layout(this.element.size);\n') + '            this._details.widget.domNode.classList.remove("focused");\n'],
-      ['                this._list.splice(index, 1, [item]);\n                this._list.setFocus([index]);\n',
-       t('resolved row', '                this._list.splice(index, 1, [item]);\n                this._list.setFocus([index]);\n')]]],
+      // (inside fewerRowWrites' condition: this plugin comes after it)
+      ['this._list.splice(index, 1, [item]);',
+       '{ const kdT_resolvedrow = Date.now(); this._list.splice(index, 1, [item]); self.__kdAdd && self.__kdAdd("resolved row", Date.now() - kdT_resolvedrow); }']]],
     ['/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js', [
       ['    renderElement(element, index, data) {\n', '    renderElement(element, index, data) {\n        const kdT0 = Date.now();\n'],
       ['\n    }\n    disposeTemplate(templateData) {', '\n        self.__kdAdd && self.__kdAdd("row render", Date.now() - kdT0);\n    }\n    disposeTemplate(templateData) {']]]
@@ -1789,6 +1790,43 @@ function fewerRowWrites() {
        '        if (this.domNode.element.getAttribute("aria-label") !== ariaLabel) {\n' +
        '            this.domNode.element.setAttribute("aria-label", ariaLabel);\n' +
        '        }\n']]],
+    // (a label's matched letters - the suggestions', the palette's, quick open's at every key - into the text and the
+    // highlight spans it has: they were all taken out and made again, each element attached and styled anew)
+    ['/vs/base/browser/ui/highlightedlabel/highlightedLabel.js', [
+      ['        reset(this.domNode, ...children);\n', '        kdMorphChildren(this.domNode, children);\n'],
+      ['class HighlightedLabel extends Disposable {',
+       'function kdOnlyText(el) {\n' +
+       '    const first = el.firstChild;\n' +
+       '    return first && first === el.lastChild && first.nodeType === 3 ? first.nodeValue : null;\n' +
+       '}\n' +
+       'function kdMorphChildren(parent, children) {\n' +
+       '    let node = parent.firstChild, i = 0;\n' +
+       '    for (; i < children.length && node; i++) {\n' +
+       '        const want = children[i];\n' +
+       '        if (typeof want === "string") {\n' +
+       '            if (node.nodeType !== 3) {\n                break;\n            }\n' +
+       '            if (node.nodeValue !== want) {\n                node.nodeValue = want;\n            }\n' +
+       '        } else {\n' +
+       '            const text = node.nodeType === 1 && node.tagName === want.tagName && node.className === want.className && kdOnlyText(node) !== null ? kdOnlyText(want) : null;\n' +
+       '            if (text === null) {\n                break;\n            }\n' +
+       '            if (node.firstChild.nodeValue !== text) {\n                node.firstChild.nodeValue = text;\n            }\n' +
+       '        }\n' +
+       '        node = node.nextSibling;\n' +
+       '    }\n' +
+       '    while (node) {\n        const next = node.nextSibling;\n        parent.removeChild(node);\n        node = next;\n    }\n' +
+       '    for (; i < children.length; i++) {\n' +
+       '        const child = children[i];\n' +
+       '        parent.appendChild(typeof child === "string" ? parent.ownerDocument.createTextNode(child) : child);\n' +
+       '    }\n' +
+       '}\n' +
+       'class HighlightedLabel extends Disposable {']]],
+    // (the focused suggestion's row drawn again once the item is resolved - for nothing when its provider has no
+    // resolving to do, as the words of the document)
+    ['/vs/editor/contrib/suggest/browser/suggestWidget.js', [
+      ['                this._ignoreFocusEvents = true;\n                this._list.splice(index, 1, [item]);\n                this._list.setFocus([index]);\n                this._ignoreFocusEvents = false;\n',
+       '                if (typeof item.provider.resolveCompletionItem === "function") {\n' +
+       '                    this._ignoreFocusEvents = true;\n                    this._list.splice(index, 1, [item]);\n                    this._list.setFocus([index]);\n                    this._ignoreFocusEvents = false;\n' +
+       '                }\n']]],
     ['/vs/editor/contrib/suggest/browser/suggestWidgetRenderer.js', [
       ['            const letterSpacingPx = `${letterSpacing}px`;\n',
        '            const letterSpacingPx = `${letterSpacing}px`;\n' +
@@ -2266,7 +2304,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), suggestTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {
