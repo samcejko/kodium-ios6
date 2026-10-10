@@ -270,6 +270,85 @@ function plainStyles() {
   ])
 }
 
+// A file's line starts - read when it opens, and of every piece of text an edit adds - were found by a charCodeAt loop
+// over all its characters (also asking each whether it is plain ASCII): 70,000 calls for a file of 70 KB, half of its
+// reading on the iPad 2 in the profiler. The line breaks are found with indexOf and the ASCII question with one
+// regular expression now - both native - when the text has no carriage return other than in \r\n (else the loop).
+function quickerLineStarts() {
+  return patchModules('kodium-quicker-line-starts', [
+    ['/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js', [
+      ['function createLineStartsFast(str, readonly = true) {\n    const r = [0];\n    let rLength = 1;\n',
+       'function createLineStartsFast(str, readonly = true) {\n    const r = [0];\n    let rLength = 1;\n' +
+       '    if (str.indexOf("\\r") === -1) {\n' +
+       '        for (let at = str.indexOf("\\n"); at !== -1; at = str.indexOf("\\n", at + 1)) {\n            r[rLength++] = at + 1;\n        }\n' +
+       '        return readonly ? createUintArray(r) : r;\n' +
+       '    }\n'],
+      ['    let cr = 0, lf = 0, crlf = 0;\n    let isBasicASCII = true;\n    for (let i = 0, len = str.length; i < len; i++) {\n',
+       '    let cr = 0, lf = 0, crlf = 0;\n    let isBasicASCII = true;\n' +
+       '    const kdFound = kdLineStarts(r, str);\n' +
+       '    if (kdFound) {\n' +
+       '        const kdResult = ( new LineStarts(createUintArray(r), 0, kdFound.lf, kdFound.crlf, kdFound.isBasicASCII));\n' +
+       '        r.length = 0;\n' +
+       '        return kdResult;\n' +
+       '    }\n' +
+       '    for (let i = 0, len = str.length; i < len; i++) {\n'],
+      // (and the typed array filled by a loop: core-js's set() for typed arrays is a generic loop of its own)
+      ['    r.set(arr, 0);\n    return r;\n}', '    for (let i = 0; i < arr.length; i++) {\n        r[i] = arr[i];\n    }\n    return r;\n}']],
+     'function kdLineStarts(r, str) {\n' +
+     '    let carriageReturns = 0;\n' +
+     '    for (let at = str.indexOf("\\r"); at !== -1; at = str.indexOf("\\r", at + 1)) {\n        carriageReturns++;\n    }\n' +
+     '    let rLength = 1, lf = 0, crlf = 0;\n' +
+     '    for (let at = str.indexOf("\\n"); at !== -1; at = str.indexOf("\\n", at + 1)) {\n' +
+     '        if (at > 0 && str.charCodeAt(at - 1) === 13) {\n            crlf++;\n        } else {\n            lf++;\n        }\n' +
+     '        r[rLength++] = at + 1;\n' +
+     '    }\n' +
+     '    if (carriageReturns !== crlf) {\n        r.length = 1;\n        return null;\n    }\n' +
+     '    return { lf, crlf, isBasicASCII: !/[^\\t\\n\\r\\x20-\\x7e]/.test(str) };\n' +
+     '}\n']
+  ])
+}
+
+// A tree given its items - the command palette's ~490 commands at every opening, Go to File's files, the Explorer's,
+// the settings' - went through them with generators (ES5 here: a regenerator state machine per item, 2-3 of them for
+// each, its empty children's too), and the list asked its focus, selection and anchor about every item: an empty trait
+// still asked the engine's Set shim (1,500 calls), and the traits' look for their items among the deleted and inserted
+// ones filled a Set and a Map of the shim with all of them (in the profiler 40 % of the palette's opening). The items
+// go through arrays now, an empty trait answers at once, and the look-up uses plain objects.
+function quickerTrees() {
+  const mapNow = 'function kdMapNow(items, fn) {\n' +
+    '    const out = [];\n' +
+    '    if (Array.isArray(items)) {\n        for (let i = 0; i < items.length; i++) {\n            out[i] = fn(items[i], i);\n        }\n        return out;\n    }\n' +
+    '    let i = 0;\n' +
+    '    for (const item of items) {\n        out[i] = fn(item, i);\n        i++;\n    }\n' +
+    '    return out;\n' +
+    '}\n'
+  return patchModules('kodium-quicker-trees', [
+    ['/vs/base/browser/ui/tree/objectTreeModel.js', [
+      ['    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return Iterable.map(elements, treeElement => {\n',
+       '    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return kdMapNow(elements, treeElement => {\n']],
+     mapNow],
+    ['/vs/base/browser/ui/tree/indexTreeModel.js', [
+      ['        const nodesToInsertIterator = Iterable.map(toInsert, el => this.createTreeNode(\n',
+       '        const nodesToInsertIterator = kdMapNow(toInsert, el => this.createTreeNode(\n']],
+     mapNow],
+    ['/vs/base/browser/ui/tree/abstractTree.js', [
+      ['    has(node) {\n        return ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n',
+       '    has(node) {\n        return this.nodes.length > 0 && ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n' +
+       '        if (this.nodes.length === 0) {\n            return;\n        }\n'],
+      ['        const deletedNodesIdSet = ( new Set());\n', '        const deletedNodesIdSet = kdIdTable();\n'],
+      ['        const insertedNodesMap = ( new Map());\n', '        const insertedNodesMap = kdIdTable();\n']],
+     'function kdIdTable() {\n' +
+     '    const table = Object.create(null);\n' +
+     '    return {\n' +
+     '        add(id) {\n            table["k" + id] = true;\n        },\n' +
+     '        has(id) {\n            return table["k" + id] !== undefined;\n        },\n' +
+     '        set(id, value) {\n            table["k" + id] = value;\n        },\n' +
+     '        get(id) {\n            return table["k" + id];\n        }\n' +
+     '    };\n' +
+     '}\n']
+  ])
+}
+
 // Workers go sooner when nothing uses them (a worker is a script engine of its own on the iPad 2: about 8 MB each): the
 // language services' after 45 s instead of 2 minutes, the editor's after a minute instead of five
 function quickerWorkers() {
@@ -914,6 +993,8 @@ function quickerMenus() {
 // The command palette at every opening (the profiler, after the menus' kept items above): each of the ~1000 commands
 // got a "Configure Keybinding" button of its own (an array, an object, a localize and a class name each), and with
 // nothing typed yet each was still tested against the empty filter (4000 calls of the filters, all matching).
+// Typing into it ("view": 2.4 s until the list changed on the iPad 2): the "similar commands" calculator was made
+// anew for every filter, and the filters asked the engine's Set and Map shims about every character.
 function quickerPalette() {
   return patchModules('kodium-quicker-palette', [
     ['/vs/workbench/contrib/quickaccess/browser/commandsQuickAccess.js', [
@@ -946,7 +1027,51 @@ function quickerPalette() {
       ['            return commandPickA.label.localeCompare(commandPickB.label);\n        });',
        '            return commandPickA.kdRank - commandPickB.kdRank;\n        });'],
       ['            const isInHistory = !!this.commandsHistory.peek(commandPick.commandId);',
-       '            const isInHistory = !!commandPick.kdCounter;']]]
+       '            const isInHistory = !!commandPick.kdCounter;'],
+      // (the "similar commands" of a typed filter: a TF-IDF calculator of all the commands' texts, made anew - every
+      // text cut into terms, counted in Maps of the engine's shim - at every key typed into the palette: kept while the
+      // commands' texts are the same, only the filter's scores worked out)
+      ['            const tfidf = ( new TfIdfCalculator());\n            tfidf.updateDocuments(allCommandPicks.map(commandPick => ({\n                key: commandPick.commandId,\n                textChunks: [this.getTfIdfChunk(commandPick)]\n            })));\n',
+       '            const tfidf = this.kdTfIdf(allCommandPicks);\n'],
+      ['    async _getPicks(filter, _disposables, token, runOptions) {\n',
+       '    kdTfIdf(allCommandPicks) {\n' +
+       '        const docs = allCommandPicks.map(commandPick => ({\n            key: commandPick.commandId,\n            textChunks: [this.getTfIdfChunk(commandPick)]\n        }));\n' +
+       '        let key = "";\n' +
+       '        for (const doc of docs) {\n            key += doc.key + "\\u0001" + doc.textChunks[0] + "\\u0002";\n        }\n' +
+       '        if (this.kdTfIdfKey !== key) {\n' +
+       '            const tfidf = new TfIdfCalculator();\n' +
+       '            tfidf.updateDocuments(docs);\n' +
+       '            this.kdTfIdfCalculator = tfidf;\n' +
+       '            this.kdTfIdfKey = key;\n' +
+       '        }\n' +
+       '        return this.kdTfIdfCalculator;\n' +
+       '    }\n' +
+       '    async _getPicks(filter, _disposables, token, runOptions) {\n']]],
+    // (and a text's terms - cut by a \p{Letter} expression, lowered for iOS 6 into a long class: 5,000 exec calls,
+    // a second of the profile - are kept by text: a command whose label changed, or one added, makes the calculator
+    // anew from the kept terms)
+    ['/vs/base/common/tfIdf.js', [
+      ['    static termFrequencies(input) {\n        return countMapFrom(TfIdfCalculator.splitTerms(input));\n    }',
+       '    static termFrequencies(input) {\n' +
+       '        let kept = TfIdfCalculator.kdTerms;\n' +
+       '        if (!kept || TfIdfCalculator.kdTermCount > 4000) {\n            kept = TfIdfCalculator.kdTerms = Object.create(null);\n            TfIdfCalculator.kdTermCount = 0;\n        }\n' +
+       '        let tf = kept["k" + input];\n' +
+       '        if (!tf) {\n            tf = kept["k" + input] = countMapFrom(TfIdfCalculator.splitTerms(input));\n            TfIdfCalculator.kdTermCount++;\n        }\n' +
+       '        return tf;\n' +
+       '    }']]],
+    // (the filters' words: whether a character separates words was asked of the engine's Set shim - 44,000 times
+    // for one filter typed into the palette - and so were the characters' alternatives and each match's memo, a Map:
+    // plain arrays now)
+    ['/vs/base/common/filters.js', [
+      ['function isWordSeparator(code) {\n    return isWhitespace(code) || ( wordSeparators.has(code));\n}',
+       'const kdWordSeparator = [];\nwordSeparators.forEach(code => {\n    kdWordSeparator[code] = true;\n});\n' +
+       'function isWordSeparator(code) {\n    return isWhitespace(code) || kdWordSeparator[code] === true;\n}'],
+      ['const alternateCharsCache = ( new Map());\nfunction getAlternateCodes(code) {\n    if (( alternateCharsCache.has(code))) {\n        return alternateCharsCache.get(code);\n    }\n',
+       'const alternateCharsCache = ( new Map());\nconst kdAlternateCodes = [];\nfunction getAlternateCodes(code) {\n' +
+       '    const kdKnown = kdAlternateCodes[code];\n    if (kdKnown !== undefined) {\n        return kdKnown === null ? undefined : kdKnown;\n    }\n'],
+      ['    alternateCharsCache.set(code, result);\n    return result;\n', '    kdAlternateCodes[code] = result === undefined ? null : result;\n    return result;\n'],
+      ['    const memo = ( new Map());\n    while (targetIndex < target.length) {\n', '    const memo = kdMemo();\n    while (targetIndex < target.length) {\n']],
+     'function kdMemo() {\n    const kept = [];\n    return {\n        get(key) {\n            return kept[key];\n        },\n        set(key, value) {\n            kept[key] = value;\n        }\n    };\n}\n']
   ])
 }
 
@@ -2780,7 +2905,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') }] },
   build: {

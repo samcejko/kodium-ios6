@@ -169,6 +169,20 @@ The first build.
   a rule no longer used stays for 5 minutes. A switch to t1.css (four colours) 0.63-0.65 s instead of 1.54-1.55, from
   it 0.58 instead of 1.6, the first opening the same (1.1 s); the swatches keep their colours (checked, a colour typed
   in too). The same goes for the editor's other rules made at run time (inlay hints' styles and the like).
+- Typing into the command palette: "view" took 2.3-2.4 s on the iPad 2 until the list showed the matching commands.
+  For a filter of three letters or more VS Code also looks for "similar commands" with a TF-IDF calculator of all the
+  commands' texts - and it made that calculator anew for every filter: each of ~490 texts cut into terms by a
+  \p{Letter} expression (on iOS 6 a long lowered class: 5,000 regular expression runs) and counted in Maps of the
+  engine's shim. The calculator is kept now while the commands' texts are the same, and a text's terms are kept by the
+  text. And the filter's own word matching asked the engine's Set shim whether each character separates words (44,000
+  times for "view") and kept its memo in a Map of the shim: plain arrays now. The matching commands show in 0.65 s,
+  the first filter after a start in 0.84 (the same rows, checked).
+- The command palette opens a little sooner (0.75-0.77 s instead of 0.81-0.84): a tree given its items - the
+  palette's ~490 commands, Go to File's files, the Explorer's - went through them with generators (each a state
+  machine in iOS 6's JavaScript, 2-3 per item), and the list's focus, selection and anchor were asked about every
+  item through the Set shim even when empty; arrays now, and an empty one answers at once.
+- A file's line starts are found with the native indexOf instead of a loop over every character (a file of 70 KB:
+  reading it 155 -> 138 ms).
 - Some forty texts of the Czech interface came out in English (Close Editor, Select All, New Window, Tab actions,
   Group 4...): the app keeps only the Czech texts its code asks for, found by the calls' numbers in the bundle - and
   a call whose number fell on the next of the bundle's ~1000-character lines was not counted (other texts in every
