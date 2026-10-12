@@ -1399,6 +1399,44 @@ function lighterTyping() {
        '    trace(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 1) {\n            return;\n        }\n        this.logger.trace.apply(this.logger, arguments);\n    }'],
       ['    debug(message, ...args) {\n        this.logger.debug(message, ...args);\n    }',
        '    debug(message) {\n        const level = this.logger.getLevel();\n        if (level === 0 || level > 2) {\n            return;\n        }\n        this.logger.debug.apply(this.logger, arguments);\n    }']]],
+    // (a file's first change after a save - an autosave's, every few seconds of typing: the model is dirty at once, the
+    // event that says so comes after the frame with the typed letter. Its listeners - the tab's and Open Editors' dirty
+    // dots, the dirty count's badge, the context keys of the group, of the working copies and of Open Editors, each
+    // change of them gone through every menu and scoped context - took ~70 ms before that frame, and the styles they
+    // changed had the editor's next read of its text area lay out the workbench: 27 ms more. The autosave and the
+    // backup are scheduled by the content's change, as before.)
+    ['/vs/workbench/services/textfile/common/textFileEditorModel.js', [
+      ['                this.trace("onModelContentChanged() - model content changed and marked as dirty");\n                this.setDirty(true);\n',
+       '                this.trace("onModelContentChanged() - model content changed and marked as dirty");\n                this.kdSetDirtyAfterFrame();\n'],
+      ['    setDirty(dirty) {\n        if (!this.isResolved()) {\n            return;\n        }\n',
+       '    kdSetDirtyAfterFrame() {\n' +
+       '        if (!this.isResolved()) {\n            return;\n        }\n' +
+       '        const wasDirty = this.dirty;\n' +
+       '        this.doSetDirty(true);\n' +
+       '        if (wasDirty || this.kdDirtyFrame) {\n            return;\n        }\n' +
+       '        this.kdDirtyFrame = true;\n' +
+       '        requestAnimationFrame(() => setTimeout(() => {\n' +
+       '            this.kdDirtyFrame = false;\n' +
+       '            if (!this.isDisposed()) {\n                this._onDidChangeDirty.fire();\n            }\n' +
+       '        }, 20));\n' +
+       '    }\n' +
+       '    setDirty(dirty) {\n        if (!this.isResolved()) {\n            return;\n        }\n']]],
+    // (and Open Editors draws its row's dirty dot - the class its renderer sets - instead of making the row again, 17 ms
+    // of its label; the focus set again only when the row has it, for the context key that follows its dirty state)
+    ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
+      ['                case GroupModelChangeKind.EDITOR_DIRTY:\n                case GroupModelChangeKind.EDITOR_STICKY:\n',
+       '                case GroupModelChangeKind.EDITOR_DIRTY:\n                    if (this.kdDirtyRow(index, e.editor)) {\n                        break;\n                    }\n                case GroupModelChangeKind.EDITOR_STICKY:\n'],
+      ['    getIndex(group, editor) {\n',
+       '    kdDirtyRow(index, editor) {\n' +
+       '        const view = this.list && this.list.view;\n' +
+       '        if (index < 0 || !editor || !view || typeof view.domElement !== "function" || index >= view.length) {\n            return false;\n        }\n' +
+       '        const row = view.domElement(index);\n' +
+       '        if (row) {\n            row.classList.toggle("dirty", editor.isDirty() && !editor.isSaving());\n        }\n' +
+       '        const focus = this.list.getFocus();\n' +
+       '        if (focus.length === 1 && focus[0] === index) {\n            this.list.setFocus(focus);\n        }\n' +
+       '        return true;\n' +
+       '    }\n' +
+       '    getIndex(group, editor) {\n']]],
     ['/vs/editor/contrib/links/browser/links.js', [
       ['        this._register(editor.onDidChangeModelContent(e => {\n            if (!this.editor.hasModel()) {\n                return;\n            }\n            this.computeLinks.schedule(',
        '        this._register(editor.onDidChangeModelContent(e => {\n            if (!this.editor.hasModel() || !this.editor.getOption(EditorOption.links)) {\n                return;\n            }\n            this.computeLinks.schedule(']]],

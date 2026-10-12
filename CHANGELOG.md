@@ -154,6 +154,13 @@ The first build.
   keys answer from an object now, and the changes told at once come as one list of keys, each once. And after the
   key's frame the editor's toolbar was made again - a new menu, new buttons, the same ones: it is made again only
   when its buttons are others, and its menu is kept while the editor's context is the same.
+  Now the key itself is as quick as any other: the file is "changed" at once, but the event that says so comes after
+  the frame with the typed letter. Its listeners - the dots of the tab and of Open Editors, the Explorer's badge, the
+  context keys of the group, of the working copies and of Open Editors - took ~70 ms before that frame, and the styles
+  they changed had the editor lay the workbench out again when it next read its text area (27 ms). The key's frame
+  comes 0.05-0.07 s after it instead of 0.12-0.13 (two interleaved rounds of four such keys on the iPad 2: medians
+  ~55 ms instead of ~125; a plain key ~50), the dots a frame later. Open Editors draws its row's dot instead of making
+  the row again. The auto save and the backup are scheduled by the change of the text, as before.
 - Switching tabs: a switch redrew every tab - its label, icon, hover, close button, classes and colours - though
   only which one is active had changed; with the same tabs and labels only their active, selected and changed states
   are drawn again now, as VS Code does when a group becomes active (six tabs, 30 switches in two interleaved rounds:
