@@ -2748,9 +2748,10 @@ function fewerRowWrites() {
 // Keys typed in a row while the suggestions are open: each key's new list was drawn in that key's own frame - its rows,
 // the widget's layout and two forced layouts of the page, 300-350 ms of the ~420 a key took to show on the iPad 2
 // (against ~95 without the list). A key that comes less than 300 ms after the previous one now leaves the list as it
-// is, and the list is drawn once the typing pauses for 300 ms. Whatever reads the list - accepting (Enter, Tab), moving
-// in it, the details, a commit character of an item that has them - draws the waiting list first, so that it acts on
-// the right item; hiding the list drops it.
+// is, and the list is drawn once the typing pauses for 300 ms; a key after a longer pause has its character drawn
+// first and the list right after that frame. Whatever reads the list - accepting (Enter, Tab), moving in it, the
+// details, a commit character of an item that has them - draws the waiting list first, so that it acts on the right
+// item; hiding the list drops it.
 function suggestPause() {
   const flushFirst = (method) => ['    ' + method + ' {\n', '    ' + method + ' {\n        this.kdFlush();\n']
   return patchModules('kodium-suggest-pause', [
@@ -2760,11 +2761,16 @@ function suggestPause() {
        // (a list that came empty is not kept waiting: it closes the widget, and an Enter meanwhile has to be a new line)
        '        const kdNow = Date.now(), kdInARow = kdNow - (this.kdLastShow || 0) < 300;\n' +
        '        if (!this.kdFlushing) {\n            this.kdLastShow = kdNow;\n        }\n' +
-       '        if (kdInARow && !this.kdFlushing && !isFrozen && this._state === State.Open && this._completionModel && completionModel.items.length > 0) {\n' +
-       '            this.kdPending = [completionModel, selectionIndex, isFrozen, isAuto, noFocus];\n' +
+       '        if (!this.kdFlushing && !isFrozen && this._state === State.Open && this._completionModel && completionModel.items.length > 0) {\n' +
+       '            const kdPending = this.kdPending = [completionModel, selectionIndex, isFrozen, isAuto, noFocus];\n' +
        '            self.__kdSuggestWaiting = this;\n' +
        '            clearTimeout(this.kdPendingTimer);\n' +
-       '            this.kdPendingTimer = setTimeout(() => this.kdFlush(), 300);\n' +
+       '            if (kdInARow) {\n                this.kdPendingTimer = setTimeout(() => this.kdFlush(), 300);\n            }\n' +
+       '            else {\n' +
+       '                requestAnimationFrame(() => {\n' +
+       '                    if (this.kdPending === kdPending) {\n                        this.kdPendingTimer = setTimeout(() => this.kdFlush(), 20);\n                    }\n' +
+       '                });\n' +
+       '            }\n' +
        '            return;\n' +
        '        }\n' +
        '        this.kdDrop();\n' +

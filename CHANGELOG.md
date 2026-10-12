@@ -195,6 +195,10 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- A character typed while the suggestions are open shows sooner: a key after a pause had its new list drawn before
+  the character appeared (median ~210-270 ms on the iPad 2 at a key every 0.35 s); now the character is drawn first
+  and the list in the next frame (~130-150 ms). Keys in quick succession still leave the list alone until a pause,
+  and accepting, moving in the list or a commit character draws the waiting list first.
 - Format Document in CSS, HTML and JSON formats right away: it asked which formatter to use, in a dialog and then a
   list of two nameless entries both marked "(default)". Monaco's language services register a document formatter
   and a range formatter, and VS Code counted the range formatter as a second document formatter because neither
