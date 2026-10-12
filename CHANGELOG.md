@@ -195,6 +195,9 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- The diff editor shows the changes (Compare, the Timeline's and Open Changes): the editor's worker threw at
+  String.prototype.trimStart, which the engine's polyfills for workers lack (replaceAll and trimEnd too) - the worker's
+  prelude has them now.
 - Search in files works: the Search view found only what was in the files the workbench had listed as it started (a
   file put into Documents later was never searched - "function" in 20 new files: 1 match), and took no account of
   the files to include or exclude. Kodium's own search now: the app lists a folder's files at once, VS Code's own

@@ -26,6 +26,26 @@
         try { Object.defineProperty(nav, 'language', { value: lang, configurable: true, enumerable: true }); } catch (e) { try { nav.language = lang; } catch (e2) {} }
     })();
 
+    // String methods that the engine's polyfills for workers lack (checked on the iPad: these three; normalize too,
+    // which VS Code does without): the diff editor's diff threw at trimStart, and showed no change
+    (function () {
+        var S = String.prototype;
+        var define = function (name, fn) {
+            if (typeof S[name] === 'function') return;
+            try { Object.defineProperty(S, name, { value: fn, writable: true, configurable: true }); } catch (e) { S[name] = fn; }
+        };
+        define('trimStart', S.trimLeft || function () { return String(this).replace(/^[\s﻿\xA0]+/, ''); });
+        define('trimEnd', S.trimRight || function () { return String(this).replace(/[\s﻿\xA0]+$/, ''); });
+        define('replaceAll', function (search, replacement) {
+            var s = String(this);
+            if (search instanceof RegExp) {
+                if (!search.global) throw new TypeError('replaceAll must be called with a global RegExp');
+                return s.replace(search, replacement);
+            }
+            return s.replace(new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement);
+        });
+    })();
+
     // (a worker of the old engine has no performance object)
     var P = G.performance || (G.performance = {});
     if (typeof P.now !== 'function') { var base = Date.now(); P.now = function () { return Date.now() - base; }; }
