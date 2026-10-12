@@ -1582,7 +1582,9 @@ function smootherScroll() {
        '    }\n' +
        '    _renderAtTopLeft() {\n']]],
     // (a LinkedList - the gesture targets, a command's handlers, keybindings - is gone through with a plain iterator:
-    // its generator was the regenerator runtime's three calls and a try per element)
+    // its generator was the regenerator runtime's three calls and a try per element. Its own Symbol.iterator is set by
+    // assignment: as a computed key of the literal it went through the engine's property helper and core-js's
+    // defineProperty - 1,550 times as the Keyboard Shortcuts editor listed the commands, 0.4 s on the iPad 2)
     ['/vs/base/common/linkedList.js', [
       ['    *[Symbol.iterator]() {\n        let node = this._first;\n        while (node !== Node.Undefined) {\n            yield node.element;\n            node = node.next;\n        }\n    }',
        '    [Symbol.iterator]() {\n' +
@@ -1592,9 +1594,9 @@ function smootherScroll() {
        '            next() {\n' +
        '                if (first) {\n                    first = false;\n                    node = list._first;\n                } else if (node !== Node.Undefined) {\n                    node = node.next;\n                }\n' +
        '                return node === Node.Undefined ? { done: true, value: undefined } : { done: false, value: node.element };\n' +
-       '            },\n' +
-       '            [Symbol.iterator]() {\n                return iterator;\n            }\n' +
+       '            }\n' +
        '        };\n' +
+       '        iterator[Symbol.iterator] = function () {\n            return iterator;\n        };\n' +
        '        return iterator;\n' +
        '    }']]],
     // (a touch whose element left the page - the scroll under the finger recycled its line or row, vsc-prelude.js
