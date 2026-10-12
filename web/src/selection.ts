@@ -41,11 +41,17 @@ let lastY = 0
 let pressTimer = 0
 let tapTimer = 0
 let caretBefore: Position | null = null
+// (a tap on the selection shows or hides its callout and keeps the selection, as on iOS)
+let tapInSelection = false
+let calloutWasShown = false
+let lastTapEnd = 0
 let swallowGesture = false
 // (a handle's drag: the selection's other end, and where on the handle the finger is)
 let anchor: Position | null = null
 let offsetX = 0
 let offsetY = 0
+// (a handle held without moving is a tap on the selection: its box is the finger's, over the selection's ends)
+let handleMoved = false
 let scrollTimer = 0
 // (the selection was made by the finger: it has handles)
 let touchSelected = false
@@ -457,11 +463,11 @@ function beginHandle(handle: HTMLElement, touch: Touch): void {
   offsetX = touch.clientX - (rect.left + at.left)
   offsetY = touch.clientY - (rect.top + at.top + at.height / 2)
   mode = 'handle'
+  handleMoved = false
   touchId = touch.identifier
-  lastX = touch.clientX
-  lastY = touch.clientY
+  startX = lastX = touch.clientX
+  startY = lastY = touch.clientY
   hideCallout()
-  showLoupe(target, lastX - offsetX, lastY - offsetY, null)
 }
 
 function moveHandle(x: number, y: number): void {
@@ -513,6 +519,11 @@ function finishDrag(): void {
   hideLoupe()
   if (!target) return
   target.focus()
+  if (was === 'handle' && !handleMoved) {
+    // (a tap on a handle: as on the selection, its callout comes or goes)
+    if (!calloutWasShown) showCallout(target)
+    return
+  }
   const selection = target.getSelection()
   if (was === 'handle' && selection && !selection.isEmpty()) touchSelected = true
   placeHandles()
@@ -542,6 +553,7 @@ function afterTap(target: ICodeEditor): void {
 }
 
 export function touchSelection(): void {
+  ;(window as { __kd_selDebug?: unknown }).__kd_selDebug = () => ({ mode, touchSelected, tapInSelection, calloutWasShown, lastTapEnd: Date.now() - lastTapEnd, callout: !!callout, editor: !!editor })
   const swallow = (e: Event) => {
     if (!swallowGesture) return
     e.stopPropagation()
@@ -560,6 +572,7 @@ export function touchSelection(): void {
     }
     const touch = e.touches[0]
     if (callout && callout.contains(touch.target as Node)) return
+    calloutWasShown = !!callout
     hideCallout()
     const handle = handleOf(touch.target)
     if (handle) {
@@ -570,13 +583,15 @@ export function touchSelection(): void {
       return
     }
     const target = editorAt(touch.target)
-    if (!target || !target.hasModel() || !textPosition(target, touch.clientX, touch.clientY)) return
+    const at = target && target.hasModel() ? textPosition(target, touch.clientX, touch.clientY) : null
+    if (!target || !at) return
     useEditor(target)
     mode = 'pending'
     touchId = touch.identifier
     startX = lastX = touch.clientX
     startY = lastY = touch.clientY
     const selection = target.getSelection()
+    tapInSelection = touchSelected && !!selection && !selection.isEmpty() && selection.containsPosition(at) && Date.now() - lastTapEnd > 400
     caretBefore = selection && selection.isEmpty() && target.hasTextFocus() ? selection.getPosition() : null
     pressTimer = setTimeout(beginLoupe, LONG_PRESS) as unknown as number
   }, true)
@@ -595,7 +610,10 @@ export function touchSelection(): void {
     e.preventDefault()
     e.stopPropagation()
     if (mode === 'loupe') moveCaret(lastX, lastY)
-    else moveHandle(lastX, lastY)
+    else if (handleMoved || Math.abs(lastX - startX) > SLOP || Math.abs(lastY - startY) > SLOP) {
+      handleMoved = true
+      moveHandle(lastX, lastY)
+    }
   }, true)
 
   const end = (e: TouchEvent) => {
@@ -604,7 +622,15 @@ export function touchSelection(): void {
     if (!touch) return
     if (mode === 'pending') {
       cancelPress()
-      if (e.type === 'touchend' && editor) afterTap(editor)
+      if (e.type !== 'touchend' || !editor) return
+      if (tapInSelection) {
+        // (the Gesture's tap would put the caret there: the selection stays, its callout comes or goes)
+        swallowGesture = true
+        setTimeout(() => { swallowGesture = false }, 0)
+        e.preventDefault()
+        if (!calloutWasShown) showCallout(editor)
+      } else afterTap(editor)
+      lastTapEnd = Date.now()
       return
     }
     e.preventDefault()
