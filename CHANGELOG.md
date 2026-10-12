@@ -195,6 +195,11 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- The first suggestions in a file, and the first after a minute without typing, come as soon as the others: the
+  editor's worker (the words of the suggestions) was started when they first asked it - 1.1 s on the iPad 2 before
+  it answered - and stops after a minute without a request. The editor's focus and its edits start it now (asking
+  it something small at most every 20 s), while the suggestions' delay runs: 1.5-1.7 s from the key to the list
+  instead of 2.6-3.1 (the others 1.4).
 - A pause in typing cost 0.2 s less in a long file: the folding regions, worked out again a second after the last
   key, were compared with the old ones through their decorations - each region's range worked out from its offsets
   in the text's tree, two line lengths besides - and now by their lines alone, while no edit added or took lines

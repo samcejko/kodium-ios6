@@ -76,6 +76,7 @@ import { warmUp } from './warmup'
 import { receiveKeys } from './keybar'
 import { showPresses } from './presses'
 import { touchSelection } from './selection'
+import { warmEditorWorker } from './editorWorker'
 import { watchMemory } from './memory'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
@@ -269,6 +270,7 @@ async function start() {
   receiveKeys()
   showPresses()
   touchSelection()
+  warmEditorWorker()
   void watchMemory()
   registerJavaScript()
   registerMarkdown()
