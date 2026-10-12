@@ -195,6 +195,11 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- A pause in typing cost 0.2 s less in a long file: the folding regions, worked out again a second after the last
+  key, were compared with the old ones through their decorations - each region's range worked out from its offsets
+  in the text's tree, two line lengths besides - and now by their lines alone, while no edit added or took lines
+  (1,500 lines on the iPad 2: ~0.24 s -> ~0.09 s, the rest is the regions' own computation). And the suggestions'
+  list asked its widget's whole layout for every item's height at every key (~100 items, 20 ms).
 - Text selection as on iOS (in Czech too): a long press puts the caret under the finger and shows the round loupe
   above it, which follows the finger; a double tap selects a word; a selection made with the finger has iOS's two blue
   handles, which drag its ends (the loupe again, the editor scrolling at its edges), and the black callout of its

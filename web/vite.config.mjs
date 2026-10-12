@@ -572,7 +572,13 @@ function smootherEditor() {
       ['const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, monospace);',
        'const rightwardsArrow = this._createRequest("→", CharWidthRequestType.Regular, all, null);']]],
     ['/vs/editor/contrib/folding/browser/folding.js', [
-      ['            min: 200\n', '            min: 1000\n']]],
+      ['            min: 200\n', '            min: 1000\n'],
+      // (whether an edit since the regions' last update added or took lines: see foldingModel.js below)
+      ['    onDidChangeModelContent(e) {\n',
+       '    onDidChangeModelContent(e) {\n' +
+       '        if (this.foldingModel && (e.isFlush || e.changes.some(c => c.range.startLineNumber !== c.range.endLineNumber || /[\\r\\n]/.test(c.text)))) {\n' +
+       '            this.foldingModel.kdLinesMoved = true;\n' +
+       '        }\n']]],
     // (an edit tells the decorations' listeners that the decorations changed - they moved with the text - and the view
     // then built every drawn line's rendering again to compare, ~55 lines at every key: 300-400 KB of garbage and the
     // most of the frame's own script. The lines an edit touches are drawn again for the edit itself, and a decoration
@@ -600,20 +606,30 @@ function smootherEditor() {
        '    const kdLines = model.getLinesContent();\n    for (let line = model.getLineCount(); line > 0; line--) {\n        const lineContent = kdLines[line - 1];\n']]],
     // (the folding regions worked out again in every pause of typing replaced all their decorations - and a change of
     // decorations has the view build every drawn line's rendering again to compare: ~0.6 MB of garbage per pause in a
-    // file of 1,500 lines - though typing in a line changes none of them: when the new regions, all unfolded, are the
-    // decorations' lines with the same options, the decorations stay)
+    // file of 1,500 lines - though typing in a line changes none of them. When no edit since the last update added or
+    // took lines and the new regions are the old ones, all unfolded and the provider's, nothing is done: the old
+    // regions' decorations are on their lines still. That was asked of the decorations themselves before - each one's
+    // range worked out from its offsets in the piece tree, two line lengths per region besides: 0.2 s per pause on the
+    // iPad 2 for a file of 1,500 lines, now ~5 ms.)
     ['/vs/editor/contrib/folding/browser/foldingModel.js', [
-      ['        this._decorationProvider.changeDecorations(\n            accessor => this._editorDecorationIds = accessor.deltaDecorations(this._editorDecorationIds, newEditorDecorations)\n        );\n',
-       '        if (!kdSameFolding(this._textModel, this._editorDecorationIds, newEditorDecorations, newRegions)) {\n' +
-       '            this._decorationProvider.changeDecorations(\n                accessor => this._editorDecorationIds = accessor.deltaDecorations(this._editorDecorationIds, newEditorDecorations)\n            );\n' +
+      ['    update(newRegions, selection) {\n',
+       '    update(newRegions, selection) {\n' +
+       '        if (!this.kdLinesMoved && kdSameRegions(this._regions, newRegions) && this._editorDecorationIds.length === newRegions.length) {\n' +
+       '            return;\n' +
        '        }\n'],
+      ['    updatePost(newRegions) {\n',
+       '    updatePost(newRegions) {\n' +
+       '        if (!this.kdLinesMoved && kdSameRegions(this._regions, newRegions) && this._editorDecorationIds.length === newRegions.length) {\n' +
+       '            return;\n' +
+       '        }\n' +
+       '        this.kdLinesMoved = false;\n'],
       ['class FoldingModel {',
-       'function kdSameFolding(textModel, ids, decorations, regions) {\n' +
-       '    if (ids.length !== decorations.length) {\n        return false;\n    }\n' +
-       '    for (let i = 0; i < decorations.length; i++) {\n' +
-       '        const range = regions.isCollapsed(i) ? null : textModel.getDecorationRange(ids[i]);\n' +
-       '        const want = decorations[i];\n' +
-       '        if (!range || range.startLineNumber !== want.range.startLineNumber || range.endLineNumber !== want.range.endLineNumber || textModel.getDecorationOptions(ids[i]) !== want.options) {\n' +
+       'function kdSameRegions(a, b) {\n' +
+       '    if (!a || !b || a.length !== b.length || a.length === 0) {\n        return false;\n    }\n' +
+       '    for (let i = 0; i < a.length; i++) {\n' +
+       '        if (a.getStartLineNumber(i) !== b.getStartLineNumber(i) || a.getEndLineNumber(i) !== b.getEndLineNumber(i) ||\n' +
+       '            a.isCollapsed(i) || b.isCollapsed(i) || a.getSource(i) !== FoldSource.provider || b.getSource(i) !== FoldSource.provider ||\n' +
+       '            a.getType(i) !== b.getType(i)) {\n' +
        '            return false;\n' +
        '        }\n' +
        '    }\n' +
@@ -2668,6 +2684,10 @@ function suggestPause() {
       flushFirst('toggleExplainMode()'),
       ['    hideWidget() {\n', '    hideWidget() {\n        this.kdDrop();\n'],
       ['    showTriggered(auto, delay) {\n', '    showTriggered(auto, delay) {\n        this.kdDrop();\n'],
+      // (the list asks every item's height at every new list - ~100 at a key -, and each answer made the widget's whole
+      // layout: options, the details' borders, a Dimension; 20 ms a key on the iPad 2. The item's height alone now)
+      ['            getHeight: _element => this.getLayoutInfo().itemHeight,\n',
+       '            getHeight: _element => clamp(this.editor.getOption(EditorOption.suggestLineHeight) || this.editor.getOption(EditorOption.fontInfo).lineHeight, 8, 1000),\n'],
       // (a key that the keybindings may give to the list - Enter, Tab, the arrows, Page Up/Down - draws the waiting
       // list before they are looked up: its context keys, "makes a text edit" for Enter, are the new list's then)
       ['export { SuggestContentWidget, SuggestWidget, editorSuggestWidgetFocusOutline,',
