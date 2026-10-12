@@ -191,6 +191,18 @@ class DocumentsSearch implements ISearchResultProvider {
     const matches: IFileMatch[] = []
     let count = 0
     let next = 0
+    // (the view shows what comes as progress, and it worked its whole tree of results out again at every piece, a piece
+    // per file: the files' matches go in batches - all at once for a search done within 1.5 s, else the first then and
+    // every 2 s after, the rest at the end)
+    const started = Date.now()
+    let pending: IFileMatch[] = []
+    let lastFlush = 0
+    const flush = () => {
+      const batch = pending
+      pending = []
+      lastFlush = Date.now()
+      for (const match of batch) onProgress?.(match)
+    }
     const reader = async (): Promise<void> => {
       while (next < files.length && count < max && !token?.isCancellationRequested) {
         const file = files[next++]
@@ -203,12 +215,15 @@ class DocumentsSearch implements ISearchResultProvider {
         const match = new FileMatch(file.resource)
         match.results = found.results
         matches.push(match)
-        onProgress?.(match)
+        pending.push(match)
+        const now = Date.now()
+        if (lastFlush ? now - lastFlush >= 2000 : now - started >= 1500) flush()
       }
     }
     const readers: Promise<void>[] = []
     for (let i = 0; i < READERS; i++) readers.push(reader())
     await Promise.all(readers)
+    if (!token?.isCancellationRequested) flush()
     return complete(matches, count >= max)
   }
 
