@@ -42,6 +42,16 @@ function Invoke-Files([string]$op, $request) {
             if (-not $isFile) { return $(if ($isDir) { 400 } else { 404 }), $null, $null }
             return 200, [IO.File]::ReadAllBytes($file), 'application/octet-stream'
         }
+        'walk' {
+            # every file below the folder: [path in the root, size, mtime] (version control folders left out)
+            if (-not $isDir) { return $(if ($isFile) { 400 } else { 404 }), $null, $null }
+            $items = @(foreach ($f in (New-Object IO.DirectoryInfo $file).GetFiles('*', [IO.SearchOption]::AllDirectories)) {
+                $p = '/' + $f.FullName.Substring($Documents.Length).TrimStart('\').Replace('\', '/')
+                if ($p -match '/\.(git|svn|hg)/') { continue }
+                '[{0},{1},{2}]' -f (ConvertTo-Json $p -Compress), $f.Length, (& $ms $f.LastWriteTime)
+            })
+            return 200, [Text.Encoding]::UTF8.GetBytes('[' + ($items -join ',') + ']'), 'application/json'
+        }
         'write' {
             if ($isDir) { return 400, $null, $null }
             if (-not $isFile -and $q['create'] -ne '1') { return 404, $null, $null }

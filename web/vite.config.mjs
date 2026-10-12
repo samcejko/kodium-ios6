@@ -2053,6 +2053,18 @@ function quickerTerminal() {
   ])
 }
 
+// The search of the workspace's files is Kodium's (web/src/search.ts): monaco-vscode-api's provider is not made - it
+// listed the whole workspace through the file service as the workbench started, and searched only those files.
+function ownSearch() {
+  return patchModules('kodium-own-search', [
+    ['/monaco-vscode-search-service-override/common.js', [
+      ['            const workspaceSearchProvider = new WorkspaceSearchProvider(fileService, logService, workspaceContextService, undefined, configurationService);\n' +
+       '            this.registerSearchResultProvider(Schemas.file, SearchProviderType.file, workspaceSearchProvider);\n' +
+       '            this.registerSearchResultProvider(Schemas.file, SearchProviderType.text, workspaceSearchProvider);\n',
+       '            // (Kodium\'s provider: web/src/search.ts)\n']]]
+  ])
+}
+
 // Cut and Copy in the app. VS Code makes them only where document.queryCommandSupported('cut'/'copy') says yes - iOS 6
 // says no, so there were none (the key bar's ctrl+x and ctrl+c, the editor's menu, the selection's callout did
 // nothing) - and copies by execCommand('copy'), whose copy event iOS 6 never fires (the engine's own copy took the
@@ -3129,7 +3141,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), ownSearch(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

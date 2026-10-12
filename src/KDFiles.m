@@ -124,6 +124,29 @@ static NSNumber *KDMillis(NSDate *date)
         completion(200, KDJSON(entries), @"application/json");
         return;
     }
+    // every file below a folder, for the search (web/src/search.ts): [path in the root, size, mtime] - version control
+    // folders left out, 20,000 files at most
+    if ([op isEqualToString:@"walk"]) {
+        if (!exists) { completion(KDNotFound, nil, nil); return; }
+        if (!dir) { completion(KDFailed, nil, nil); return; }
+        NSString *base = [file isEqualToString:root] ? @"" : [file substringFromIndex:root.length];
+        NSMutableArray *files = [NSMutableArray array];
+        NSDirectoryEnumerator *walk = [fm enumeratorAtPath:file];
+        for (NSString *relative in walk) {
+            NSDictionary *a = walk.fileAttributes;
+            NSString *type = [a fileType];
+            if ([type isEqualToString:NSFileTypeDirectory]) {
+                NSString *name = [relative lastPathComponent];
+                if ([name isEqualToString:@".git"] || [name isEqualToString:@".svn"] || [name isEqualToString:@".hg"]) [walk skipDescendants];
+                continue;
+            }
+            if (![type isEqualToString:NSFileTypeRegular]) continue;
+            [files addObject:@[[NSString stringWithFormat:@"%@/%@", base, relative], @([a fileSize]), KDMillis([a fileModificationDate] ?: [NSDate date])]];
+            if (files.count >= 20000) break;
+        }
+        completion(200, KDJSON(files), @"application/json");
+        return;
+    }
     if ([op isEqualToString:@"read"]) {
         if (!exists) { completion(KDNotFound, nil, nil); return; }
         if (dir) { completion(KDFailed, nil, nil); return; }

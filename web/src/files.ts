@@ -33,7 +33,7 @@ function call(root: Root, op: string, params: Record<string, string>, body?: Uin
     const xhr = new XMLHttpRequest()
     const all: Record<string, string> = root === 'documents' ? params : { ...params, root }
     const query = Object.keys(all).map((k) => encodeURIComponent(k) + '=' + encodeURIComponent(all[k])).join('&')
-    const reading = op === 'stat' || op === 'list' || op === 'read'
+    const reading = op === 'stat' || op === 'list' || op === 'read' || op === 'walk'
     xhr.open(reading ? 'GET' : 'POST', API + op + '?' + query, true)
     if (binary) xhr.responseType = 'arraybuffer'
     xhr.onload = () => resolve(xhr)
@@ -201,6 +201,19 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
     check(await call(this.root, 'rename', { path, to: target, overwrite: opts.overwrite ? '1' : '0' }), from)
     this.changed({ type: FileChangeType.DELETED, resource: from }, { type: FileChangeType.ADDED, resource: to })
   }
+}
+
+// For the search (search.ts): every file below a folder of Documents ("/a" or "/"), as [path in Documents, size, mtime];
+// and a file's bytes, asynchronously
+export async function walkDocuments(path: string): Promise<[string, number, number][]> {
+  const xhr = await call('documents', 'walk', { path })
+  if (xhr.status !== 200) return []
+  return JSON.parse(xhr.responseText) as [string, number, number][]
+}
+
+export async function readDocument(path: string): Promise<Uint8Array | null> {
+  const xhr = await call('documents', 'read', { path }, undefined, true)
+  return xhr.status === 200 ? new Uint8Array(xhr.response as ArrayBuffer) : null
 }
 
 const SAMPLES: [string, string][] = [
