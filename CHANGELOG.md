@@ -195,6 +195,11 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- Text beyond ASCII - Czech - is decoded 10-80 times sooner: the engine's TextDecoder polyfill went through escape()
+  and decodeURIComponent for any such text - 11.9 s for 342 KB at once on the iPad 2, 1.2 s in the chunks a file is
+  read in (a file with diacritics opened, the extensions' gallery's answers, the terminal's output, the search's
+  files). Kodium decodes UTF-8 itself now (0.14 s for the same; streaming, U+FFFD and fatal as the standard has
+  them - checked against a desktop's decoder in 24,000 cases), and encodes it too (a file saved: 0.35 -> 0.12 s).
 - The diff editor shows the changes (Compare, the Timeline's and Open Changes): the editor's worker threw at
   String.prototype.trimStart, which the engine's polyfills for workers lack (replaceAll and trimEnd too) - the worker's
   prelude has them now.

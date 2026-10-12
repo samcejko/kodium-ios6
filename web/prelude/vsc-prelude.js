@@ -769,7 +769,116 @@
     // pairs the bytes one by one and pushes each character into an array (15 000 pushes in a typing run). The
     // characters as they are instead, String.fromCharCode in chunks; a text with a lone surrogate (which a decoder
     // turns into U+FFFD) still goes to the polyfill.
+    // And UTF-8: the polyfill decodes a text with any character beyond ASCII through escape() and decodeURIComponent -
+    // 11.9 s for 342 KB of Czech text at once on the iPad 2, 1.2 s in chunks of 64 KB (a file's reading, a response of
+    // the extensions' gallery, the terminal's output, the search's files). Here a plain loop over the bytes, streaming
+    // as the standard has it (a sequence cut at a chunk's end waits for the next chunk), U+FFFD for what is not UTF-8
+    // (or a TypeError for a fatal decoder).
     var TD = G.TextDecoder;
+    var utf8Decode = function (dec, input, stream) {
+        var bytes;
+        if (!input) bytes = new Uint8Array(0);
+        else if (input.BYTES_PER_ELEMENT === 1) bytes = input;
+        else if (input.buffer && typeof input.byteLength === 'number') bytes = new Uint8Array(input.buffer, input.byteOffset || 0, input.byteLength);
+        else if (typeof input.byteLength === 'number') bytes = new Uint8Array(input);
+        else bytes = new Uint8Array(0);
+        var pend = dec.__kdPend;
+        if (pend) {
+            var joined = new Uint8Array(pend.length + bytes.length);
+            joined.set(pend, 0);
+            joined.set(bytes, pend.length);
+            bytes = joined;
+            dec.__kdPend = null;
+        }
+        var n = bytes.length, i = 0, out = '', codes = [], k = 0, fatal = !!dec.fatal;
+        // (a byte order mark is left out at the stream's start only: a first chunk too short to tell waits)
+        if (!dec.__kdStarted && n > 0) {
+            if (n >= 3 || !stream) {
+                dec.__kdStarted = true;
+                if (!dec.ignoreBOM && n >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) i = 3;
+            } else if (bytes[0] === 0xEF && (n < 2 || bytes[1] === 0xBB)) {
+                dec.__kdPend = new Uint8Array(bytes);
+                return '';
+            } else dec.__kdStarted = true;
+        }
+        var bad = function () {
+            if (fatal) { dec.__kdStarted = false; throw new TypeError('The encoded data was not valid utf-8'); }
+            codes[k++] = 0xFFFD;
+        };
+        while (i < n) {
+            var b = bytes[i];
+            if (b < 0x80) { codes[k++] = b; i++; }
+            else {
+                var need = b >= 0xF0 ? (b < 0xF5 ? 3 : -1) : b >= 0xE0 ? 2 : b >= 0xC2 ? 1 : -1;
+                if (need < 0) { bad(); i++; }
+                else {
+                    // (how many of its continuation bytes are there and right: the second byte has narrower ranges
+                    // after E0, ED, F0, F4)
+                    var got = 0;
+                    for (var j = 1; j <= need && i + j < n; j++) {
+                        var c = bytes[i + j];
+                        if ((c & 0xC0) !== 0x80) break;
+                        if (j === 1 && ((b === 0xE0 && c < 0xA0) || (b === 0xED && c > 0x9F) || (b === 0xF0 && c < 0x90) || (b === 0xF4 && c > 0x8F))) break;
+                        got++;
+                    }
+                    if (got === need) {
+                        var b1 = bytes[i + 1] & 0x3F;
+                        if (need === 1) codes[k++] = ((b & 0x1F) << 6) | b1;
+                        else if (need === 2) codes[k++] = ((b & 0x0F) << 12) | (b1 << 6) | (bytes[i + 2] & 0x3F);
+                        else {
+                            var cp = (((b & 0x07) << 18) | (b1 << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F)) - 0x10000;
+                            codes[k++] = 0xD800 + (cp >> 10);
+                            codes[k++] = 0xDC00 + (cp & 0x3FF);
+                        }
+                        i += need + 1;
+                    } else if (i + got + 1 >= n && stream) {
+                        // (cut by the chunk's end: the rest comes with the next one)
+                        dec.__kdPend = new Uint8Array(bytes.subarray(i));
+                        break;
+                    } else {
+                        bad();
+                        i += got + 1;
+                    }
+                }
+            }
+            if (k >= 8192) { out += fromCC.apply(null, codes); codes = []; k = 0; }
+        }
+        if (k) out += fromCC.apply(null, codes);
+        if (!stream) dec.__kdStarted = false;
+        return out;
+    };
+    // (and the other way, a file saved, the terminal's input: the polyfill's encoder took 350 ms for 300,000 characters
+    // of Czech text - two passes here, the bytes counted and then written into an array of their exact length)
+    var utf8Encode = function (input) {
+        var s = input === undefined ? '' : String(input), n = s.length, len = 0, i, c, c2;
+        for (i = 0; i < n; i++) {
+            c = s.charCodeAt(i);
+            if (c < 0x80) len++;
+            else if (c < 0x800) len += 2;
+            else if (c >= 0xD800 && c < 0xDC00 && i + 1 < n && (c2 = s.charCodeAt(i + 1)) >= 0xDC00 && c2 < 0xE000) { len += 4; i++; }
+            else len += 3;
+        }
+        var out = new Uint8Array(len), p = 0;
+        for (i = 0; i < n; i++) {
+            c = s.charCodeAt(i);
+            if (c < 0x80) out[p++] = c;
+            else if (c < 0x800) { out[p++] = 0xC0 | (c >> 6); out[p++] = 0x80 | (c & 0x3F); }
+            else if (c >= 0xD800 && c < 0xDC00 && i + 1 < n && (c2 = s.charCodeAt(i + 1)) >= 0xDC00 && c2 < 0xE000) {
+                var cp = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+                out[p++] = 0xF0 | (cp >> 18); out[p++] = 0x80 | ((cp >> 12) & 0x3F); out[p++] = 0x80 | ((cp >> 6) & 0x3F); out[p++] = 0x80 | (cp & 0x3F);
+                i++;
+            } else if (c >= 0xD800 && c < 0xE000) { out[p++] = 0xEF; out[p++] = 0xBF; out[p++] = 0xBD; }
+            else { out[p++] = 0xE0 | (c >> 12); out[p++] = 0x80 | ((c >> 6) & 0x3F); out[p++] = 0x80 | (c & 0x3F); }
+        }
+        return out;
+    };
+    var TE = G.TextEncoder;
+    if (TE && TE.prototype && typeof TE.prototype.encode === 'function' && !TE.prototype.encode.__vsc &&
+        String(TE.prototype.encode).indexOf('[native code]') < 0) {
+        var vEncode = function (input) { return utf8Encode(input); };
+        vEncode.__vsc = true;
+        TE.prototype.encode = vEncode;
+    }
     if (TD && TD.prototype && typeof TD.prototype.decode === 'function' && !TD.prototype.decode.__vsc) {
         var origDecode = TD.prototype.decode, fromCC = String.fromCharCode;
         var loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -780,6 +889,7 @@
                 for (; i < n; i += 8192) s += fromCC.apply(null, input.subarray(i, i + 8192 < n ? i + 8192 : n));
                 if (!loneSurrogate.test(s)) return s;
             }
+            if (this.encoding === 'utf-8' && !this.__dnf) return utf8Decode(this, input, !!(options && options.stream));
             return origDecode.apply(this, arguments);
         };
         vDecode.__vsc = true;
