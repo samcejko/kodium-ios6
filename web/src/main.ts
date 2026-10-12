@@ -7,6 +7,7 @@ import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
 import { IHistoryService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/history/common/history.service'
+import { ICodeEditorService } from '@codingame/monaco-vscode-api/vscode/vs/editor/browser/services/codeEditorService.service'
 import { SaveReason } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/editor'
 import { IStorageService } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage.service'
 import { WillSaveStateReason } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage'
@@ -319,6 +320,9 @@ async function start() {
   // (and a JSON schema's text as the JSON language service gets it, e.g. 'vscode://schemas/keybindings')
   ;(window as { __kd_schemaContent?: unknown }).__kd_schemaContent = (uri: string) =>
     (Registry.as(JSONExtensions.JSONContribution) as { getSchemaContent(uri: string): string | undefined }).getSchemaContent(uri)
+  // (and the code editor with the focus, or the one that had it last - a test's: its text, selections, trigger)
+  const codeEditorService = await getService(ICodeEditorService)
+  ;(window as { __kd_activeEditor?: unknown }).__kd_activeEditor = () => codeEditorService.getActiveCodeEditor() || codeEditorService.getFocusedCodeEditor()
   // what one does first done once unseen, before the splash goes (warmup.ts)
   try { await warmUp() } catch { /* the workbench as it is */ }
   mark('ready')

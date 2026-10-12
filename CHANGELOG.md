@@ -195,6 +195,12 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- Format Document in CSS, HTML and JSON formats right away: it asked which formatter to use, in a dialog and then a
+  list of two nameless entries both marked "(default)". Monaco's language services register a document formatter
+  and a range formatter, and VS Code counted the range formatter as a second document formatter because neither
+  comes from an extension. Format Selection still uses the range formatter.
+- A JavaScript file's syntax error stays in the Problems panel only while the file is open: the error was kept after
+  the file closed, and a file opened again without the error kept showing it.
 - The text selection's loupe follows the finger smoothly: ~45 ms a frame on the iPad 2 instead of ~270 ms every other
   frame, and no half-second stall 1.5 s into a drag. It copied the editor's lines into itself one by one, reading each
   copy's place after the last copy went in, so WebKit laid the whole page out again ~14 times a move. Now the places

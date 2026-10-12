@@ -2063,6 +2063,21 @@ function quickerColumns() {
   ])
 }
 
+// Format Document in CSS, HTML and JSON asked which formatter to take ("There are multiple formatters...", a pick of
+// two nameless entries, both "(default)"): monaco's language services register a document and a range formatter, and
+// VS Code adds a range formatter as a document formatter too unless the same extension has one - they come from no
+// extension. A range formatter of no extension is not added when a document formatter of no extension is there
+// (VS Code takes "no extension" as one already: both were the default). Format Selection keeps the range formatter.
+function singleFormatters() {
+  return patchModules('kodium-single-formatters', [
+    ['/vs/editor/contrib/format/browser/format.js', [
+      ['            seen.add(formatter.extensionId);\n        }\n        result.push({',
+       '            seen.add(formatter.extensionId);\n        }\n' +
+       '        else if (result.some(f => !f.extensionId)) {\n            continue;\n        }\n' +
+       '        result.push({']]]
+  ])
+}
+
 // The terminal's start, 2.4 s on the iPad 2 before the shell was asked for, half of it xterm.js's styles. Its DOM
 // renderer has a <style> for the cells' size and one for the theme (256 colours, the cursor), its scroll bar another:
 // each went into the page empty and got its text after, the renderer's two again at every option set (VS Code sets a
@@ -3236,7 +3251,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

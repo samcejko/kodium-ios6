@@ -177,7 +177,9 @@ function watch(model: editor.ITextModel): void {
     checking.delete(model.uri.toString())
     analyses.delete(model.uri.toString())
     lastSymbols.delete(model.uri.toString())
-    marked.delete(model.uri.toString())
+    // (its problem goes with it: the markers outlive the model, and the file opened again without the error kept it -
+    // only a file in `marked` is cleared)
+    clear(model)
   })
 }
 
