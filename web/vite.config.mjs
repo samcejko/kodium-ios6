@@ -331,6 +331,11 @@ function quickerTrees() {
       ['        const nodesToInsertIterator = Iterable.map(toInsert, el => this.createTreeNode(\n',
        '        const nodesToInsertIterator = kdMapNow(toInsert, el => this.createTreeNode(\n']],
      mapNow],
+    // (an async data tree - the Search view's results - gave each node's children as a generator at every refresh,
+    // which its model reads to the end anyway: an array now)
+    ['/vs/base/browser/ui/tree/asyncDataTree.js', [
+      ['            children: node.hasChildren ? Iterable.map(node.children, child => this.asTreeElement(child, viewStateContext)) : [],\n',
+       '            children: node.hasChildren ? node.children.map(child => this.asTreeElement(child, viewStateContext)) : [],\n']]],
     ['/vs/base/browser/ui/tree/abstractTree.js', [
       ['    has(node) {\n        return ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n',
        '    has(node) {\n        return this.nodes.length > 0 && ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n' +
@@ -2053,6 +2058,47 @@ function quickerTerminal() {
   ])
 }
 
+// A build for measuring the Search view (KODIUM_SEARCH_TIMERS=1 .\web\build.ps1): self.__kdAdd(name, ms) around the
+// results' renderers, the async tree's refreshes and renders, the results model's add, the view's tree refreshes
+// (the async ones until they settle), when a script has set it.
+function searchTimers() {
+  if (!process.env.KODIUM_SEARCH_TIMERS) return null
+  const wrap = 'function kdTime(proto, name, label) {\n' +
+    '    const f = proto[name];\n' +
+    '    if (typeof f !== "function") return;\n' +
+    '    proto[name] = function () {\n' +
+    '        const t = Date.now();\n' +
+    '        let r;\n' +
+    '        try { r = f.apply(this, arguments); } finally { if (!(r && typeof r.then === "function")) self.__kdAdd && self.__kdAdd(label, Date.now() - t); }\n' +
+    '        if (r && typeof r.then === "function") r.then(() => self.__kdAdd && self.__kdAdd(label + " (settled)", Date.now() - t), () => {});\n' +
+    '        return r;\n' +
+    '    };\n' +
+    '}\n'
+  return patchModules('kodium-search-timers', [
+    ['/vs/workbench/contrib/search/browser/searchResultsView.js', [
+      ['export { FileMatchRenderer, FolderMatchRenderer, MatchRenderer, SearchAccessibilityProvider, SearchDelegate, TextSearchResultRenderer };',
+       'for (const [C, n] of [[TextSearchResultRenderer, "text"], [FolderMatchRenderer, "folder"], [FileMatchRenderer, "file"], [MatchRenderer, "match"]]) {\n' +
+       '    kdTime(C.prototype, "renderTemplate", n + ".renderTemplate");\n    kdTime(C.prototype, "renderElement", n + ".renderElement");\n}\n' +
+       'export { FileMatchRenderer, FolderMatchRenderer, MatchRenderer, SearchAccessibilityProvider, SearchDelegate, TextSearchResultRenderer };']],
+     wrap],
+    ['/vs/base/browser/ui/tree/asyncDataTree.js', [
+      ['export { AsyncDataTree, CompressibleAsyncDataTree };',
+       'kdTime(AsyncDataTree.prototype, "render", "tree.render");\nkdTime(AsyncDataTree.prototype, "updateChildren", "tree.updateChildren");\n' +
+       'kdTime(AsyncDataTree.prototype, "refreshNode", "tree.refreshNode");\n' +
+       'export { AsyncDataTree, CompressibleAsyncDataTree };']],
+     wrap],
+    ['/vs/workbench/contrib/search/browser/searchTreeModel/searchResult.js', [
+      ['export { SearchResultImpl };', 'kdTime(SearchResultImpl.prototype, "add", "results.add");\nkdTime(SearchResultImpl.prototype, "clear", "results.clear");\nexport { SearchResultImpl };']],
+     wrap],
+    ['/vs/workbench/contrib/search/browser/searchView.js', [
+      ['export { SearchView, SearchViewPosition, getEditorSelectionFromMatch, getSelectionTextFromEditor };',
+       'kdTime(RefreshTreeController.prototype, "refreshTree", "view.refreshTree");\nkdTime(SearchView.prototype, "onSearchComplete", "view.onSearchComplete");\n' +
+       'kdTime(SearchView.prototype, "updateSearchResultCount", "view.updateSearchResultCount");\n' +
+       'export { SearchView, SearchViewPosition, getEditorSelectionFromMatch, getSelectionTextFromEditor };']],
+     wrap]
+  ])
+}
+
 // The search of the workspace's files is Kodium's (web/src/search.ts): monaco-vscode-api's provider is not made - it
 // listed the whole workspace through the file service as the workbench started, and searched only those files.
 function ownSearch() {
@@ -3141,7 +3187,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), ownSearch(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)
