@@ -198,7 +198,11 @@ async function start() {
       // the Kodium Shell daemon's, which VS Code's shell integration scripts and persistent sessions do not reach
       'terminal.integrated.gpuAcceleration': 'off',
       'terminal.integrated.shellIntegration.enabled': false,
-      'terminal.integrated.enablePersistentSessions': false
+      'terminal.integrated.enablePersistentSessions': false,
+      // The Search view's results: a file with more than 10 matches comes collapsed, its matches made when it is opened
+      // (VS Code's "auto"; a lone file is always open). Every match was a node of the results' tree at once - 420 for
+      // "function" in 20 files, 1.7 s on the iPad 2 for the 21 rows on the screen.
+      'search.collapseResults': 'auto'
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
