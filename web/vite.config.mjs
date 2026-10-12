@@ -323,10 +323,18 @@ function quickerTrees() {
     '    return out;\n' +
     '}\n'
   return patchModules('kodium-quicker-trees', [
+    // (and the elements not sorted while their sorter says it keeps them as they are: the command palette's and Go to
+    // Symbol's lists without a filter - ~4,000 comparisons of 500 picks that all answered 0)
     ['/vs/base/browser/ui/tree/objectTreeModel.js', [
+      ['            this.sorter = {\n                compare(a, b) {\n                    return options.sorter.compare(a.element, b.element);\n                }\n            };\n',
+       '            this.sorter = {\n                compare(a, b) {\n                    return options.sorter.compare(a.element, b.element);\n                },\n' +
+       '                kdKeepsOrder() {\n                    return !!options.sorter.kdKeepsOrder && options.sorter.kdKeepsOrder();\n                }\n            };\n'],
       ['    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return Iterable.map(elements, treeElement => {\n',
-       '    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return kdMapNow(elements, treeElement => {\n']],
+       '    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter && !this.sorter.kdKeepsOrder()) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return kdMapNow(elements, treeElement => {\n']],
      mapNow],
+    ['/vs/platform/quickinput/browser/quickInputList.js', [
+      ['                sorter: {\n                    compare: (element, otherElement) => {\n                        if (!this.sortByLabel || !this._lastQueryString) {\n                            return 0;\n                        }\n',
+       '                sorter: {\n                    kdKeepsOrder: () => !this.sortByLabel || !this._lastQueryString,\n                    compare: (element, otherElement) => {\n                        if (!this.sortByLabel || !this._lastQueryString) {\n                            return 0;\n                        }\n']]],
     ['/vs/base/browser/ui/tree/indexTreeModel.js', [
       ['        const nodesToInsertIterator = Iterable.map(toInsert, el => this.createTreeNode(\n',
        '        const nodesToInsertIterator = kdMapNow(toInsert, el => this.createTreeNode(\n']],

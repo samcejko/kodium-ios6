@@ -195,6 +195,8 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- The command palette opens ~30 ms sooner: its list sorted its ~500 commands at every opening without a filter, with
+  a comparison that answers "equal" then (and an old engine's sort need not even keep that order).
 - The start is ready ~3 s sooner (43 s instead of 45-48 on the iPad 2) and the start's memory peak relieves memory
   less often (it threw the warm-up's compiled code away): the warm-up now waits until the start's code can be thrown
   away (22 s after the launch) and does each step once, after it. Before, it did its first step meanwhile, on top
