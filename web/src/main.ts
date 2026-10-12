@@ -6,6 +6,7 @@
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
+import { IHistoryService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/history/common/history.service'
 import { SaveReason } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/editor'
 import { IStorageService } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage.service'
 import { WillSaveStateReason } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage'
@@ -300,6 +301,20 @@ async function start() {
     const out: Record<string, [string, number][]> = {}
     timings.forEach((list, phase) => { out[phase] = list.slice() })
     return out
+  }
+  // (and the recently opened files of Documents/kodium-test forgotten - the tests' files, gone when they are cleaned up
+  // over SSH, where VS Code does not see it: Go to File still offered them)
+  const historyService = await getService(IHistoryService)
+  ;(window as { __kd_forgetTestFiles?: unknown }).__kd_forgetTestFiles = () => {
+    let forgotten = 0
+    for (const entry of historyService.getHistory()) {
+      const resource = (entry as { resource?: URI }).resource
+      if (resource && resource.path.indexOf(DOCUMENTS + '/kodium-test/') === 0) {
+        historyService.removeFromHistory(entry)
+        forgotten++
+      }
+    }
+    return forgotten
   }
   // (and a JSON schema's text as the JSON language service gets it, e.g. 'vscode://schemas/keybindings')
   ;(window as { __kd_schemaContent?: unknown }).__kd_schemaContent = (uri: string) =>

@@ -791,6 +791,9 @@
             for (var r = 0; r < e.length; r += 3) {
                 var k = e[r], v = e[r + 1], kind = e[r + 2];
                 if (kind === 3) { G.__br_assignOwn(t, v); continue; }
+                // (a core-js symbol as a value's key - an iterator's [Symbol.iterator] - by assignment: the same own,
+                // enumerable property under the symbol's name, without core-js's defineProperty)
+                if (kind === 0 && typeof k === 'object' && k !== null) { t[k] = v; continue; }
                 if (!plainKey(k)) { OrigProps(t, [k, v, kind]); continue; }
                 if (kind === 0) { nDP(t, k, { value: v, enumerable: true, writable: true, configurable: true }); continue; }
                 var c = nGOPD(t, k), d = { enumerable: true, configurable: true };
