@@ -208,7 +208,10 @@ int main(void)
         _exit(127);
     }
 
-    say("OK\n");
+    // (the shell's process ID with it: the app hands it to VS Code)
+    char ok[32];
+    snprintf(ok, sizeof ok, "OK %d\n", (int)pid);
+    say(ok);
     int flags = fcntl(1, F_GETFL);
     fcntl(1, F_SETFL, flags | O_NONBLOCK);
 

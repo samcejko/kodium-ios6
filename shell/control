@@ -1,6 +1,6 @@
 Package: com.samcejko.kodium-shell
 Name: Kodium Shell
-Version: 0.1.0
+Version: 0.1.1
 Architecture: iphoneos-arm
 Description: Shells for Kodium's terminal
  iOS does not let an app of the App Store kind start processes, Kodium

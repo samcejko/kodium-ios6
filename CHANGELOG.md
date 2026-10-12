@@ -182,9 +182,24 @@ The first build.
   so a new package does: Kodium Shell (Kodium-shell-<version>.deb) has launchd start a small daemon for each
   connection to 127.0.0.1:47070, which runs a login shell (bash) on a pseudo terminal as the user mobile, in the
   workspace's folder. It answers only Kodium: a connection has to name the token Kodium writes into its container at
-  every start. Without the package the terminal says how to install it. Left out of VS Code's terminal: what needs its
-  shell integration scripts (command history, quick fixes, sticky scroll, completions), voice input, the accessible
-  view and type-ahead echo - 1.3 MB of the 2.1 it brought (the workbench grew by 1.5 MB).
+  every start. Without the package the terminal says how to install it (in Czech too). Left out of VS Code's terminal:
+  what needs its shell integration scripts (command history, quick fixes, sticky scroll, completions), voice input,
+  the accessible view and type-ahead echo - 1.3 MB of the 2.1 it brought (the workbench grew by 1.5 MB). On the iPad 2
+  a new terminal's prompt shows in 1.1-1.2 s (2.1 s when the panel opens with it), a key's echo comes in 40-110 ms,
+  2000 lines of output in 1.3 s, Ctrl+C stops a command in 0.14 s.
+- The terminal's start, 3.7 s on the iPad 2 until the prompt, half of it xterm.js's styles: its renderer's <style>
+  elements went into the page empty and got their text after, were written again at every option VS Code set as the
+  terminal opened (the same text), and each write had the old WebKit work the whole page's style out again (70-160 ms);
+  the theme's 55 KB went through the engine's CSS rewriter in the page as well. One style per terminal now, written
+  once and as the rewriter would have it (the -webkit- keyframes, rgba() colours), so the engine leaves it alone. The
+  styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
+  terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
+  keys are kept in an object too.
+- Surfari's engine matched an expression with named groups at every character in String.prototype.matchAll (it
+  copied the expression from what the lowering of the names kept: the names alone), so VS Code's split of the
+  terminal's output threw at every piece and nothing reached the terminal; the terminal's links use it too. Kodium's
+  prelude copies such an expression from its own source now. And VS Code sends a terminal's input only to a shell
+  with a process ID: Kodium Shell 0.1.1 tells the app the shell's.
 - The key bar has esc and ctrl: ctrl stays down for the next key, of the bar or of the on-screen keyboard - in the
   terminal Ctrl+C, Ctrl+D, Ctrl+Z and the like, in the editor its shortcuts (Ctrl+S save, F find, H replace, Z/Y
   undo/redo, / comment, D next occurrence, G go to line, P go to file, W close). In the terminal Tab, Esc and the arrows

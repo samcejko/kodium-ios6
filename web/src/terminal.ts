@@ -4,13 +4,24 @@
 // user mobile. A shell's output comes by long polls of /__kd/term/read - the app answers as soon as there is some, or
 // after 20 s with nothing - its input goes by POSTs of /__kd/term/write, as UTF-8.
 import getTerminalServiceOverride, {
+  ITerminalService,
   SimpleTerminalBackend,
   SimpleTerminalProcess,
   type ITerminalChildProcess
 } from '@codingame/monaco-vscode-terminal-service-override'
+import type { IProcessReadyEvent } from '@codingame/monaco-vscode-api/vscode/vs/platform/terminal/common/terminal'
 import { Emitter } from '@codingame/monaco-vscode-api/vscode/vs/base/common/event'
+import { StandaloneServices } from '@codingame/monaco-vscode-api/vscode/vs/editor/standalone/browser/standaloneServices'
 
 const API = location.href.replace(/[?#].*$/, '').replace(/\/[^/]*$/, '') + '/__kd/term/'
+
+const cs = /^cs/i.test((window as { __kd_lang?: string }).__kd_lang || '')
+// (what the terminal shows when the package is missing: it can be installed with Cydia's dpkg from the PC, see README)
+const NO_DAEMON = cs
+  ? 'Terminál Kodia potřebuje balíček Kodium Shell (Kodium-shell-*.deb): iOS aplikaci nedovolí spustit žádný proces,\r\n' +
+    'shelly spouští démon z balíčku. Nainstalujte ho (dpkg -i) a otevřete terminál znovu.\r\n'
+  : 'Kodium needs the package Kodium Shell (Kodium-shell-*.deb) for its terminal: iOS lets an app start no\r\n' +
+    'process, the package\'s daemon runs the shells. Install it (dpkg -i) and open the terminal again.\r\n'
 
 function call(op: string, params: Record<string, string | number>, body?: Uint8Array, binary = false): Promise<XMLHttpRequest> {
   return new Promise((resolve, reject) => {
@@ -25,16 +36,15 @@ function call(op: string, params: Record<string, string | number>, body?: Uint8A
   })
 }
 
-// (what the terminal shows when the package is missing: it can be installed with Cydia's dpkg from the PC, see README)
-const NO_DAEMON = 'Kodium needs the package Kodium Shell (Kodium-shell-*.deb) for its terminal: iOS lets an app start no\r\n' +
-  'process, the package\'s daemon runs the shells. Install it (dpkg -i) and open the terminal again.\r\n'
-
 class KodiumShell extends SimpleTerminalProcess {
   private session = 0
   private ended = false
   private readonly decoder = new TextDecoder('utf-8')
   private readonly encoder = new TextEncoder()
   private readonly exited: Emitter<number | undefined>
+  // (VS Code's process manager listens for "ready" from before start() and sends the input only to a shell with a
+  // process ID: the base class fires it with ours (0) on a timer from the constructor, so start() fires its own)
+  private readonly ready = new Emitter<IProcessReadyEvent>()
   // (input typed while the shell is being started, sent once it is)
   private pending: string[] = []
 
@@ -43,6 +53,7 @@ class KodiumShell extends SimpleTerminalProcess {
     super(id, 0, cwd, output.event)
     this.exited = exited
     this.onProcessExit = exited.event
+    this.onProcessReady = this.ready.event
   }
 
   async start (): Promise<undefined | { message: string }> {
@@ -58,7 +69,10 @@ class KodiumShell extends SimpleTerminalProcess {
       return undefined
     }
     if (xhr.status !== 200) return { message: 'The shell did not start (' + xhr.status + ' ' + xhr.responseText + ')' }
-    this.session = (JSON.parse(xhr.responseText) as { id: number }).id
+    // (the shell's process ID, from Kodium Shell 0.1.1 on; the session's before)
+    const opened = JSON.parse(xhr.responseText) as { id: number, pid?: number }
+    this.session = opened.id
+    this.ready.fire({ pid: opened.pid || opened.id, cwd: this.cwd, windowsPty: undefined })
     for (const data of this.pending) this.input(data)
     this.pending = []
     this.read()
@@ -127,4 +141,20 @@ export function getTerminalOverride (): ReturnType<typeof getTerminalServiceOver
   const backend = new KodiumTerminalBackend()
   backend.setReady()
   return getTerminalServiceOverride(backend)
+}
+
+// (for the tests over SSH: the active terminal's lines as xterm.js keeps them, whatever is drawn - a line the terminal
+// wrapped joined again; null without a terminal)
+;(window as { __kd_terminalLines?: unknown }).__kd_terminalLines = (): string[] | null => {
+  const xterm = StandaloneServices.get(ITerminalService).activeInstance?.xterm?.raw
+  if (!xterm) return null
+  const buffer = xterm.buffer.active
+  const lines: string[] = []
+  for (let i = 0; i < buffer.length; i++) {
+    const line = buffer.getLine(i)
+    if (!line) continue
+    if (line.isWrapped && lines.length) lines[lines.length - 1] += line.translateToString(true)
+    else lines.push(line.translateToString(true))
+  }
+  return lines
 }

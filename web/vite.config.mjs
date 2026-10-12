@@ -928,7 +928,16 @@ function quickerMenus() {
        '    affectsSome(keys) {\n        const own = this.keys;\n        for (let i = 0; i < own.length; i++) {\n            if (keys.has(own[i])) {\n                return true;\n            }\n        }\n        return false;\n    }'],
       ['    affectsSome(keys) {\n        for (const e of this.events) {\n            if (e.affectsSome(keys)) {\n                return true;\n            }\n        }\n        return false;\n    }',
        '    affectsSome(keys) {\n        const events = this.events;\n        for (let i = 0; i < events.length; i++) {\n            if (events[i].affectsSome(keys)) {\n                return true;\n            }\n        }\n        return false;\n    }'],
-      ['            merge: input => ( new CompositeContextKeyChangeEvent(input))', '            merge: input => kdMergeKeyEvents(input)']],
+      ['            merge: input => ( new CompositeContextKeyChangeEvent(input))', '            merge: input => kdMergeKeyEvents(input)'],
+      // (a config.* context key's value from an object: the values were kept in a ternary search tree alone, which
+      // every read walked - the terminal's menus ask its settings, 2500 steps of it as a terminal opened, 0.2 s)
+      ['        this._listener = this._configurationService.onDidChangeConfiguration(event => {\n            if (event.source === ConfigurationTarget.DEFAULT) {',
+       '        this._listener = this._configurationService.onDidChangeConfiguration(event => {\n            this.kdValues = Object.create(null);\n' +
+       '            if (event.source === ConfigurationTarget.DEFAULT) {'],
+      ['        if (( this._values.has(key))) {\n            return this._values.get(key);\n        }\n',
+       '        const kdValues = this.kdValues || (this.kdValues = Object.create(null));\n        if (key in kdValues) {\n            return kdValues[key];\n        }\n' +
+       '        if (( this._values.has(key))) {\n            return kdValues[key] = this._values.get(key);\n        }\n'],
+      ['        this._values.set(key, value);\n        return value;\n    }', '        this._values.set(key, value);\n        kdValues[key] = value;\n        return value;\n    }']],
      // (the changes a buffered or paused context tells at once - a view's reset and set of the same keys - as one list
      // of their keys, each once: every menu below asks each change about each of its keys)
      'function kdMergeKeyEvents(input) {\n' +
@@ -1984,6 +1993,112 @@ function settingsTimers() {
   ])
 }
 
+// The terminal's start, 2.4 s on the iPad 2 before the shell was asked for, half of it xterm.js's styles. Its DOM
+// renderer has a <style> for the cells' size and one for the theme (256 colours, the cursor), its scroll bar another:
+// each went into the page empty and got its text after, the renderer's two again at every option set (VS Code sets a
+// dozen as the terminal opens) - the same text as often as not - and every write had the old WebKit work out the whole
+// page's style again (70-160 ms); the 55 KB of the theme's went through the engine's rewriter in the page as well
+// (0.2-0.3 s). Now each terminal has one style - the cells' rule, the theme's, the scroll bar's - that goes in with
+// its text, written again only when the text changed, and written as the rewriter would have it (vsc-prelude.js
+// __kd_xtermStyle), so the engine's shim leaves it alone.
+function quickerTerminal() {
+  return patchModules('kodium-quicker-terminal', [
+    ['/@xterm/xterm/lib/xterm.mjs', [
+      ['this._dimensionsStyleElement||(this._dimensionsStyleElement=this._document.createElement("style"),this._screenElement.appendChild(this._dimensionsStyleElement));' +
+       'let t=`${this._terminalSelector} .xterm-rows span { display: inline-block; height: 100%; vertical-align: top;}`;this._dimensionsStyleElement.textContent=t,',
+       'this._dimensionsStyleElement||(this._dimensionsStyleElement=this._document.createElement("style"));'],
+      ['this._themeStyleElement||(this._themeStyleElement=this._document.createElement("style"),this._screenElement.appendChild(this._themeStyleElement));' +
+       'let t=`${this._terminalSelector} .xterm-rows { pointer-events: none;',
+       'this._themeStyleElement||(this._themeStyleElement=this._document.createElement("style"));' +
+       'let t=`${this._terminalSelector} .xterm-rows span { display: inline-block; height: 100%; vertical-align: top;}${this._terminalSelector} .xterm-rows { pointer-events: none;'],
+      ['this._themeStyleElement.textContent=t}',
+       't+=`.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider { background: ${e.scrollbarSliderBackground.css}; }' +
+       '.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider:hover { background: ${e.scrollbarSliderHoverBackground.css}; }' +
+       '.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider.xterm-active { background: ${e.scrollbarSliderActiveBackground.css}; }`,' +
+       'this._kdThemeText!==t&&(this._kdThemeText=t,this._themeStyleElement.textContent=self.__kd_xtermStyle?self.__kd_xtermStyle(t):t),' +
+       'this._themeStyleElement.parentNode||this._screenElement.appendChild(this._themeStyleElement)}'],
+      ['this._styleElement=s.mainDocument.createElement("style"),t.appendChild(this._styleElement),this._register(E(()=>this._styleElement.remove())),' +
+       'this._register(j.runAndSubscribe(l.onChangeColors,()=>{this._styleElement.textContent=[',
+       'this._register(j.runAndSubscribe(l.onChangeColors,()=>{void [']]],
+    // (and the workbench's styles of the terminals' icons and colours, written again at every terminal made or
+    // closed - 4 writes as one opened, 65 ms each - mostly the same text: an icon's rule came once per terminal)
+    ['/vs/workbench/contrib/terminal/browser/terminalView.js', [
+      ['        this._styleElement.textContent = css;\n    }\n};\nTerminalThemeIconStyle = ',
+       '        if (css !== (this.kdCss || "")) {\n            this.kdCss = css;\n            this._styleElement.textContent = css;\n        }\n    }\n};\nTerminalThemeIconStyle = ']]],
+    ['/vs/workbench/contrib/terminal/browser/terminalService.js', [
+      ['        let css = "";\n        const productIconTheme = this._themeService.getProductIconTheme();',
+       '        let css = "", kdRule;\n        const productIconTheme = this._themeService.getProductIconTheme();'],
+      ['                        css += inline`.monaco-workbench .terminal-tab.codicon-${className(icon.id)}::before\n',
+       '                        kdRule = inline`.monaco-workbench .terminal-tab.codicon-${className(icon.id)}::before\n'],
+      ['font-family: ${stringValue(def.font?.id ?? "codicon")} !important;}`;\n',
+       'font-family: ${stringValue(def.font?.id ?? "codicon")} !important;}`;\n                        if (css.indexOf(kdRule) === -1) css += kdRule;\n'],
+      ['        css += getColorStyleContent(colorTheme);\n        this._styleElement.textContent = css;\n',
+       '        css += getColorStyleContent(colorTheme);\n        if (css !== (this.kdCss || "")) {\n            this.kdCss = css;\n            this._styleElement.textContent = css;\n        }\n']]]
+  ])
+}
+
+// A build for measuring a terminal's start (KODIUM_TERMINAL_TIMERS=1 .\web\build.ps1): self.__kdMark(name) along the
+// way from the command to the shell's start, self.__kdAdd(name, ms) for each terminal contribution's making and opening.
+function terminalTimers() {
+  if (!process.env.KODIUM_TERMINAL_TIMERS) return null
+  const m = (n) => 'self.__kdMark && self.__kdMark("' + n + '");\n'
+  return patchModules('kodium-terminal-timers', [
+    ['/vs/workbench/contrib/terminal/browser/terminalService.js', [
+      ['    async createTerminal(options) {\n', '    async createTerminal(options) {\n        ' + m('createTerminal')],
+      ['        this._evaluateLocalCwd(shellLaunchConfig);', '        ' + m('profile and cwd') + '        this._evaluateLocalCwd(shellLaunchConfig);'],
+      ['        const parent = await this._getSplitParent(options?.location);', '        ' + m('location') + '        const parent = await this._getSplitParent(options?.location);'],
+      ['        this._extensionService.activateByEvent("onTerminal:*");\n        let instance;',
+       '        this._extensionService.activateByEvent("onTerminal:*");\n        ' + m('activateByEvent') + '        let instance;'],
+      ['            instance = this._createTerminal(shellLaunchConfig, location, options);\n        }',
+       '            instance = this._createTerminal(shellLaunchConfig, location, options);\n            ' + m('_createTerminal done') + '        }']]],
+    ['/vs/workbench/contrib/terminal/browser/terminalInstance.js', [
+      ['        this._initDimensions();\n        this._processManager = this._createProcessManager();\n',
+       '        ' + m('instance: dims') + '        this._initDimensions();\n        this._processManager = this._createProcessManager();\n        ' + m('instance: process manager')],
+      ['        this._xtermReadyPromise = this._createXterm();\n        this._xtermReadyPromise.then(async () => {\n            await this._containerReadyBarrier.wait();\n',
+       '        this._xtermReadyPromise = this._createXterm();\n        ' + m('instance: _createXterm called') + '        this._xtermReadyPromise.then(async () => {\n            ' + m('xterm ready') +
+       '            await this._containerReadyBarrier.wait();\n            ' + m('container ready')],
+      ['            await this._createProcess();\n            if (this.shellLaunchConfig.attachPersistentProcess) {',
+       '            ' + m('_createProcess') + '            await this._createProcess();\n            ' + m('_createProcess done') + '            if (this.shellLaunchConfig.attachPersistentProcess) {'],
+      ['        const contributionDescs = TerminalExtensionsRegistry.getTerminalContributions();',
+       '        ' + m('contributions') + '        const contributionDescs = TerminalExtensionsRegistry.getTerminalContributions();'],
+      ['            let contribution;\n            try {\n', '            let contribution;\n            const kdT = Date.now();\n            try {\n'],
+      ['                this._contributions.set(desc.id, contribution);\n            } catch (err) {',
+       '                this._contributions.set(desc.id, contribution);\n                self.__kdAdd && self.__kdAdd("contrib " + desc.id, Date.now() - kdT);\n            } catch (err) {'],
+      ['        const Terminal = await TerminalInstance_1.getXtermConstructor(this._keybindingService, this._contextKeyService);',
+       '        ' + m('xterm constructor') + '        const Terminal = await TerminalInstance_1.getXtermConstructor(this._keybindingService, this._contextKeyService);\n        ' + m('xterm constructor loaded')],
+      ['        this.xterm = xterm;\n        this._resizeDebouncer', '        ' + m('XtermTerminal made') + '        this.xterm = xterm;\n        this._resizeDebouncer'],
+      ['        this._register(this._processManager.onProcessData(e => this._onProcessData(e)));',
+       '        ' + m('xterm listeners') + '        this._register(this._processManager.onProcessData(e => this._onProcessData(e)));'],
+      ['        const trusted = this._isRemoteResolverTerminal || (await this._trust());',
+       '        ' + m('trust') + '        const trusted = this._isRemoteResolverTerminal || (await this._trust());\n        ' + m('trusted')],
+      ['        const originalIcon = this.shellLaunchConfig.icon;\n', '        ' + m('pm.createProcess') + '        const originalIcon = this.shellLaunchConfig.icon;\n'],
+      ['        const screenElement = xterm.attachToElement(xtermHost);\n        for (const contribution of ( this._contributions.values())) {',
+       '        ' + m('_open: xterm.attachToElement') + '        const screenElement = xterm.attachToElement(xtermHost);\n        ' + m('_open: attached') +
+       '        for (const contribution of ( this._contributions.values())) {\n            const kdT = Date.now();\n            try {'],
+      ['            } else {\n                contribution.xtermOpen?.(this.xterm);\n            }\n        }\n',
+       '            } else {\n                contribution.xtermOpen?.(this.xterm);\n            }\n            } finally { self.__kdAdd && self.__kdAdd("xtermOpen " + (contribution.constructor && contribution.constructor.ID || contribution.constructor.name), Date.now() - kdT); }\n        }\n        ' + m('_open: contributions opened')],
+      ['        this._widgetManager.attachToElement(screenElement);\n', '        ' + m('_open: widgets') + '        this._widgetManager.attachToElement(screenElement);\n'],
+      ['        this.updateConfig();\n        if (xterm.raw.options.disableStdin) {', '        ' + m('_open: updateConfig') + '        this.updateConfig();\n        ' + m('_open: config updated') + '        if (xterm.raw.options.disableStdin) {']]],
+    ['/vs/workbench/contrib/terminal/browser/terminalProcessManager.js', [
+      ['        this._processListeners = [newProcess.onProcessReady(e => {\n', '        this._processListeners = [newProcess.onProcessReady(e => {\n            ' + m('pm: process ready')],
+      ['            this._onProcessReady.fire(e);\n            if (this._preLaunchInputQueue.length > 0 && this._process) {',
+       '            this._onProcessReady.fire(e);\n            ' + m('pm: ready listeners done') + '            if (this._preLaunchInputQueue.length > 0 && this._process) {'],
+      ['        const result = await newProcess.start();\n', '        ' + m('pm: start') + '        const result = await newProcess.start();\n        ' + m('pm: started')],
+      ['        await this._terminalProfileResolverService.resolveShellLaunchConfig(shellLaunchConfig, {\n            remoteAuthority: undefined,',
+       '        ' + m('pm: resolveShellLaunchConfig') + '        await this._terminalProfileResolverService.resolveShellLaunchConfig(shellLaunchConfig, {\n            remoteAuthority: undefined,'],
+      ['        const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(Schemas.file);\n        const initialCwd',
+       '        ' + m('pm: cwd') + '        const activeWorkspaceRootUri = this._historyService.getLastActiveWorkspaceRoot(Schemas.file);\n        const initialCwd'],
+      ['        const env = await this._resolveEnvironment(backend, variableResolver, shellLaunchConfig);\n        const options = {\n            shellIntegration: {\n                enabled: this._configurationService.getValue(TerminalSettingId.ShellIntegrationEnabled),\n                suggestEnabled: this._configurationService.getValue(TerminalContribSettingId.SuggestEnabled),\n                nonce: this.shellIntegrationNonce\n            },\n            windowsUseConptyDll: this._terminalConfigurationService.config.windowsUseConptyDll ?? false,\n            environmentVariableCollections: this._extEnvironmentVariableCollection ? ',
+       '        ' + m('pm: environment') + '        const env = await this._resolveEnvironment(backend, variableResolver, shellLaunchConfig);\n        ' + m('pm: environment done') + '        const options = {\n            shellIntegration: {\n                enabled: this._configurationService.getValue(TerminalSettingId.ShellIntegrationEnabled),\n                suggestEnabled: this._configurationService.getValue(TerminalContribSettingId.SuggestEnabled),\n                nonce: this.shellIntegrationNonce\n            },\n            windowsUseConptyDll: this._terminalConfigurationService.config.windowsUseConptyDll ?? false,\n            environmentVariableCollections: this._extEnvironmentVariableCollection ? ']]],
+    ['/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.js', [
+      ['        this.raw = this._register(( new xtermCtor({', '        ' + m('xterm: new Terminal') + '        this.raw = this._register(( new xtermCtor({'],
+      ['        this._updateSmoothScrolling();\n        this._core = this.raw._core;', '        ' + m('xterm: Terminal made') + '        this._updateSmoothScrolling();\n        this._core = this.raw._core;'],
+      ['        this._updateUnicodeVersion();\n        this._markNavigationAddon =', '        ' + m('xterm: addons') + '        this._updateUnicodeVersion();\n        this._markNavigationAddon ='],
+      ['        this._shellIntegrationAddon = ( new ShellIntegrationAddon(', '        ' + m('xterm: shell integration addon') + '        this._shellIntegrationAddon = ( new ShellIntegrationAddon('],
+      ['        this._xtermAddonLoader.importAddon("clipboard").then(', '        ' + m('xterm: addons loaded') + '        this._xtermAddonLoader.importAddon("clipboard").then(']]]
+  ])
+}
+
 // The built-in language extensions bring their TextMate grammars, which Kodium never reads (no TextMate tokenizer here:
 // it needs WebAssembly; monaco's Monarch grammars colour the code): their files stay out of the app (1.6 MB), the
 // extensions' entries for them point at an empty document.
@@ -2971,7 +3086,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

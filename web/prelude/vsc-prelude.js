@@ -323,6 +323,41 @@
         } catch (e) {}
     })();
 
+    // String.prototype.matchAll with an expression that has named groups: the lowering (__br_named) numbers them and
+    // gives .groups through the expression's own exec, and its __brRe has their names alone - the engine's matchAll
+    // makes its copy of the expression from __brRe.source, an empty pattern then, which matched at every character (the
+    // terminal split its output there: VS Code threw "seq must be defined" at every piece, nothing reached xterm.js).
+    // Such an expression is copied from its own source here, with its exec; any other goes to the engine's.
+    (function () {
+        var engineMatchAll = String.prototype.matchAll;
+        if (typeof engineMatchAll !== 'function') return;
+        var own = Object.prototype.hasOwnProperty;
+        var matchAll = function (re) {
+            var info = re && re.__brRe;
+            if (!info || !info.names || info.source !== undefined || !own.call(re, 'exec')) return engineMatchAll.apply(this, arguments);
+            if (this === null || this === undefined) throw new TypeError('String.prototype.matchAll called on null or undefined');
+            if (!re.global) throw new TypeError('String.prototype.matchAll called with a non-global RegExp argument');
+            var s = String(this);
+            var rx = new RegExp(re.source, 'g' + (re.ignoreCase ? 'i' : '') + (re.multiline ? 'm' : ''));
+            rx.exec = re.exec;
+            rx.lastIndex = re.lastIndex;
+            var done = false, it = {
+                next: function () {
+                    var m = done ? null : rx.exec(s);
+                    if (!m) { done = true; return { value: undefined, done: true }; }
+                    if (m[0] === '') rx.lastIndex++;
+                    return { value: m, done: false };
+                }
+            };
+            if (G.Symbol && Symbol.iterator) it[Symbol.iterator] = function () { return this; };
+            it['@@iterator'] = function () { return this; };
+            return it;
+        };
+        try {
+            Object.defineProperty(String.prototype, 'matchAll', { value: matchAll, writable: true, configurable: true });
+        } catch (e) { String.prototype.matchAll = matchAll; }
+    })();
+
     // User Timing: the workbench marks its startup phases (performance.mark) and reads them back
     var P = G.performance || (G.performance = {});
     if (typeof P.now !== 'function') { var base = Date.now(); P.now = function () { return Date.now() - base; }; }
@@ -440,6 +475,18 @@
         var resolved = text.indexOf('var(') >= 0 ? resolveVars(text, 0) : text;
         if (resolved.indexOf('var(') >= 0) resolved = resolved.replace(UNRESOLVED, '$1');
         return PLAIN_LACKS.test(resolved.replace(SIMPLE_NOT, '')) ? text : '/*br*/' + resolved;
+    };
+    // A terminal's style (xterm.js's theme, cells, cursor and scroll bar: 55 KB, which the engine's rewriter went
+    // through in the page as the terminal opened, 0.2-0.3 s on the iPad 2), written as the rewriter would have it and
+    // with its mark: the -webkit- keyframes, animations and calc(), colours of 8 hex digits as rgba(). (Called by the
+    // patched xterm.js, vite.config.mjs quickerTerminal.)
+    var HEX8 = /#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})\b/gi;
+    G.__kd_xtermStyle = function (text) {
+        if (nativeVars || typeof text !== 'string') return text;
+        return '/*br*/' + text.replace(/@keyframes /g, '@-webkit-keyframes ').replace(/([{;]\s*)animation:/g, '$1-webkit-animation:')
+            .replace(/([:\s(])calc\(/g, '$1-webkit-calc(').replace(HEX8, function (m, r, g, b, a) {
+                return 'rgba(' + parseInt(r, 16) + ',' + parseInt(g, 16) + ',' + parseInt(b, 16) + ',' + Math.round(parseInt(a, 16) / 0.255) / 1000 + ')';
+            });
     };
     // The theme VS Code applies: its <style class="contributedColorTheme"> with .monaco-workbench { --vscode-...: ...; }.
     // The engine rewrites that style as it goes in (custom properties out) and hands the values to its shims, where

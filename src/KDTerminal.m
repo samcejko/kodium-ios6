@@ -193,12 +193,14 @@ static BOOL KDWriteAll(int fd, const uint8_t *p, size_t n)
         got++;
     }
     reply[got] = 0;
-    if (!ok || strcmp(reply, "OK") != 0) {
+    // ("OK <the shell's process ID>"; "OK" from Kodium Shell 0.1.0)
+    if (!ok || !(strcmp(reply, "OK") == 0 || strncmp(reply, "OK ", 3) == 0)) {
         close(fd);
         BRLog(@"Terminal: the shell daemon said %s", got ? reply : "nothing");
         completion(strncmp(reply, "ERR token", 9) == 0 ? 403 : 502, KDText([NSString stringWithUTF8String:reply] ?: @"no answer"), @"text/plain");
         return;
     }
+    int pid = strncmp(reply, "OK ", 3) == 0 ? atoi(reply + 3) : 0;
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
     static NSInteger lastId;
     NSNumber *sessionId = @(++lastId);
@@ -229,7 +231,7 @@ static BOOL KDWriteAll(int fd, const uint8_t *p, size_t n)
     dispatch_source_set_cancel_handler(session.reader, ^{ close(fd); });
     dispatch_resume(session.reader);
     KDSessions()[sessionId] = session;
-    completion(200, KDText([NSString stringWithFormat:@"{\"id\":%ld}", (long)sessionId.integerValue]), @"application/json");
+    completion(200, KDText([NSString stringWithFormat:@"{\"id\":%ld,\"pid\":%d}", (long)sessionId.integerValue, pid]), @"application/json");
 }
 
 // (queue) the output gathered so far, to the read waiting; or the end
