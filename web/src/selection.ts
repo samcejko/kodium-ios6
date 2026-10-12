@@ -68,12 +68,27 @@ let loupeContent: HTMLElement | null = null
 let loupeLines: HTMLElement | null = null
 let loupeOverlays: HTMLElement | null = null
 let loupeCaret: HTMLElement | null = null
+let loupeGlass: HTMLElement | null = null
 let loupeFrame = 0
+let loupeCy = 0
+let loupeTransform = ''
+// (where the loupe's caret is, while the finger moves it)
+let loupePosition: Position | null = null
+// (a finger's moves: the first of a frame at once, the ones that come before the next animation frame together in it -
+// touches come 60 times a second and a move takes longer on the iPad 2: they waited in a queue behind each other)
+let moveFrame = 0
+let moveDirty = false
 
 function setTransform(element: HTMLElement, value: string): void {
   const style = element.style as CSSStyleDeclaration & { webkitTransform?: string }
   style.webkitTransform = value
   style.transform = value
+}
+
+// (a style written only when it changes: any write has the old WebKit work the element's style out again, and the
+// loupe's are written at every move of the finger)
+function setStyle(element: HTMLElement, name: 'display' | 'left' | 'top' | 'height' | 'visibility', value: string): void {
+  if (element.style[name] !== value) element.style[name] = value
 }
 
 function editorAt(target: EventTarget | null): ICodeEditor | null {
@@ -176,8 +191,8 @@ function placeHandles(): void {
   const target = editor
   const selection = target && target.getSelection()
   if (!target || !selection || selection.isEmpty() || !touchSelected) {
-    if (startHandle) startHandle.style.display = 'none'
-    if (endHandle) endHandle.style.display = 'none'
+    if (startHandle) setStyle(startHandle, 'display', 'none')
+    if (endHandle) setStyle(endHandle, 'display', 'none')
     return
   }
   if (!startHandle) startHandle = makeHandle(true)
@@ -195,7 +210,7 @@ function handleOf(target: EventTarget | null): HTMLElement | null {
 
 // ---- the loupe: the lines under the finger, drawn again bigger (copies of the editor's line elements)
 
-function showLoupe(target: ICodeEditor, x: number, y: number, caret: Position | null): void {
+function showLoupe(target: ICodeEditor, rect: DOMRect, x: number, y: number, caret: Position | null): void {
   const dom = target.getDomNode()
   if (!dom) return
   if (!loupeHost) {
@@ -217,13 +232,14 @@ function showLoupe(target: ICodeEditor, x: number, y: number, caret: Position | 
     loupeContent.appendChild(loupeLines)
     loupeContent.appendChild(loupeCaret)
     loupe.appendChild(loupeContent)
-    const glass = document.createElement('div')
-    glass.className = 'kd-loupe-glass'
-    loupe.appendChild(glass)
+    // (its shadow and glass: a layer of their own above it - kodium.css)
+    loupeGlass = document.createElement('div')
+    loupeGlass.className = 'kd-loupe-glass'
   }
   if (loupe.parentNode !== loupeHost || loupe.style.display === 'none') {
     loupeHost.className = 'kd-loupe-host ' + dom.className.replace(/\bfocused\b/, '')
     loupeHost.appendChild(loupe)
+    if (loupeGlass) loupeHost.appendChild(loupeGlass)
     // (the editor's font and background: the copied lines take them from here)
     const lines = dom.querySelector('.view-lines') as HTMLElement | null
     const background = dom.querySelector('.monaco-editor-background') as HTMLElement | null
@@ -237,68 +253,110 @@ function showLoupe(target: ICodeEditor, x: number, y: number, caret: Position | 
     }
     loupe.style.backgroundColor = background ? getComputedStyle(background).backgroundColor : ''
   }
-  loupe.style.display = 'block'
-  const rect = dom.getBoundingClientRect()
+  setStyle(loupe, 'display', 'block')
   const fx = x - rect.left
   const fy = y - rect.top
   const at = caret ? target.getScrolledVisiblePosition(caret) : null
   // (the loupe shows the finger's place: the line of the caret, around the finger)
   const cx = fx
   const cy = at ? at.top + at.height / 2 : fy
-  // (in the page: above the finger, within the window)
-  loupe.style.left = Math.round(Math.max(0, Math.min(window.innerWidth - 2 * LOUPE_R - 2, x - LOUPE_R))) + 'px'
-  loupe.style.top = Math.round(Math.max(0, y - LOUPE_GAP - 2 * LOUPE_R)) + 'px'
-  if (loupeContent) setTransform(loupeContent, 'translate(' + Math.round(LOUPE_R - cx * LOUPE_SCALE) + 'px,' + Math.round(LOUPE_R - cy * LOUPE_SCALE) + 'px) scale(' + LOUPE_SCALE + ')')
+  // (in the page: above the finger, within the window; the glass on it, inside its border)
+  const left = Math.round(Math.max(0, Math.min(window.innerWidth - 2 * LOUPE_R - 2, x - LOUPE_R)))
+  const top = Math.round(Math.max(0, y - LOUPE_GAP - 2 * LOUPE_R))
+  setStyle(loupe, 'left', left + 'px')
+  setStyle(loupe, 'top', top + 'px')
+  if (loupeGlass) {
+    setStyle(loupeGlass, 'display', 'block')
+    setStyle(loupeGlass, 'left', (left + 1) + 'px')
+    setStyle(loupeGlass, 'top', (top + 1) + 'px')
+  }
+  const transform = 'translate(' + Math.round(LOUPE_R - cx * LOUPE_SCALE) + 'px,' + Math.round(LOUPE_R - cy * LOUPE_SCALE) + 'px) scale(' + LOUPE_SCALE + ')'
+  if (loupeContent && transform !== loupeTransform) {
+    loupeTransform = transform
+    setTransform(loupeContent, transform)
+  }
   if (loupeCaret) {
     if (at && (mode === 'loupe')) {
-      loupeCaret.style.display = 'block'
-      loupeCaret.style.left = at.left + 'px'
-      loupeCaret.style.top = at.top + 'px'
-      loupeCaret.style.height = at.height + 'px'
-    } else loupeCaret.style.display = 'none'
+      setStyle(loupeCaret, 'display', 'block')
+      setStyle(loupeCaret, 'left', at.left + 'px')
+      setStyle(loupeCaret, 'top', at.top + 'px')
+      setStyle(loupeCaret, 'height', at.height + 'px')
+    } else setStyle(loupeCaret, 'display', 'none')
   }
-  // (the copies once the editor has drawn the new caret or selection: after its animation frame)
+  // (the copies once the editor has drawn the new caret or selection: after its animation frame - around the place
+  // the loupe shows then)
+  loupeCy = cy
   if (!loupeFrame) {
     loupeFrame = requestAnimationFrame(() => {
       setTimeout(() => {
         loupeFrame = 0
-        copyLines(target, cy)
+        copyLines(target, loupeCy)
       }, 0)
     })
   }
 }
 
 // the editor's lines and their overlays (the selection, the current line) near the loupe's middle, copied into it at
-// their places in the editor
+// their places in the editor. Every place is read first, then the copies made: a read after a change of the page has
+// WebKit lay the whole page out again (the copies made row by row did that ~14 times a move: 200 ms frames on the
+// iPad 2). Not again while the lines and the scrolling stay the same - a finger moving along a line -, and while the
+// selection (the caret's line only: the loupe draws its own caret) stays the same the overlays neither: a handle's
+// drag changes the selection's overlays only, the lines' copies (their spans) were most of the work.
+let copiedKey = ''
+let copiedOverlaysKey = ''
+
 function copyLines(target: ICodeEditor, cy: number): void {
   const dom = target.getDomNode()
-  if (!dom || !loupe || loupe.style.display === 'none' || !loupeLines || !loupeOverlays) return
+  const model = target.getModel()
+  const selection = target.getSelection()
+  if (!dom || !model || !selection || !loupe || loupe.style.display === 'none' || !loupeLines || !loupeOverlays) return
+  const selected = selection.isEmpty() ? String(selection.positionLineNumber) : selection.toString()
+  // (whitespace shown in the selection is in the lines themselves)
+  const key = target.getId() + '|' + model.getVersionId() + '|' + target.getScrollTop() + '|' + target.getScrollLeft() + '|' + Math.round(cy) +
+    (target.getOption(EditorOption.renderWhitespace) === 'selection' ? '|' + selected : '')
+  const overlaysKey = key + '|' + selected
+  const linesNow = key !== copiedKey
+  if (!linesNow && overlaysKey === copiedOverlaysKey) return
+  copiedKey = key
+  copiedOverlaysKey = overlaysKey
   const rect = dom.getBoundingClientRect()
   const reach = LOUPE_R / LOUPE_SCALE + 20
-  const copy = (selector: string, into: HTMLElement) => {
-    while (into.firstChild) into.removeChild(into.firstChild)
+  const near = (selector: string): { row: HTMLElement, r: DOMRect }[] => {
+    const found: { row: HTMLElement, r: DOMRect }[] = []
     const rows = dom.querySelectorAll(selector)
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as HTMLElement
-      if (loupe && loupe.contains(row)) continue
       const r = row.getBoundingClientRect()
       const top = r.top - rect.top
-      if (top + r.height < cy - reach || top > cy + reach) continue
+      if (top + r.height >= cy - reach && top <= cy + reach) found.push({ row, r })
+    }
+    return found
+  }
+  const overlays = near('.view-overlays > div')
+  const lines = linesNow ? near('.view-lines > .view-line') : null
+  const copy = (found: { row: HTMLElement, r: DOMRect }[], into: HTMLElement) => {
+    while (into.firstChild) into.removeChild(into.firstChild)
+    for (let i = 0; i < found.length; i++) {
+      const { row, r } = found[i]
       const clone = row.cloneNode(true) as HTMLElement
       clone.style.position = 'absolute'
-      clone.style.top = top + 'px'
+      clone.style.top = (r.top - rect.top) + 'px'
       clone.style.left = (r.left - rect.left) + 'px'
       clone.style.width = r.width + 'px'
       clone.style.height = r.height + 'px'
       into.appendChild(clone)
     }
   }
-  copy('.view-overlays > div', loupeOverlays)
-  copy('.view-lines > .view-line', loupeLines)
+  copy(overlays, loupeOverlays)
+  if (lines) copy(lines, loupeLines)
 }
 
 function hideLoupe(): void {
   if (loupe) loupe.style.display = 'none'
+  if (loupeGlass) loupeGlass.style.display = 'none'
+  copiedKey = ''
+  copiedOverlaysKey = ''
+  loupeTransform = ''
 }
 
 // ---- the callout
@@ -433,19 +491,42 @@ function beginLoupe(): void {
   hideCallout()
   touchSelected = false
   placeHandles()
+  loupePosition = null
   moveCaret(lastX, lastY)
+  // (a selection goes at once, as on iOS: the loupe's caret takes its place)
+  const selection = target.getSelection()
+  if (loupePosition && selection && !selection.isEmpty()) target.setPosition(loupePosition)
+  showEditorCaret(target, false)
 }
 
+// (a move reads the editor's place first, while the page is laid out from the last frame: read after the caret's
+// render and the loupe's styles it had WebKit lay the page out then and there, 20 ms a move on the iPad 2.) The
+// caret under the finger is the loupe's own while it moves - the editor's goes there when the finger is lifted: the
+// editor drawing its caret, its current line and the status bar's column at every move was 25 ms of each frame.
 function moveCaret(x: number, y: number): void {
   const target = editor
-  if (!target) return
-  const position = textPosition(target, x, y) || target.getTargetAtClientPoint(x, y)?.position || null
-  if (position) {
-    const current = target.getSelection()
-    if (!current || !current.isEmpty() || !current.getPosition().equals(position)) target.setPosition(position)
-  }
-  showLoupe(target, x, y, target.getPosition())
-  edgeScroll(y)
+  const dom = target && target.getDomNode()
+  if (!target || !dom) return
+  const rect = dom.getBoundingClientRect()
+  const position = target.getTargetAtClientPoint(x, y)?.position || null
+  if (position) loupePosition = position
+  showLoupe(target, rect, x, y, loupePosition || target.getPosition())
+  edgeScroll(rect, y)
+}
+
+// (the finger lifted: the editor's caret where the loupe's was - hidden meanwhile, it stood where the touch began)
+function placeCaret(target: ICodeEditor | null): void {
+  const position = loupePosition
+  loupePosition = null
+  showEditorCaret(target, true)
+  if (!target || !position) return
+  const current = target.getSelection()
+  if (!current || !current.isEmpty() || !current.getPosition().equals(position)) target.setPosition(position)
+}
+
+function showEditorCaret(target: ICodeEditor | null, show: boolean): void {
+  const layer = target && target.getDomNode()?.querySelector('.cursors-layer') as HTMLElement | null
+  if (layer) setStyle(layer, 'visibility', show ? '' : 'hidden')
 }
 
 function beginHandle(handle: HTMLElement, touch: Touch): void {
@@ -472,7 +553,9 @@ function beginHandle(handle: HTMLElement, touch: Touch): void {
 
 function moveHandle(x: number, y: number): void {
   const target = editor
-  if (!target || !anchor) return
+  const dom = target && target.getDomNode()
+  if (!target || !dom || !anchor) return
+  const rect = dom.getBoundingClientRect()
   const px = x - offsetX
   const py = y - offsetY
   const position = target.getTargetAtClientPoint(px, py)?.position
@@ -480,16 +563,42 @@ function moveHandle(x: number, y: number): void {
     target.setSelection(Selection.fromPositions(anchor, position))
     placeHandles()
   }
-  showLoupe(target, px, py, null)
-  edgeScroll(py)
+  showLoupe(target, rect, px, py, null)
+  edgeScroll(rect, py)
+}
+
+function applyMove(): void {
+  if (mode === 'loupe') moveCaret(lastX, lastY)
+  else if (mode === 'handle') moveHandle(lastX, lastY)
+}
+
+function queueMove(): void {
+  if (moveFrame) {
+    moveDirty = true
+    return
+  }
+  applyMove()
+  moveFrame = requestAnimationFrame(() => {
+    moveFrame = 0
+    if (!moveDirty) return
+    moveDirty = false
+    queueMove()
+  })
+}
+
+// (the finger lifted: where it was last counts)
+function flushMove(): void {
+  if (moveFrame) cancelAnimationFrame(moveFrame)
+  moveFrame = 0
+  if (!moveDirty) return
+  moveDirty = false
+  applyMove()
 }
 
 // a dragging finger at the editor's top or bottom scrolls it, a line at a time, while it stays there
-function edgeScroll(y: number): void {
+function edgeScroll(rect: DOMRect, y: number): void {
   const target = editor
-  const dom = target && target.getDomNode()
-  if (!target || !dom) return
-  const rect = dom.getBoundingClientRect()
+  if (!target) return
   const direction = y < rect.top + EDGE ? -1 : y > rect.top + target.getLayoutInfo().height - EDGE ? 1 : 0
   if (!direction) {
     if (scrollTimer) clearInterval(scrollTimer)
@@ -510,6 +619,7 @@ function edgeScroll(y: number): void {
 }
 
 function finishDrag(): void {
+  flushMove()
   const target = editor
   const was = mode
   mode = 'none'
@@ -517,8 +627,12 @@ function finishDrag(): void {
   if (scrollTimer) clearInterval(scrollTimer)
   scrollTimer = 0
   hideLoupe()
-  if (!target) return
+  if (!target) {
+    loupePosition = null
+    return
+  }
   target.focus()
+  if (was === 'loupe') placeCaret(target)
   if (was === 'handle' && !handleMoved) {
     // (a tap on a handle: as on the selection, its callout comes or goes)
     if (!calloutWasShown) showCallout(target)
@@ -609,10 +723,10 @@ export function touchSelection(): void {
     // (the loupe's or the handle's: no scrolling - VS Code's Gesture keeps the touch where it began)
     e.preventDefault()
     e.stopPropagation()
-    if (mode === 'loupe') moveCaret(lastX, lastY)
+    if (mode === 'loupe') queueMove()
     else if (handleMoved || Math.abs(lastX - startX) > SLOP || Math.abs(lastY - startY) > SLOP) {
       handleMoved = true
-      moveHandle(lastX, lastY)
+      queueMove()
     }
   }, true)
 
@@ -641,6 +755,11 @@ export function touchSelection(): void {
       setTimeout(() => { swallowGesture = false }, 0)
     }
     if (e.type === 'touchcancel') {
+      if (moveFrame) cancelAnimationFrame(moveFrame)
+      moveFrame = 0
+      moveDirty = false
+      loupePosition = null
+      showEditorCaret(editor, true)
       mode = 'none'
       hideLoupe()
       return

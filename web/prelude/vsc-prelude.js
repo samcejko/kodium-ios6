@@ -109,8 +109,10 @@
         // (and once the workbench has started, as after an input: the start's garbage - JavaScriptCore's own timer,
         // which would have collected it, is kept quiet - is collected as soon as the page is idle)
         G.__kd_afterStart = noteInput;
+        // (at the window, first of all: the text selection's loupe and handles stop their touches there - web/src/
+        // selection.ts -, and a drag seen by no one here was a pause: the collection came 1.5 s into it, 0.5 s long)
         var names = ['keydown', 'keypress', 'input', 'compositionupdate', 'touchstart', 'touchmove', 'mousedown'];
-        for (var i = 0; i < names.length; i++) document.addEventListener(names[i], noteInput, true);
+        for (var i = 0; i < names.length; i++) G.addEventListener(names[i], noteInput, true);
         var runDue = 0, calm = 0;
         var schedule = function (ms) {
             if (timer) return;

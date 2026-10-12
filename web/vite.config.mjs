@@ -2016,6 +2016,53 @@ function settingsTimers() {
   ])
 }
 
+// A column's place on the screen (CursorColumns): VS Code walks the line by graphemes (their break table, an iterator
+// object a character) - ~85 us a character on the iPad 2, ~2.6 ms for a 30-character line - in the hit test of every
+// tap and of every move of the loupe's finger, at each cursor move up or down, for the status bar's column at every
+// cursor move. A character below U+0300 that the next one is not a combining mark after (they start at U+0300) is a
+// grapheme of its own, neither wide nor an emoji: such lines - code, Czech letters too - are counted by characters
+// (tabs to their stops); any other character and the walk is VS Code's from the start. Code points (the status bar)
+// differ from characters only at surrogates (U+D800 up).
+function quickerColumns() {
+  return patchModules('kodium-quicker-columns', [
+    ['/vs/editor/common/core/cursorColumns.js', [
+      ['    static visibleColumnFromColumn(lineContent, column, tabSize) {\n        const textLen = Math.min(column - 1, lineContent.length);\n',
+       '    static visibleColumnFromColumn(lineContent, column, tabSize) {\n        const textLen = Math.min(column - 1, lineContent.length);\n' +
+       '        let kdResult = 0, kdAt = 0;\n' +
+       '        for (; kdAt < textLen; kdAt++) {\n' +
+       '            const kdCode = lineContent.charCodeAt(kdAt);\n' +
+       '            if (kdCode === CharCode.Tab) {\n                kdResult = kdResult + tabSize - kdResult % tabSize;\n            }\n' +
+       '            else if (kdCode < 0x300) {\n                kdResult++;\n            }\n' +
+       '            else {\n                break;\n            }\n' +
+       '        }\n' +
+       '        if (kdAt === textLen) {\n            return kdResult;\n        }\n'],
+      ['    static toStatusbarColumn(lineContent, column, tabSize) {\n        const text = lineContent.substring(0, Math.min(column - 1, lineContent.length));\n',
+       '    static toStatusbarColumn(lineContent, column, tabSize) {\n' +
+       '        const kdLen = Math.min(column - 1, lineContent.length);\n' +
+       '        let kdResult = 0, kdAt = 0;\n' +
+       '        for (; kdAt < kdLen; kdAt++) {\n' +
+       '            const kdCode = lineContent.charCodeAt(kdAt);\n' +
+       '            if (kdCode === CharCode.Tab) {\n                kdResult = kdResult + tabSize - kdResult % tabSize;\n            }\n' +
+       '            else if (kdCode < 0xD800) {\n                kdResult++;\n            }\n' +
+       '            else {\n                break;\n            }\n' +
+       '        }\n' +
+       '        if (kdAt === kdLen) {\n            return kdResult + 1;\n        }\n' +
+       '        const text = lineContent.substring(0, Math.min(column - 1, lineContent.length));\n'],
+      ['        const lineContentLength = lineContent.length;\n        const iterator = new GraphemeIterator(lineContent);\n',
+       '        const lineContentLength = lineContent.length;\n' +
+       '        let kdBefore = 0;\n' +
+       '        for (let kdAt = 0; kdAt < lineContentLength; kdAt++) {\n' +
+       '            const kdCode = lineContent.charCodeAt(kdAt);\n' +
+       '            if (kdCode >= 0x300 || (kdAt + 1 < lineContentLength && lineContent.charCodeAt(kdAt + 1) >= 0x300)) {\n                kdBefore = -1;\n                break;\n            }\n' +
+       '            const kdAfter = kdCode === CharCode.Tab ? kdBefore + tabSize - kdBefore % tabSize : kdBefore + 1;\n' +
+       '            if (kdAfter >= visibleColumn) {\n                return kdAfter - visibleColumn < visibleColumn - kdBefore ? kdAt + 2 : kdAt + 1;\n            }\n' +
+       '            kdBefore = kdAfter;\n' +
+       '        }\n' +
+       '        if (kdBefore !== -1) {\n            return lineContentLength + 1;\n        }\n' +
+       '        const iterator = new GraphemeIterator(lineContent);\n']]]
+  ])
+}
+
 // The terminal's start, 2.4 s on the iPad 2 before the shell was asked for, half of it xterm.js's styles. Its DOM
 // renderer has a <style> for the cells' size and one for the theme (256 colours, the cursor), its scroll bar another:
 // each went into the page empty and got its text after, the renderer's two again at every option set (VS Code sets a
@@ -3189,7 +3236,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

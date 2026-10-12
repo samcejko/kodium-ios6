@@ -195,6 +195,19 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- The text selection's loupe follows the finger smoothly: ~45 ms a frame on the iPad 2 instead of ~270 ms every other
+  frame, and no half-second stall 1.5 s into a drag. It copied the editor's lines into itself one by one, reading each
+  copy's place after the last copy went in, so WebKit laid the whole page out again ~14 times a move. Now the places
+  are read first; lines are copied only when the finger reaches another line (a selection's handle copies only its
+  overlays); the moves that come before the next frame are taken together; and the caret under the finger is the
+  loupe's own until the finger is lifted (the editor drew its caret, current line and the status bar's column anew at
+  every move). The loupe stops its touches, so the prelude's watch for input never saw them, and the garbage
+  collection waiting for a pause ran in the middle of the drag. It watches at the window now. The glass and shadow are
+  a layer of their own that is only moved.
+- Where a tap or a finger falls in the text is worked out sooner, and so are the caret's column on a move up or down
+  and the status bar's column: VS Code walked the line grapheme by grapheme (~85 µs a character on the iPad 2). A
+  line whose characters are all below U+0300 (code, Czech too) is now counted character by character, tabs to their
+  stops, with the same results as VS Code's walk in 1.4 million cases.
 - Text beyond ASCII - Czech - is decoded 10-80 times sooner: the engine's TextDecoder polyfill went through escape()
   and decodeURIComponent for any such text - 11.9 s for 342 KB at once on the iPad 2, 1.2 s in the chunks a file is
   read in (a file with diacritics opened, the extensions' gallery's answers, the terminal's output, the search's
