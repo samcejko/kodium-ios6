@@ -26,6 +26,10 @@ extensions are the next big step (see the plan below).
   `kodium-shelld` for each connection to `127.0.0.1:47070`: a login shell (bash) on a pseudo terminal, as the user
   mobile. It answers only Kodium - a connection has to name the token Kodium writes into its container at every start
   (`src/KDTerminal.m`, `web/src/terminal.ts`). Install it once, as root: `dpkg -i Kodium-shell-<version>.deb`.
+- **Touch**: text is selected as on iOS (`web/src/selection.ts`) - a long press shows the loupe and puts the caret
+  under the finger, a double tap selects a word, a selection has iOS's handles and the callout of its edits (Cut, Copy,
+  Paste, Select, Select All, and More... for the editor's menu) -, and the clipboard is the system's pasteboard, both
+  ways (`/__kd/app/copy` and `/paste`).
 
 ## Plan
 

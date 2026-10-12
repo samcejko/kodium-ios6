@@ -310,7 +310,6 @@
         };
         ClipboardItem.prototype.getType = function (type) { return Promise.resolve(this.__kdItems[type]); };
         G.ClipboardItem = ClipboardItem;
-        var writeText = clip.writeText;
         try {
             clip.write = function (list) {
                 var data = list && list[0] && list[0].__kdItems && list[0].__kdItems['text/plain'];
@@ -318,8 +317,32 @@
                 return Promise.resolve(data).then(function (v) {
                     // (a Blob of the text, or the text)
                     return v && typeof v === 'object' && typeof v.text === 'function' ? v.text() : v;
-                }).then(function (text) { return writeText.call(clip, String(text)); }, function () {});
+                }).then(function (text) { return clip.writeText(String(text)); }, function () {});
             };
+        } catch (e) {}
+    })();
+
+    // The system's pasteboard, both ways, through the app (KDSiteProtocol /__kd/app/copy and /paste): the engine's
+    // clipboard writes only within 5 s of a touch on the page (a copy from the key bar, a native button, went nowhere)
+    // and refuses to read - VS Code's Paste asks it (the key bar's ctrl+v, the editor's menu, the selection's callout).
+    (function () {
+        var clip = G.navigator && G.navigator.clipboard;
+        if (!clip || !G.location || G.location.hostname !== 'kodium.invalid') return;
+        var call = function (method, path, body) {
+            return new Promise(function (resolve, reject) {
+                var x = new XMLHttpRequest();
+                x.open(method, path, true);
+                x.onload = function () {
+                    if (x.status === 200 || x.status === 204) resolve(x.status === 200 ? x.responseText : '');
+                    else reject(new Error('the pasteboard: ' + x.status));
+                };
+                x.onerror = function () { reject(new Error('the pasteboard did not answer')); };
+                x.send(body === undefined ? null : body);
+            });
+        };
+        try {
+            clip.readText = function () { return call('GET', '/__kd/app/paste'); };
+            clip.writeText = function (text) { return call('POST', '/__kd/app/copy', String(text)).then(function () {}); };
         } catch (e) {}
     })();
 

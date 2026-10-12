@@ -75,6 +75,7 @@ import { watchForeground } from './explorer'
 import { warmUp } from './warmup'
 import { receiveKeys } from './keybar'
 import { showPresses } from './presses'
+import { touchSelection } from './selection'
 import { watchMemory } from './memory'
 import { registerJavaScript } from './javascript'
 import { registerEmmet } from './emmet'
@@ -267,6 +268,7 @@ async function start() {
   }, 8000)
   receiveKeys()
   showPresses()
+  touchSelection()
   void watchMemory()
   registerJavaScript()
   registerMarkdown()

@@ -2037,6 +2037,29 @@ function quickerTerminal() {
   ])
 }
 
+// Cut and Copy in the app. VS Code makes them only where document.queryCommandSupported('cut'/'copy') says yes - iOS 6
+// says no, so there were none (the key bar's ctrl+x and ctrl+c, the editor's menu, the selection's callout did
+// nothing) - and copies by execCommand('copy'), whose copy event iOS 6 never fires (the engine's own copy took the
+// textarea's "vscode-placeholder" then). In the app they are made, and they write the editor's selection through the
+// clipboard service, as VS Code does in Electron when the event fails to come; a cut then deletes it.
+function iosClipboard() {
+  return patchModules('kodium-ios-clipboard', [
+    ['/vs/editor/contrib/clipboard/browser/clipboard.js', [
+      ['const supportsCut = (isNative || (document.queryCommandSupported', 'const supportsCut = (isNative || kdInApp || (document.queryCommandSupported'],
+      ['const supportsCopy = (isNative || (document.queryCommandSupported', 'const supportsCopy = (isNative || kdInApp || (document.queryCommandSupported'],
+      ['function executeClipboardCopyWithWorkaround(editor, clipboardService) {\n',
+       'function executeClipboardCopyWithWorkaround(editor, clipboardService) {\n' +
+       '    if (kdInApp) {\n' +
+       '        const { dataToCopy } = generateDataToCopyAndStoreInMemory(editor._getViewModel(), undefined, isFirefox);\n' +
+       '        void clipboardService.writeText(dataToCopy.text);\n' +
+       '        return;\n' +
+       '    }\n'],
+      ['            if (focusedEditor.getOption(EditorOption.effectiveEditContext) && browserCommand === "cut") {',
+       '            if ((focusedEditor.getOption(EditorOption.effectiveEditContext) || kdInApp) && browserCommand === "cut") {']],
+     'const kdInApp = typeof location === "object" && location.hostname === "kodium.invalid";\n']
+  ])
+}
+
 // A build for measuring a terminal's start (KODIUM_TERMINAL_TIMERS=1 .\web\build.ps1): self.__kdMark(name) along the
 // way from the command to the shell's start, self.__kdAdd(name, ms) for each terminal contribution's making and opening.
 function terminalTimers() {
@@ -3086,7 +3109,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), iosClipboard(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

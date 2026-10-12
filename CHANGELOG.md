@@ -195,6 +195,14 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- Text selection as on iOS (in Czech too): a long press puts the caret under the finger and shows the round loupe
+  above it, which follows the finger; a double tap selects a word; a selection made with the finger has iOS's two blue
+  handles, which drag its ends (the loupe again, the editor scrolling at its edges), and the black callout of its
+  edits - Cut, Copy, Paste and More... (the editor's context menu, which a long press opened before); for the caret
+  Select, Select All and Paste, and a tap on the caret shows it too.
+- Cut and Copy work: iOS 6 says it supports neither, and VS Code then made neither (the key bar's ctrl+c and ctrl+x
+  did nothing, the editor's menu had no Cut and Copy); they put the selection into the system's pasteboard now
+  through the app, as Paste reads it (the engine's clipboard wrote only within 5 s of a touch, and read nothing).
 - Surfari's engine matched an expression with named groups at every character in String.prototype.matchAll (it
   copied the expression from what the lowering of the names kept: the names alone), so VS Code's split of the
   terminal's output threw at every piece and nothing reached the terminal; the terminal's links use it too. Kodium's

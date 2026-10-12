@@ -142,6 +142,136 @@
   box-sizing: border-box;
 }
 
+/* Text selection as iOS 6 has it (selection.ts): the handles of a selection - a blue bar along the line, a glossy blue
+   knob above its start and below its end, in a box wide enough for the finger -, the round loupe above the finger
+   with its glass, and the black callout of the edits with its arrow. */
+.monaco-editor .kd-handle {
+  position: absolute;
+  z-index: 40;
+  width: 44px;
+}
+.monaco-editor .kd-handle-bar {
+  position: absolute;
+  left: 21px;
+  width: 2px;
+  background-color: #2f6fdc;
+}
+.monaco-editor .kd-handle-knob {
+  position: absolute;
+  left: 15px;
+  width: 12px;
+  height: 12px;
+  margin-top: -1px;
+  border: 1px solid #1d4cae;
+  border-radius: 7px;
+  background-color: #3a7ae4;
+  background-image: -webkit-linear-gradient(top, #b4d0fd 0%, #5b93ef 45%, #2f68db 55%, #2a5fcf 100%);
+  background-image: linear-gradient(to bottom, #b4d0fd 0%, #5b93ef 45%, #2f68db 55%, #2a5fcf 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.kd-loupe-host,
+.kd-loupe-host.monaco-editor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  z-index: 3000;
+  pointer-events: none;
+}
+.monaco-editor .kd-loupe {
+  position: absolute;
+  z-index: 42;
+  width: 116px;
+  height: 116px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  border-radius: 59px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.monaco-editor .kd-loupe-content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4000px;
+  height: 4000px;
+  -webkit-transform-origin: 0 0;
+  transform-origin: 0 0;
+}
+.monaco-editor .kd-loupe-content .view-lines,
+.monaco-editor .kd-loupe-content .view-overlays {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: pre;
+}
+.monaco-editor .kd-loupe-caret {
+  position: absolute;
+  width: 2px;
+  background-color: #3a7ae4;
+}
+.monaco-editor .kd-loupe-glass {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 116px;
+  height: 116px;
+  border-radius: 58px;
+  background-image: -webkit-radial-gradient(50% 0%, ellipse cover, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35), inset 0 -2px 6px rgba(0, 0, 0, 0.25);
+}
+.monaco-editor .kd-callout {
+  position: absolute;
+  z-index: 44;
+  height: 37px;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.9);
+  border-radius: 8px;
+  background-color: #1e1e1e;
+  background-image: -webkit-linear-gradient(top, #5c5c5c 0%, #303030 50%, #141414 51%, #060606 100%);
+  background-image: linear-gradient(to bottom, #5c5c5c 0%, #303030 50%, #141414 51%, #060606 100%);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  font: bold 14px/37px Helvetica, Arial, sans-serif;
+  color: #fff;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.8);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.monaco-editor .kd-callout-item {
+  display: inline-block;
+  height: 37px;
+  padding: 0 13px;
+  border-left: 1px solid rgba(0, 0, 0, 0.85);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.16);
+}
+.monaco-editor .kd-callout-item:first-child {
+  border-left: 0;
+  border-radius: 7px 0 0 7px;
+  box-shadow: none;
+}
+.monaco-editor .kd-callout-item:nth-last-child(2) { border-radius: 0 7px 7px 0; }
+.monaco-editor .kd-callout-item.kd-down {
+  background-image: -webkit-linear-gradient(top, #6f9df5 0%, #3c72e6 50%, #2459d6 51%, #1d4ec3 100%);
+  background-image: linear-gradient(to bottom, #6f9df5 0%, #3c72e6 50%, #2459d6 51%, #1d4ec3 100%);
+}
+.monaco-editor .kd-callout-arrow {
+  position: absolute;
+  bottom: -10px;
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid #070707;
+}
+.monaco-editor .kd-callout.kd-below .kd-callout-arrow {
+  top: -10px;
+  bottom: auto;
+  border-top: 0;
+  border-bottom: 10px solid #5a5a5a;
+}
+
 /* A composited layer for each part that changes while one works. After a change, the iOS 6 engine maps the repaint
    rectangle of every box it laid out through all of its ancestors, up to the nearest composited layer - without
    these the root of the page, 30 levels up in VS Code's DOM (and the old flexbox lays a row's children out more than

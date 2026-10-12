@@ -1,4 +1,5 @@
 #import "KDSiteProtocol.h"
+#import <UIKit/UIKit.h>
 #import "KDFiles.h"
 #import "KDTerminal.h"
 #import "KDKeyBar.h"
@@ -32,6 +33,24 @@ static NSString *KDContentType(NSString *extension)
                    @"mp4": @"video/mp4", @"mov": @"video/quicktime", @"pdf": @"application/pdf" };
     });
     return types[[extension lowercaseString]] ?: @"application/octet-stream";
+}
+
+// a request's body: HTTPBody, or what its stream gives
+static NSData *KDRequestBody(NSURLRequest *request)
+{
+    if (request.HTTPBody) return request.HTTPBody;
+    NSInputStream *stream = request.HTTPBodyStream;
+    if (!stream) return [NSData data];
+    NSMutableData *d = [NSMutableData data];
+    [stream open];
+    uint8_t buf[16384];
+    for (;;) {
+        NSInteger n = [stream read:buf maxLength:sizeof(buf)];
+        if (n <= 0) break;
+        [d appendBytes:buf length:(NSUInteger)n];
+    }
+    [stream close];
+    return d;
 }
 
 static NSString *KDStylesheetCacheDirectory(void)
@@ -177,6 +196,20 @@ static NSString *KDStylesheetCacheDirectory(void)
                 [self deliverData:[(done ? @"done" : @"no") dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain" status:200];
             }];
         });
+        return;
+    }
+    // The system's pasteboard for the workbench's clipboard (web/prelude/vsc-prelude.js): its text (empty: 204), and a
+    // copy's text put there. (Read and written here, on the loading thread: the main thread may be waiting for the page.)
+    if ([url.path isEqualToString:@"/__kd/app/paste"]) {
+        NSString *text = [UIPasteboard generalPasteboard].string;
+        if (text.length) [self deliverData:[text dataUsingEncoding:NSUTF8StringEncoding] type:@"text/plain; charset=utf-8" status:200];
+        else [self deliverData:[NSData data] type:@"text/plain" status:204];
+        return;
+    }
+    if ([url.path isEqualToString:@"/__kd/app/copy"]) {
+        NSString *text = [[NSString alloc] initWithData:KDRequestBody(self.request) encoding:NSUTF8StringEncoding];
+        if (text) [UIPasteboard generalPasteboard].string = text;
+        [self deliverData:[NSData data] type:@"text/plain" status:text ? 200 : 400];
         return;
     }
     // the key bar's ctrl was used for a key (web/src/keybar.ts): it goes up
