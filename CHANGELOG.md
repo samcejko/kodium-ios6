@@ -196,7 +196,8 @@ The first build.
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
 - Search in files shows many results sooner: a file with more than 10 matches now comes collapsed (VS Code's own
-  "auto"; a single file is always open), and its matches are made when it is opened. Every match used to be a node of
+  "auto"), and its matches are made when it is opened. Results in a single file (under 50 matches) are opened when
+  the search completes, as VS Code does for a search it restores. Every match used to be a node of
   the results' tree at once: 400 matches in 20 files show in ~1.05 s instead of ~1.4 on the iPad 2. The setting
   search.collapseResults brings back "alwaysExpand".
 - The command palette opens ~30 ms sooner: its list sorted its ~500 commands at every opening without a filter, with

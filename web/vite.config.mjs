@@ -2179,7 +2179,14 @@ function ownSearch() {
       ['            const workspaceSearchProvider = new WorkspaceSearchProvider(fileService, logService, workspaceContextService, undefined, configurationService);\n' +
        '            this.registerSearchResultProvider(Schemas.file, SearchProviderType.file, workspaceSearchProvider);\n' +
        '            this.registerSearchResultProvider(Schemas.file, SearchProviderType.text, workspaceSearchProvider);\n',
-       '            // (Kodium\'s provider: web/src/search.ts)\n']]]
+       '            // (Kodium\'s provider: web/src/search.ts)\n']]],
+    // (a search's results in a single file are opened when it completes, as VS Code opens them for a search it
+    // restores: with search.collapseResults "auto" - Kodium's default - a lone file of 11-49 matches stayed closed)
+    ['/vs/workbench/contrib/search/browser/searchView.js', [
+      ['        if (completed?.exit === SearchCompletionExitCode.NewSearchStarted) {\n            return;\n        }\n        SearchContext.AIResultsRequested.bindTo',
+       '        if (completed?.exit === SearchCompletionExitCode.NewSearchStarted) {\n            return;\n        }\n' +
+       '        if (allResults) {\n            await this.expandIfSingularResult().catch(() => undefined);\n        }\n' +
+       '        SearchContext.AIResultsRequested.bindTo']]]
   ])
 }
 
