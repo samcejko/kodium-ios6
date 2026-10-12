@@ -8,6 +8,8 @@ import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
 import { IHistoryService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/history/common/history.service'
 import { ICodeEditorService } from '@codingame/monaco-vscode-api/vscode/vs/editor/browser/services/codeEditorService.service'
+import { IConfigurationService } from '@codingame/monaco-vscode-api/vscode/vs/platform/configuration/common/configuration.service'
+import { ConfigurationTarget } from '@codingame/monaco-vscode-api/vscode/vs/platform/configuration/common/configuration'
 import { SaveReason } from '@codingame/monaco-vscode-api/vscode/vs/workbench/common/editor'
 import { IStorageService } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage.service'
 import { WillSaveStateReason } from '@codingame/monaco-vscode-api/vscode/vs/platform/storage/common/storage'
@@ -323,6 +325,16 @@ async function start() {
   // (and the code editor with the focus, or the one that had it last - a test's: its text, selections, trigger)
   const codeEditorService = await getService(ICodeEditorService)
   ;(window as { __kd_activeEditor?: unknown }).__kd_activeEditor = () => codeEditorService.getActiveCodeEditor() || codeEditorService.getFocusedCodeEditor()
+  // (and the changes of the settings from here on, when, from where and which: one of the defaults after the warm-up
+  // has the Settings editor build its tree again at its next opening - the warm-up's tree lost)
+  const configurationService = await getService(IConfigurationService)
+  const configChanges: string[] = (window as { __kd_configChanges?: string[] }).__kd_configChanges = []
+  configurationService.onDidChangeConfiguration((e) => {
+    if (configChanges.length >= 40) return
+    const keys = Array.from(e.affectedKeys)
+    configChanges.push(((Date.now() - ((window as { __vsc_t0?: number }).__vsc_t0 || 0)) / 1000).toFixed(1) + ' s ' +
+      (e.source === ConfigurationTarget.DEFAULT ? 'default' : 'source ' + e.source) + ': ' + keys.length + ' ' + keys.slice(0, 6).join(', '))
+  })
   // what one does first done once unseen, before the splash goes (warmup.ts)
   try { await warmUp() } catch { /* the workbench as it is */ }
   mark('ready')

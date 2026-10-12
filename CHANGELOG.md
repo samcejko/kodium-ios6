@@ -195,6 +195,11 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- Go to Definition, Find All References and Rename Symbol in JavaScript answer at once (~15 ms) and no longer freeze the
+  editor. They parsed the file on the page's thread whenever it had changed since the last time: ~1 s for 1,500 lines on
+  the iPad 2, with the page frozen meanwhile. The worker that checks the syntax after each pause in typing now works out
+  the file's scopes too (jsScopes.ts). Asked right after an edit, they wait for the worker's answer while the page stays
+  free.
 - A character typed while the suggestions are open shows sooner: a key after a pause had its new list drawn before
   the character appeared (median ~210-270 ms on the iPad 2 at a key every 0.35 s); now the character is drawn first
   and the list in the next frame (~130-150 ms). Keys in quick succession still leave the list alone until a pause,
