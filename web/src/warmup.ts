@@ -17,10 +17,10 @@
 // after it and had its tree built again: vite.config.mjs quickerSettings).
 // The compiled code has to stay for that: Surfari's engine keeps it once the start's code was thrown away - which
 // JavaScriptCore did a minute after the start, or the engine at 75 s, right when one had begun to work: the warm-up's
-// went with it. So the app throws the start's code away between two steps (as soon as the engine can tell, 22 s after
-// launch: src/KDSiteProtocol.m /__kd/app/keepcode), and the steps before it run again at the end. (When memory is
-// short - a big workbench and other apps - the engine lets JavaScriptCore throw the code away again: what was made
-// stays, widgets and lists, and that is most of what the warm-up saves.)
+// went with it. So the app throws the start's code away first (as soon as the engine can tell, 22 s after launch:
+// src/KDSiteProtocol.m /__kd/app/keepcode), and the steps come after it. (When memory is short - a big workbench and
+// other apps - the engine lets JavaScriptCore throw the code away again: what was made stays, widgets and lists, and
+// that is most of what the warm-up saves.)
 import { getService } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
 import { IQuickInputService } from '@codingame/monaco-vscode-api/vscode/vs/platform/quickinput/common/quickInput.service'
@@ -189,6 +189,15 @@ export async function warmUp(): Promise<void> {
       if (answer === 'done') again = before
     }
     const order: number[] = steps.map((_, i) => i)
+    // (the start's code thrown away before the first step - the app can from 22 s after the launch on: memory never
+    // holds both, the steps' code is all kept, and none runs twice. Measured on the iPad 2, interleaved with doing the
+    // first step meanwhile and it again at the end: ready 43.1-43.4 s instead of 44.9-48.4, one engine relief at the
+    // start instead of one or two)
+    say(1, order.length)
+    for (let tries = 0; asking && tries < 40; tries++) {
+      await ask(0)
+      if (asking) await sleep(500)
+    }
     for (let k = 0; k < order.length; k++) {
       if (asking) {
         await ask(k)

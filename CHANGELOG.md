@@ -195,6 +195,10 @@ The first build.
   styles of the terminals' icons were written again at every terminal made (the same text, 65 ms each), and the
   terminal's menus asked its settings through a ternary search tree at every condition (0.2 s): the settings' context
   keys are kept in an object too.
+- The start is ready ~3 s sooner (43 s instead of 45-48 on the iPad 2) and the start's memory peak relieves memory
+  less often (it threw the warm-up's compiled code away): the warm-up now waits until the start's code can be thrown
+  away (22 s after the launch) and does each step once, after it. Before, it did its first step meanwhile, on top
+  of the start's code, and again at the end.
 - Go to Definition, Find All References and Rename Symbol in JavaScript answer at once (~15 ms) and no longer freeze the
   editor. They parsed the file on the page's thread whenever it had changed since the last time: ~1 s for 1,500 lines on
   the iPad 2, with the page frozen meanwhile. The worker that checks the syntax after each pause in typing now works out
