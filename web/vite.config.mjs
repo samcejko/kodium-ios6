@@ -1445,8 +1445,29 @@ function quickerPalette() {
 // (and window.newWindowProfile, which lists the profiles, is registered with the start's other settings, not "eventually"
 // - 30-45 s after the start on the iPad 2, the page busy: it came after the warm-up had made the Settings editor's tree,
 // and every setting registered drops the default settings, so the tree was built again at the first opening)
+// (and Keyboard Shortcuts sorted its ~2000 entries by their labels and commands at every opening - ~22,000 comparisons,
+// a localeCompare or two each, the Czech labels mostly the engine's slow way: the order that came out is kept, each
+// entry's place by its id and label, and the same entries opened again are put in their places - two numbers compared)
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
+    ['/vs/workbench/services/preferences/browser/keybindingsEditorModel.js', [
+      ['        this._keybindingItems = this._keybindingItemsSortedByPrecedence.slice(0).sort((a, b) => KeybindingsEditorModel_1.compareKeybindingData(a, b));\n',
+       '        this._keybindingItems = kdSortKeybindings(this._keybindingItemsSortedByPrecedence.slice(0));\n']],
+     'let kdOrder = null;\n' +
+     'function kdSortKeybindings(items) {\n' +
+     '    const key = item => KeybindingsEditorModel_1.getId(item) + "\\u0001" + (item.commandLabel || "");\n' +
+     '    const keys = items.map(key);\n' +
+     '    if (kdOrder && kdOrder.count === items.length && keys.every(k => kdOrder.places["k" + k] !== undefined)) {\n' +
+     '        const placed = items.map((item, i) => ({ place: kdOrder.places["k" + keys[i]], item }));\n' +
+     '        placed.sort((x, y) => x.place - y.place);\n' +
+     '        return placed.map(x => x.item);\n' +
+     '    }\n' +
+     '    const sorted = items.sort((a, b) => KeybindingsEditorModel_1.compareKeybindingData(a, b));\n' +
+     '    const places = Object.create(null);\n' +
+     '    for (let i = 0; i < sorted.length; i++) {\n        places["k" + key(sorted[i])] = i;\n    }\n' +
+     '    kdOrder = { count: sorted.length, places };\n' +
+     '    return sorted;\n' +
+     '}\n'],
     ['/vs/workbench/browser/workbench.contribution.js', [
       ['        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.Eventually\n',
        '        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.AfterRestored\n']]],
