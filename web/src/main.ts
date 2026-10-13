@@ -199,6 +199,9 @@ async function start() {
       'terminal.integrated.gpuAcceleration': 'off',
       'terminal.integrated.shellIntegration.enabled': false,
       'terminal.integrated.enablePersistentSessions': false,
+      // No animations (VS Code's reduced motion, which iOS 6 cannot ask for): the find widget slid in for 0.2 s, the
+      // notifications, hovers and scroll bars faded - each frame of it a style recalculation of the old WebKit
+      'workbench.reduceMotion': 'on',
       // The Search view's results: a file with more than 10 matches comes collapsed, its matches made when it is opened
       // (VS Code's "auto"; a lone file is always open). Every match was a node of the results' tree at once - 420 for
       // "function" in 20 files, 1.7 s on the iPad 2 for the 21 rows on the screen.
