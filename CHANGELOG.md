@@ -75,6 +75,10 @@ The first build.
   at the next frame - and come out when their list does; the terminal's styles (its theme, 58 KB, and its icons') are
   in the head too, and an empty <style> the terminal view made, used by nothing, is gone. The breadcrumbs of a new
   editor group (the Markdown preview opened to the side) also put theirs into the shared sheet.
+- The command palette opens in ~0.66 s instead of ~0.76 (interleaved on the iPad 2; the same 566 commands in the same
+  order): its commands are read from the palette's menu in the registry - those whose conditions hold and which are
+  enabled - instead of a menu made for it at every opening: ~440 actions, each with an action to hide it and one to set
+  its keybinding, and the context keys of all their conditions collected (~110 ms).
 - The Settings editor opens in 0.60-0.65 s instead of 0.77-0.80 (interleaved on the iPad 2): its table of contents
   and its settings tree made their own style controllers with a <style> in each tree's container, and those went into
   the page seven times as the editor opened - each time the old WebKit's rule sets made anew. They are in the shared

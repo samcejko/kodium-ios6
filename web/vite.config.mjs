@@ -1377,7 +1377,23 @@ function quickerPalette() {
     ['/vs/workbench/contrib/quickaccess/browser/commandsQuickAccess.js', [
       ['        return [...this.getCodeEditorCommandPicks(), ...this.getGlobalCommandPicks()].map(picks => ({\n            ...picks,\n            buttons: [{\n                iconClass: ThemeIcon.asClassName(Codicon.gear),\n                tooltip: ( localize(17512, "Configure Keybinding"))\n            }],',
        '        const kdButtons = [{\n            iconClass: ThemeIcon.asClassName(Codicon.gear),\n            tooltip: ( localize(17512, "Configure Keybinding"))\n        }];\n' +
-       '        return [...this.getCodeEditorCommandPicks(), ...this.getGlobalCommandPicks()].map(picks => ({\n            ...picks,\n            buttons: kdButtons,']]],
+       '        return [...this.getCodeEditorCommandPicks(), ...this.getGlobalCommandPicks()].map(picks => ({\n            ...picks,\n            buttons: kdButtons,'],
+      // (its commands: those of the palette's menu whose condition holds and which are enabled - what a menu made for
+      // them gave, without making the menu: ~440 actions, each with an action to hide it and one to set its keybinding,
+      // and the context keys of all their conditions collected, at every opening - ~110 ms on the iPad 2)
+      ['        const globalCommandsMenu = this.menuService.getMenuActions(MenuId.CommandPalette, scopedContextKeyService);\n' +
+       '        const globalCommandsMenuActions = globalCommandsMenu.reduce((r, [, actions]) => [...r, ...actions], []).filter(action => action instanceof MenuItemAction && action.enabled);\n',
+       '        const globalCommandsMenuActions = kdPaletteActions(scopedContextKeyService);\n']],
+     'import { MenuRegistry as KdMenuRegistry, isIMenuItem as kdIsIMenuItem } from "@codingame/monaco-vscode-api/vscode/vs/platform/actions/common/actions";\n' +
+     'function kdPaletteActions(contextKeyService) {\n' +
+     '    const out = [];\n' +
+     '    for (const item of KdMenuRegistry.getMenuItems(MenuId.CommandPalette)) {\n' +
+     '        if (!kdIsIMenuItem(item) || !contextKeyService.contextMatchesRules(item.when)) {\n            continue;\n        }\n' +
+     '        if (item.command.precondition && !contextKeyService.contextMatchesRules(item.command.precondition)) {\n            continue;\n        }\n' +
+     '        out.push({ item: item.command });\n' +
+     '    }\n' +
+     '    return out;\n' +
+     '}\n'],
     ['/vs/platform/quickinput/browser/commandsQuickAccess.js', [
       ['        const filteredCommandPicks = [];\n        for (const commandPick of allCommandPicks) {',
        '        const filteredCommandPicks = [];\n' +
@@ -2324,6 +2340,26 @@ function openTimers() {
       ['            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n',
        '            ' + m('view state restored') + '            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n            ' + m('readonly options')],
       ['        mark("code/didSetInputToTextFileEditor");\n', '        ' + m('setInput done') + '        mark("code/didSetInputToTextFileEditor");\n']]],
+    // (an editor pane: its input set)
+    ['/vs/workbench/browser/parts/editor/editorPanes.js', [
+      ['        } = await this.doSetInput(pane, editor, options, context);\n',
+       '        } = await this.doSetInput(pane, editor, options, context);\n        ' + m('panes: input set')]]],
+    // (the command palette: all the commands' picks, sorted, made; the picker given them)
+    ['/vs/platform/quickinput/browser/commandsQuickAccess.js', [
+      ['        const allCommandPicks = await this.getCommandPicks(token);\n',
+       '        ' + m('cmd: getPicks') + '        const allCommandPicks = await this.getCommandPicks(token);\n        ' + m('cmd: all picks')],
+      ['        const commandPicks = [];\n        let addOtherSeparator = false;\n',
+       '        ' + m('cmd: sorted') + '        const commandPicks = [];\n        let addOtherSeparator = false;\n'],
+      ['        if (!this.hasAdditionalCommandPicks(filter, token)) {\n            return commandPicks;\n        }\n',
+       '        ' + m('cmd: picks made') + '        if (!this.hasAdditionalCommandPicks(filter, token)) {\n            return commandPicks;\n        }\n']]],
+    ['/vs/platform/quickinput/browser/quickAccess.js', [
+      ['        picker.show();\n        if (visibleSelection && visibleValue === value) {\n',
+       '        ' + m('qa: show') + '        picker.show();\n        ' + m('qa: shown') + '        if (visibleSelection && visibleValue === value) {\n']]],
+    ['/vs/workbench/contrib/quickaccess/browser/commandsQuickAccess.js', [
+      ['        return globalCommandPicks;\n    }\n', '        ' + m('cmd: global picks') + '        return globalCommandPicks;\n    }\n']]],
+    ['/vs/platform/quickinput/browser/pickerQuickAccess.js', [
+      ['                picker.items = items;\n                if (activeItem) {\n                    picker.activeItems = [activeItem];\n                }\n                return true;\n',
+       '                ' + m('pick: will set items') + '                picker.items = items;\n                ' + m('pick: items set') + '                if (activeItem) {\n                    picker.activeItems = [activeItem];\n                }\n                return true;\n']]],
     // (Go to Symbol: the symbols there, the picks made, the picker updated with them)
     ['/vs/editor/contrib/quickAccess/browser/gotoSymbolQuickAccess.js', [
       ['        const symbolsPromise = this.getDocumentSymbols(model, token);\n',
