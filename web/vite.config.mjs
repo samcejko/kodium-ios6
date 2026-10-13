@@ -450,8 +450,48 @@ function quickerWorkers() {
       ['        const worker = await this._workerWithResources([original, modified],  true);\n        const result = await worker.$computeDiff(( original.toString()), ( modified.toString()), options, algorithm);\n',
        '        let result = this.kdLocalDiff(original, modified, options, algorithm);\n        if (!result) {\n' +
        '            const worker = await this._workerWithResources([original, modified],  true);\n            result = await worker.$computeDiff(( original.toString()), ( modified.toString()), options, algorithm);\n        }\n'],
-      ['            await proxy.$ping();\n            return proxy;\n', '            await proxy.$ping();\n            this.kdReady = true;\n            return proxy;\n']],
-     'import { linesDiffComputers as kdLinesDiffComputers } from "../../common/diff/linesDiffComputers.js";\n'],
+      ['            await proxy.$ping();\n            return proxy;\n', '            await proxy.$ping();\n            this.kdReady = true;\n            return proxy;\n'],
+      // (and the words of the file for the suggestions: in the page too while the worker is not there - the suggest
+      // key tapped a minute after the last use waited for the worker's start, 1.1 s - for files up to 60 KB, as the
+      // worker finds them; the worker is started meanwhile)
+      ['        const client = await this._workerManager.withWorker();\n        const data = await client.textualSuggest(models, word?.word, wordDefRegExp);\n',
+       '        const data = kdLocalWords(this._workerManager, this._modelService, models, word?.word, wordDefRegExp) ||\n' +
+       '            await (await this._workerManager.withWorker()).textualSuggest(models, word?.word, wordDefRegExp);\n']],
+     'import { linesDiffComputers as kdLinesDiffComputers } from "../../common/diff/linesDiffComputers.js";\n' +
+     'function kdLocalWords(manager, modelService, uris, leading, wordDef) {\n' +
+     '    const client = manager._editorWorkerClient;\n' +
+     '    if (client && client.kdReady) {\n        return null;\n    }\n' +
+     '    manager.withWorker().then(c => c._getProxy()).then(undefined, () => undefined);\n' +
+     '    const models = [];\n' +
+     '    let chars = 0;\n' +
+     '    for (const uri of uris) {\n' +
+     '        const m = modelService.getModel(uri);\n' +
+     '        if (m) {\n            models.push(m);\n            chars += m.getValueLength();\n        }\n' +
+     '    }\n' +
+     '    if (!models.length || chars > 60000) {\n        return null;\n    }\n' +
+     '    const t0 = Date.now();\n' +
+     '    const re = new RegExp(wordDef.source, "g" + (wordDef.ignoreCase ? "i" : "") + (wordDef.multiline ? "m" : ""));\n' +
+     '    const seen = Object.create(null), words = [];\n' +
+     '    outer: for (const m of models) {\n' +
+     '        const count = m.getLineCount();\n' +
+     '        for (let line = 1; line <= count; line++) {\n' +
+     '            const text = m.getLineContent(line);\n' +
+     '            re.lastIndex = 0;\n' +
+     '            let match;\n' +
+     '            while ((match = re.exec(text))) {\n' +
+     '                const w = match[0];\n' +
+     '                if (w.length === 0) {\n                    break;\n                }\n' +
+     '                if (w === leading || seen["k" + w] !== undefined) {\n                    continue;\n                }\n' +
+     '                const first = w.charCodeAt(0);\n' +
+     '                if ((first >= 48 && first <= 57 || first === 45 || first === 46 || first === 73) && !isNaN(Number(w))) {\n                    seen["k" + w] = 2;\n                    continue;\n                }\n' +
+     '                seen["k" + w] = 1;\n' +
+     '                words.push(w);\n' +
+     '                if (words.length > 10000) {\n                    break outer;\n                }\n' +
+     '            }\n' +
+     '        }\n' +
+     '    }\n' +
+     '    return { words, duration: Date.now() - t0 };\n' +
+     '}\n'],
     ['/vs/workbench/browser/parts/editor/textDiffEditor.js', [
       ['    createEditorControl(parent, configuration) {\n',
        '    createEditorControl(parent, configuration) {\n        kdStartEditorWorker(this.instantiationService);\n'],

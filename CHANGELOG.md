@@ -75,6 +75,9 @@ The first build.
   at the next frame - and come out when their list does; the terminal's styles (its theme, 58 KB, and its icons') are
   in the head too, and an empty <style> the terminal view made, used by nothing, is gone. The breadcrumbs of a new
   editor group (the Markdown preview opened to the side) also put theirs into the shared sheet.
+- Suggestions asked for while the editor's worker is not there - right after a start, or a minute after its last use -
+  take the file's words from the page (files up to 60 KB) instead of waiting for the worker to start (1.1 s): the
+  first list 0.83-1.29 s instead of 1.36-1.44 on the iPad 2, interleaved.
 - No animations (VS Code's workbench.reduceMotion "on" by default, which iOS 6 cannot ask for): the find widget is
   there in 0.28-0.29 s instead of 0.42-0.45 (interleaved on the iPad 2) - it slid in for 0.2 s, each frame of it a
   style recalculation of the old WebKit -, and notifications, hovers and scroll bars no longer fade.
