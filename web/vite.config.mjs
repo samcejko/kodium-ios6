@@ -1515,11 +1515,55 @@ function quickerPalette() {
 // (and Keyboard Shortcuts sorted its ~2000 entries by their labels and commands at every opening - ~22,000 comparisons,
 // a localeCompare or two each, the Czech labels mostly the engine's slow way: the order that came out is kept, each
 // entry's place by its id and label, and the same entries opened again are put in their places - two numbers compared)
+// (and made all its ~1,600 entries anew at every opening - each command looked up in the menus, its labels put
+// together in the display language: ~360 ms on the iPad 2. The entries made last are taken again while the
+// keybindings - the resolver's list -, the registered commands and menus, the extensions and the labels' count are
+// the same; and whether a command has a default keybinding is looked up, not searched for in the ~600 that have one)
 function quickerSettings() {
   return patchModules('kodium-quicker-settings', [
     ['/vs/workbench/services/preferences/browser/keybindingsEditorModel.js', [
       ['        this._keybindingItems = this._keybindingItemsSortedByPrecedence.slice(0).sort((a, b) => KeybindingsEditorModel_1.compareKeybindingData(a, b));\n',
-       '        this._keybindingItems = kdSortKeybindings(this._keybindingItemsSortedByPrecedence.slice(0));\n']],
+       '        this._keybindingItems = kdSortKeybindings(this._keybindingItemsSortedByPrecedence.slice(0));\n'],
+      // (the entries made at the last opening, while the keybindings - the resolver's list -, the registered commands and
+      // menus, the extensions and the labels' count are the same)
+      ['    async resolve(\n        actionLabels = ( new Map())\n    ) {\n        const extensions = this.getExtensionsMapping();\n',
+       '    async resolve(\n        actionLabels = ( new Map())\n    ) {\n' +
+       '        const kdKeybindings = this.keybindingsService.getKeybindings();\n' +
+       '        const kdExtensions = this.extensionService.extensions.length;\n' +
+       '        kdWatchRegistries();\n' +
+       '        if (kdResolved && kdResolved.keybindings === kdKeybindings && kdResolved.version === kdRegistryVersion && kdResolved.extensions === kdExtensions && kdResolved.labels === actionLabels.size) {\n' +
+       '            this._keybindingItemsSortedByPrecedence = kdResolved.byPrecedence.slice(0);\n' +
+       '            this._keybindingItems = kdResolved.items.slice(0);\n' +
+       '            return super.resolve();\n' +
+       '        }\n' +
+       '        const extensions = this.getExtensionsMapping();\n'],
+      ['        this._keybindingItems = kdSortKeybindings(this._keybindingItemsSortedByPrecedence.slice(0));\n        return super.resolve();\n',
+       '        this._keybindingItems = kdSortKeybindings(this._keybindingItemsSortedByPrecedence.slice(0));\n' +
+       '        kdResolved = { keybindings: kdKeybindings, version: kdRegistryVersion, extensions: kdExtensions, labels: actionLabels.size,\n' +
+       '            byPrecedence: this._keybindingItemsSortedByPrecedence.slice(0), items: this._keybindingItems.slice(0) };\n' +
+       '        return super.resolve();\n'],
+      // (whether a command has a default keybinding: looked up, not searched for in the ~600 commands that have one)
+      ['                commandsWithDefaultKeybindings.indexOf(command) === -1,\n', '                kdNotDefault(commandsWithDefaultKeybindings, command),\n']],
+     'import { CommandsRegistry as KdCommandsRegistry } from "../../../../platform/commands/common/commands.js";\n' +
+     'import { MenuRegistry as KdMenuRegistry } from "../../../../platform/actions/common/actions.js";\n' +
+     'let kdResolved = null;\n' +
+     'let kdRegistryVersion = 0;\n' +
+     'let kdWatching = false;\n' +
+     'function kdWatchRegistries() {\n' +
+     '    if (kdWatching) {\n        return;\n    }\n' +
+     '    kdWatching = true;\n' +
+     '    KdMenuRegistry.onDidChangeMenu(() => kdRegistryVersion++);\n' +
+     '    KdCommandsRegistry.onDidRegisterCommand(() => kdRegistryVersion++);\n' +
+     '}\n' +
+     'let kdDefaultsTable = null;\n' +
+     'function kdNotDefault(list, command) {\n' +
+     '    let table = kdDefaultsTable;\n' +
+     '    if (!table || table.list !== list) {\n' +
+     '        table = kdDefaultsTable = { list, set: Object.create(null) };\n' +
+     '        for (let i = 0; i < list.length; i++) {\n            table.set["k" + list[i]] = true;\n        }\n' +
+     '    }\n' +
+     '    return table.set["k" + command] !== true;\n' +
+     '}\n' +
      'let kdOrder = null;\n' +
      'function kdSortKeybindings(items) {\n' +
      '    const key = item => KeybindingsEditorModel_1.getId(item) + "\\u0001" + (item.commandLabel || "");\n' +
@@ -1535,6 +1579,28 @@ function quickerSettings() {
      '    kdOrder = { count: sorted.length, places };\n' +
      '    return sorted;\n' +
      '}\n'],
+    // (and its layout - as it shows, before its entries are made, and after - measured the page twice each time: the
+    // width of its search actions and the height of its header, both the same every time - 96 ms when it came back into
+    // the page on the iPad 2: measured once now)
+    ['/vs/workbench/contrib/preferences/browser/keybindingsEditor.js', [
+      ['        this.searchWidget.inputBox.inputElement.style.paddingRight = `${getTotalWidth(this.actionsContainer) + 12}px`;\n',
+       '        const kdWidth = this.kdActionsWidth || getTotalWidth(this.actionsContainer);\n' +
+       '        if (kdWidth > 0) {\n            this.kdActionsWidth = kdWidth;\n        }\n' +
+       '        this.searchWidget.inputBox.inputElement.style.paddingRight = `${kdWidth + 12}px`;\n'],
+      ['        const tableHeight = this.dimension.height - (getDomNodePagePosition(this.headerContainer).height + 12) ;\n',
+       '        const kdSmall = this.headerContainer.classList.contains("small") ? 1 : 0;\n' +
+       '        let kdHeader = this.kdHeaderHeights && this.kdHeaderHeights[kdSmall];\n' +
+       '        if (!kdHeader) {\n' +
+       '            kdHeader = getDomNodePagePosition(this.headerContainer).height;\n' +
+       '            if (kdHeader > 0) {\n                (this.kdHeaderHeights || (this.kdHeaderHeights = []))[kdSmall] = kdHeader;\n            }\n' +
+       '        }\n' +
+       '        const tableHeight = this.dimension.height - (kdHeader + 12) ;\n'],
+      // (the table's width too: the editor's less what its padding takes, measured the first time)
+      ['        this.keybindingsTable.layout(tableHeight);\n    }\n',
+       '        const kdInsets = this.kdTableInsets || (this.kdTableInsets = []);\n' +
+       '        this.keybindingsTable.layout(tableHeight, kdInsets[kdSmall] !== undefined ? this.dimension.width - kdInsets[kdSmall] : undefined);\n' +
+       '        if (kdInsets[kdSmall] === undefined && this.keybindingsTable.cachedWidth > 0) {\n            kdInsets[kdSmall] = this.dimension.width - this.keybindingsTable.cachedWidth;\n        }\n' +
+       '    }\n']]],
     ['/vs/workbench/browser/workbench.contribution.js', [
       ['        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.Eventually\n',
        '        DynamicWindowConfiguration.ID,\n        DynamicWindowConfiguration,\n        WorkbenchPhase.AfterRestored\n']]],
@@ -2407,6 +2473,30 @@ function settingsTimers() {
   if (!process.env.KODIUM_SETTINGS_TIMERS) return null
   const m = (n) => 'self.__kdMark && self.__kdMark("' + n + '");\n'
   return patchModules('kodium-settings-timers', [
+    // (and Keyboard Shortcuts: the model's items, the labels, the table)
+    ['/vs/workbench/contrib/preferences/browser/keybindingsEditor.js', [
+      ['        return super.setInput(input, options, context, token).then(() => this.render(!!(options && options.preserveFocus)));',
+       '        return super.setInput(input, options, context, token).then(() => this.render(!!(options && options.preserveFocus))).then(kdR => { ' + m('kb: setInput done').trim() + ' return kdR; });'],
+      ['    layout(dimension) {\n        this.dimension = dimension;\n        this.layoutSearchWidget(dimension);\n',
+       '    layout(dimension) {\n        ' + m('kb: layout') + '        this.dimension = dimension;\n        this.layoutSearchWidget(dimension);\n        ' + m('kb: search widget laid out')],
+      ['        this.defineKeybindingWidget.layout(this.dimension);\n        this.layoutKeybindingsTable();\n        this._onLayout.fire();\n',
+       '        this.defineKeybindingWidget.layout(this.dimension);\n        ' + m('kb: table layout') + '        this.layoutKeybindingsTable();\n        this._onLayout.fire();\n'],
+      ['        this.layoutKeybindingsTable();\n        this._onLayout.fire();\n    }\n',
+       '        this.layoutKeybindingsTable();\n        this._onLayout.fire();\n        ' + m('kb: layout done') + '    }\n'],
+      ['    focus() {\n        super.focus();\n        const activeKeybindingEntry = this.activeKeybindingEntry;\n',
+       '    focus() {\n        ' + m('kb: focus') + '        super.focus();\n        const activeKeybindingEntry = this.activeKeybindingEntry;\n'],
+      ['            this.keybindingsEditorModel = await input.resolve();\n            await this.keybindingsEditorModel.resolve(this.getActionsLabels());\n            this.renderKeybindingsEntries(false, preserveFocus);\n',
+       '            this.keybindingsEditorModel = await input.resolve();\n            ' + m('kb: labels') + '            const kdLabels = this.getActionsLabels();\n            ' + m('kb: model.resolve') +
+       '            await this.keybindingsEditorModel.resolve(kdLabels);\n            ' + m('kb: entries') + '            this.renderKeybindingsEntries(false, preserveFocus);\n            ' + m('kb: entries rendered')],
+      ['            const keybindingsEntries = this.keybindingsEditorModel.fetch(filter, this.sortByPrecedenceAction.checked);\n',
+       '            const keybindingsEntries = this.keybindingsEditorModel.fetch(filter, this.sortByPrecedenceAction.checked);\n            ' + m('kb: fetched')],
+      ['            this.keybindingsTable.splice(0, this.keybindingsTable.length, this.tableEntries);\n            this.layoutKeybindingsTable();\n',
+       '            ' + m('kb: will splice') + '            this.keybindingsTable.splice(0, this.keybindingsTable.length, this.tableEntries);\n            ' + m('kb: spliced') + '            this.layoutKeybindingsTable();\n            ' + m('kb: laid out')]]],
+    ['/vs/workbench/services/preferences/browser/keybindingsEditorModel.js', [
+      ['        const commandsWithDefaultKeybindings = this.keybindingsService.getDefaultKeybindings().map(keybinding => keybinding.command);\n',
+       '        ' + m('kbm: bound items') + '        const commandsWithDefaultKeybindings = this.keybindingsService.getDefaultKeybindings().map(keybinding => keybinding.command);\n'],
+      ['        this._keybindingItemsSortedByPrecedence = distinct(\n', '        ' + m('kbm: unbound items') + '        this._keybindingItemsSortedByPrecedence = distinct(\n'],
+      ['        return super.resolve();\n    }\n    static getId(keybindingItem) {', '        ' + m('kbm: sorted') + '        return super.resolve();\n    }\n    static getId(keybindingItem) {']]],
     ['/vs/workbench/services/preferences/common/preferencesModels.js', [
       ['            if (e.source === ConfigurationTarget.DEFAULT) {\n                this.reset();',
        '            if (e.source === ConfigurationTarget.DEFAULT) {\n                (self.__kdResets = self.__kdResets || []).push(Math.round(performance.now()) + ":" + [...e.affectedKeys].slice(0, 6).join("|") + ":" + e.affectedKeys.size);\n                this.reset();'],

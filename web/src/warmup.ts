@@ -169,11 +169,11 @@ export async function warmUp(): Promise<void> {
         }
         const group = groups.activeGroup as unknown as { editorPane?: { kdPreparePane?(typeId: string): boolean } }
         try { group.editorPane?.kdPreparePane?.('workbench.editors.files.textFileEditor') } catch { /* made at the first file then */ }
+        // (not the diff editor's pane: the first diff of a start 0.3 s sooner, for 1.2 s more of the start and 15 MB
+        // more at its peak)
         // (and JavaScript's snippets read and parsed - 181 of them, kept for the session: it was the first suggestions'
         // in a JavaScript file, ~0.15 s of the first key typed into it on the iPad 2)
         try { await (await getService(ISnippetsService)).getSnippets('javascript') } catch { /* read at the first suggestions then */ }
-        // (and xterm.js's module run, which the first terminal of a start waited for)
-        try { await import('@xterm/xterm') } catch { /* at the first terminal then */ }
       },
       // the Settings editor, its tree built (unless one is open already - restored): opened again, it shows that tree
       async () => {

@@ -91,11 +91,18 @@ The first build.
   ~130 ms. And an editor's first frame and its frames after a change of size no longer lay the page out twice in their
   middle: its overlay widgets measured the editor's place on the page, which only a widget fixed outside the editor
   needs, and the height of iOS's keyboard button in its corner, 36 px by its CSS (20-30 ms each, two editors in a diff).
-- The first terminal of a start shows its prompt ~0.1 s sooner (~1.75 s instead of ~1.83 on the iPad 2, interleaved):
-  the warm-up behind the splash runs xterm.js's module (0.1-0.3 s more of the start), and a shell's output is asked
-  for as soon as it is open, before the workbench takes its start in (~170 ms). (A shell opened ahead for the next
-  terminal gained at most 60 ms - the terminal's view and xterm.js keep the page busy until its prompt is drawn - and
-  is not kept.)
+- A new terminal asks for its shell's output as soon as the shell is open, before the workbench takes its start in
+  (~170 ms on the iPad 2). (A shell opened ahead for the next terminal gained at most 60 ms - the terminal's view and
+  xterm.js keep the page busy until its prompt is drawn -, and xterm.js's module run in the warm-up ~70 ms of the
+  first terminal for 0.1-0.3 s more of the start: neither is kept.)
+- Keyboard Shortcuts opened again shows in ~0.83 s instead of ~1.33 (the first time ~2.2 s instead of ~2.4; measured
+  by its own marks on the iPad 2): its ~1,600 entries - each command looked up in the menus, its labels put together
+  in the display language - were made anew at every opening (~360 ms); they are taken again while the keybindings,
+  the registered commands and menus and the extensions are the same, and whether a command has a default keybinding
+  is looked up instead of searched for among the ~600 that have one (~110 ms of the first opening). And as it showed,
+  the editor measured the page three times - the width of its search actions, its header's height, its table's
+  width, all the same every time - each a layout of the whole page before its entries were there (~150 ms): measured
+  once now.
 - Keyboard Shortcuts opened again keeps the order its ~2000 entries were sorted in (by their labels and commands:
   ~22,000 comparisons, a localeCompare or two each): the same entries are put in their places (~1.75 s instead of
   ~1.80 on the iPad 2, interleaved).
