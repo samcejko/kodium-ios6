@@ -282,7 +282,20 @@ function sharedListStyles() {
   return patchModules('kodium-shared-list-styles', [
     ['/vs/base/browser/ui/list/listWidget.js', [
       ['            const styleElement = createStyleSheet(this.view.domNode);\n',
-       '            const styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.view.domNode);\n']], prefix],
+       '            const styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.view.domNode);\n'],
+      // (a style controller of the widget's own - the Settings editor's trees - with a shared style: out with the list)
+      ['            this.styleController = _options.styleController(this.view.domId);\n',
+       '            this.styleController = _options.styleController(this.view.domId);\n' +
+       '            const kdOwn = this.styleController && this.styleController.styleElement;\n' +
+       '            if (kdOwn && kdOwn.kdShared) {\n                this.disposables.add({ dispose: () => kdOwn.remove() });\n            }\n']], prefix],
+    // (the Settings editor's two trees made their own style controllers, each with a <style> in the tree's container,
+    // which went into the page again seven times as the editor opened)
+    ['/vs/workbench/contrib/preferences/browser/tocTree.js', [
+      ['            styleController: id => ( new DefaultStyleController(createStyleSheet(container), id)),\n',
+       '            styleController: id => ( new DefaultStyleController(kdSheetStyle(null) || createStyleSheet(container), id)),\n']], prefix],
+    ['/vs/workbench/contrib/preferences/browser/settingsTree.js', [
+      ['            styleController: id => ( new DefaultStyleController(createStyleSheet(container), id)),\n',
+       '            styleController: id => ( new DefaultStyleController(kdSheetStyle(null) || createStyleSheet(container), id)),\n']], prefix],
     ['/vs/base/browser/ui/tree/abstractTree.js', [
       ['        this.styleElement = createStyleSheet(this.view.getHTMLElement());\n',
        '        this.styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.view.getHTMLElement());\n']], prefix],
@@ -2311,6 +2324,15 @@ function openTimers() {
       ['            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n',
        '            ' + m('view state restored') + '            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n            ' + m('readonly options')],
       ['        mark("code/didSetInputToTextFileEditor");\n', '        ' + m('setInput done') + '        mark("code/didSetInputToTextFileEditor");\n']]],
+    // (Go to Symbol: the symbols there, the picks made, the picker updated with them)
+    ['/vs/editor/contrib/quickAccess/browser/gotoSymbolQuickAccess.js', [
+      ['        const symbolsPromise = this.getDocumentSymbols(model, token);\n',
+       '        ' + m('sym: provide') + '        const symbolsPromise = this.getDocumentSymbols(model, token);\n        symbolsPromise.then(() => { ' + m('sym: symbols').trim() + ' });\n'],
+      ['                const items = await this.doGetSymbolPicks(symbolsPromise, query, undefined, picksCts.value.token, model);\n',
+       '                const items = await this.doGetSymbolPicks(symbolsPromise, query, undefined, picksCts.value.token, model);\n                ' + m('sym: picks made')],
+      ['                    picker.kdBatch(() => {\n', '                    ' + m('sym: batch') + '                    picker.kdBatch(() => {\n'],
+      ['                } else if (items.length > 0) {\n                    picker.items = items;\n',
+       '                    ' + m('sym: picker updated') + '                } else if (items.length > 0) {\n                    picker.items = items;\n']]],
     // (views made active or inactive by a change of context keys, and the title areas of composites updated)
     ['/vs/workbench/services/views/common/viewContainerModel.js', [
       ['        if (addedActiveItems.length || removedActiveItems.length) {\n            this._onDidChangeActiveViewDescriptors.fire(({\n',

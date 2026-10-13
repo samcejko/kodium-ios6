@@ -587,6 +587,7 @@
         if (nativeVars || typeof G.__brNativeInsertRule !== 'function' || !document.head) return null;
         var block = { text: '', n: 0, el: null };
         var handle = {
+            kdShared: true,
             remove: function () { dropRules(block); dropOwn(block); block.text = ''; }
         };
         Object.defineProperty(handle, 'textContent', {

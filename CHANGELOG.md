@@ -75,6 +75,10 @@ The first build.
   at the next frame - and come out when their list does; the terminal's styles (its theme, 58 KB, and its icons') are
   in the head too, and an empty <style> the terminal view made, used by nothing, is gone. The breadcrumbs of a new
   editor group (the Markdown preview opened to the side) also put theirs into the shared sheet.
+- The Settings editor opens in 0.60-0.65 s instead of 0.77-0.80 (interleaved on the iPad 2): its table of contents
+  and its settings tree made their own style controllers with a <style> in each tree's container, and those went into
+  the page seven times as the editor opened - each time the old WebKit's rule sets made anew. They are in the shared
+  sheet too now, taken out when their tree goes.
 - Diffs: two files of 800 lines took 10-12 s to compare on the iPad 2 and then showed as changed throughout; now 2.4-3.8 s,
   every change in its place. The diff algorithm aligned their lines by dynamic programming in three plain arrays of
   640,000 elements, which the old JavaScriptCore keeps as hash tables, and asked the clock at every element - and ran out
