@@ -1175,6 +1175,16 @@ function quickerPicks() {
     '    return items;\n' +
     '}\n'
   return patchModules('kodium-quicker-picks', [
+    // (the list of a quick pick that went - the palette's 566 commands - emptied a little after it went, not as the
+    // next one shows: ~40 ms of the next opening's)
+    ['/vs/platform/quickinput/browser/quickInputController.js', [
+      ['        controller.didHide(reason);\n    }\n    completeCloseAnimation() {',
+       '        controller.didHide(reason);\n' +
+       '        clearTimeout(this.kdClearTimer);\n' +
+       '        this.kdClearTimer = setTimeout(() => {\n' +
+       '            if (!this.controller && this.ui) {\n                this.ui.list.setElements([]);\n            }\n' +
+       '        }, 600);\n' +
+       '    }\n    completeCloseAnimation() {']]],
     ['/vs/platform/quickinput/browser/quickInputList.js', [
       ['        data.toDisposeElement.clear();\n        data.toolBar.setActions([]);\n    }\n',
        '        data.toDisposeElement.clear();\n        if (!data.kdActions) {\n            data.toolBar.setActions([]);\n        }\n    }\n'],
@@ -2392,6 +2402,16 @@ function openTimers() {
        '        ' + m('cmd: sorted') + '        const commandPicks = [];\n        let addOtherSeparator = false;\n'],
       ['        if (!this.hasAdditionalCommandPicks(filter, token)) {\n            return commandPicks;\n        }\n',
        '        ' + m('cmd: picks made') + '        if (!this.hasAdditionalCommandPicks(filter, token)) {\n            return commandPicks;\n        }\n']]],
+    ['/vs/platform/quickinput/browser/quickInputController.js', [
+      ['        ui.container.style.display = "";\n        this.updateLayout();\n',
+       '        ui.container.style.display = "";\n        ' + m('qi: layout') + '        this.updateLayout();\n        ' + m('qi: laid out')],
+      ['        this.onShowEmitter.fire();\n        ui.inputBox.setFocus();\n',
+       '        ' + m('qi: onShow') + '        this.onShowEmitter.fire();\n        ' + m('qi: focus') + '        ui.inputBox.setFocus();\n        ' + m('qi: focused')]]],
+    ['/vs/platform/quickinput/browser/quickInput.js', [
+      ['        this.ui.show(this);\n        this._visible.set(true, undefined);\n',
+       '        ' + m('qi: ui.show') + '        this.ui.show(this);\n        ' + m('qi: ui shown') + '        this._visible.set(true, undefined);\n'],
+      ['        if (this.buttons.length) {\n            this.buttonsUpdated = true;\n        }\n        this.update();\n    }\n',
+       '        if (this.buttons.length) {\n            this.buttonsUpdated = true;\n        }\n        ' + m('qi: update') + '        this.update();\n        ' + m('qi: updated') + '    }\n']]],
     ['/vs/platform/quickinput/browser/quickAccess.js', [
       ['        picker.show();\n        if (visibleSelection && visibleValue === value) {\n',
        '        ' + m('qa: show') + '        picker.show();\n        ' + m('qa: shown') + '        if (visibleSelection && visibleValue === value) {\n']]],
