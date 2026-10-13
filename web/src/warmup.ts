@@ -172,6 +172,8 @@ export async function warmUp(): Promise<void> {
         // (and JavaScript's snippets read and parsed - 181 of them, kept for the session: it was the first suggestions'
         // in a JavaScript file, ~0.15 s of the first key typed into it on the iPad 2)
         try { await (await getService(ISnippetsService)).getSnippets('javascript') } catch { /* read at the first suggestions then */ }
+        // (and xterm.js's module run, which the first terminal of a start waited for)
+        try { await import('@xterm/xterm') } catch { /* at the first terminal then */ }
       },
       // the Settings editor, its tree built (unless one is open already - restored): opened again, it shows that tree
       async () => {

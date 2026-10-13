@@ -72,10 +72,12 @@ class KodiumShell extends SimpleTerminalProcess {
     // (the shell's process ID, from Kodium Shell 0.1.1 on; the session's before)
     const opened = JSON.parse(xhr.responseText) as { id: number, pid?: number }
     this.session = opened.id
+    // (its output asked for before the workbench takes "ready" - ~170 ms on the iPad 2 - so that the app has the
+    // request when the prompt comes)
+    this.read()
     this.ready.fire({ pid: opened.pid || opened.id, cwd: this.cwd, windowsPty: undefined })
     for (const data of this.pending) this.input(data)
     this.pending = []
-    this.read()
     return undefined
   }
 
