@@ -1078,12 +1078,30 @@ function quickerPicks() {
      '    data.kdActions = key === null ? undefined : { key, actions: primary };\n' +
      '    return false;\n' +
      '}\n'],
+    // (- and the outline's elements gone through with their Maps' forEach, not for...of: ES5 here, each step of it an
+    // iterator result and a [key, value] array from the engine's Map, ~3,400 of them after every pause of typing in a
+    // file of 469 symbols - its size measured twice, its problems put on its symbols, the symbol at the cursor)
     ['/vs/editor/contrib/documentSymbols/browser/outlineModel.js', [
       ['        return roots.sort((a, b) => Range.compareRangesUsingStarts(a.range, b.range));\n',
        '        return kdSortedOnce(roots, (a, b) => Range.compareRangesUsingStarts(a.range, b.range));\n'],
       ['        return bucket.sort(\n            (a, b) => Position.compare',
-       '        return kdSortedOnce(bucket,\n            (a, b) => Position.compare']],
-     sortedOnce],
+       '        return kdSortedOnce(bucket,\n            (a, b) => Position.compare'],
+      ['        for (const [, child] of element.children) {\n            res += TreeElement.size(child);\n        }\n',
+       '        element.children.forEach(child => {\n            res += TreeElement.size(child);\n        });\n'],
+      ['        for (const [, item] of children) {\n            if (!item.symbol.range || !Range.containsPosition(item.symbol.range, position)) {\n',
+       '        for (const item of kdValuesOf(children)) {\n            if (!item.symbol.range || !Range.containsPosition(item.symbol.range, position)) {\n'],
+      ['        for (const [, child] of this.children) {\n            this._updateMarker(marker, child);\n        }\n',
+       '        this.children.forEach(child => {\n            this._updateMarker(marker, child);\n        });\n'],
+      ['        for (const [, child] of item.children) {\n            this._updateMarker(myMarkers, child);\n        }\n',
+       '        item.children.forEach(child => {\n            this._updateMarker(myMarkers, child);\n        });\n'],
+      ['        for (const child of ( this.children.values())) {\n            if (child instanceof OutlineElement) {\n',
+       '        for (const child of kdValuesOf(this.children)) {\n            if (child instanceof OutlineElement) {\n']],
+     sortedOnce +
+     'function kdValuesOf(map) {\n' +
+     '    const out = [];\n' +
+     '    if (map.size) {\n        map.forEach(value => out.push(value));\n    }\n' +
+     '    return out;\n' +
+     '}\n'],
     ['/vs/editor/contrib/quickAccess/browser/gotoSymbolQuickAccess.js', [
       ['        const sortedFilteredSymbolPicks = filteredSymbolPicks.sort(\n            (symbolA, symbolB) =>',
        '        const sortedFilteredSymbolPicks = kdSortedOnce(filteredSymbolPicks,\n            (symbolA, symbolB) =>'],
@@ -1176,11 +1194,44 @@ function quickerOutline() {
        '        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));\n' +
        '        if (cts.token.isCancellationRequested) {\n            newOutline?.dispose();\n            return;\n        }\n' +
        '        this._editorControlDisposables.add(newOutline);\n'],
+      // (- and after a change of the text, when the symbols are the same ones - the same names, kinds and nesting, only
+      // their places moved - the tree's nodes are given the new symbols and its rows on the screen drawn again: making
+      // the tree again was ~500 nodes created, filtered and sorted after every pause of typing in a long file)
+      ['            } else {\n                this._domNode.classList.remove("message");\n                tree.updateChildren();\n            }\n',
+       '            } else {\n                this._domNode.classList.remove("message");\n                if (!kdUpdateInPlace(tree)) {\n                    tree.updateChildren();\n                }\n            }\n'],
       ['        this._editorControlDisposables.add(newOutline.onDidChange(updateTree));\n',
        '        this._editorControlDisposables.add(newOutline.onDidChange(e => {\n' +
        '            if (e && e.affectOnlyActiveElement && tree.getInput()) {\n                return;\n            }\n' +
        '            updateTree();\n' +
        '        }));\n']],
+     'function kdUpdateInPlace(tree) {\n' +
+     '    const model = tree.model, identity = tree.identityProvider, source = tree.dataSource, view = tree.view;\n' +
+     '    if (!model || !model.nodes || !identity || !source || !view || typeof model.getNode !== "function" || typeof model.rerender !== "function") {\n        return false;\n    }\n' +
+     '    const kind = element => element && element.symbol ? element.symbol.kind : (element && element.constructor);\n' +
+     '    const pairs = [];\n' +
+     '    const same = (parentNode, parentElement) => {\n' +
+     '        const found = source.getChildren(parentElement);\n' +
+     '        const items = Array.isArray(found) ? found : [...found];\n' +
+     '        const nodes = parentNode.children;\n' +
+     '        if (items.length !== nodes.length) {\n            return false;\n        }\n' +
+     '        for (let i = 0; i < items.length; i++) {\n' +
+     '            const node = nodes[i], item = items[i];\n' +
+     '            if (String(identity.getId(node.element)) !== String(identity.getId(item)) || kind(node.element) !== kind(item)) {\n                return false;\n            }\n' +
+     '            pairs.push(node, item);\n' +
+     '            if (!same(node, item)) {\n                return false;\n            }\n' +
+     '        }\n' +
+     '        return true;\n' +
+     '    };\n' +
+     '    if (!same(model.getNode(null), tree.getInput())) {\n        return false;\n    }\n' +
+     '    for (let i = 0; i < pairs.length; i += 2) {\n' +
+     '        const node = pairs[i], item = pairs[i + 1];\n' +
+     '        if (node.element !== item) {\n            model.nodes.delete(node.element);\n            node.element = item;\n            model.nodes.set(item, node);\n        }\n' +
+     '    }\n' +
+     '    const first = view.firstVisibleIndex, last = Math.min(view.lastVisibleIndex, view.length - 1);\n' +
+     '    for (let i = Math.max(first, 0); i <= last; i++) {\n        model.rerender(view.element(i).element);\n    }\n' +
+     '    if (typeof tree.rerenderStickyScroll === "function") {\n        tree.rerenderStickyScroll();\n    }\n' +
+     '    return true;\n' +
+     '}\n' +
      'function kdSameTypes(types, renderers) {\n' +
      '    if (!types || types.length !== renderers.length) {\n        return false;\n    }\n' +
      '    for (let i = 0; i < types.length; i++) {\n        if (!renderers[i] || renderers[i].constructor !== types[i]) {\n            return false;\n        }\n    }\n' +

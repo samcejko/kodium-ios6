@@ -82,9 +82,13 @@ The first build.
   symbol - the answers are kept for the task now), the symbols went from the outline's Maps to the tree through the
   engine's iterators and a generator per symbol (arrays now), each symbol's children were sorted though in order (a
   look along them first), and a change of the file's problems made the tree again even when the counts of errors and
-  warnings the symbols show stayed the same (only when they change now). The stalls after a pause in that file: 0.6-0.9
-  s of frames over 50 ms in the 2.5 s after a key instead of 1.4-1.6 s (interleaved; the first key after opening the
-  file still ~2 s).
+  warnings the symbols show stayed the same (only when they change now). And when the symbols after a change of the
+  text are the same ones - the same names, kinds and nesting, only their places moved, as while typing in a function -
+  the tree's nodes are given the new symbols and only its rows on the screen are drawn again (a tap on a row goes to
+  the symbol's new place). The outline's own elements are gone through with their Maps' forEach instead of for...of
+  (the engine's iterators: ~3,400 iterator steps after each pause). The stalls after a pause in that file: the longest
+  frame ~0.2 s instead of 0.3-0.5 for most keys, 0.3-0.8 s of frames over 50 ms in the 2.5 s after a key instead of
+  1.4-1.6 s (interleaved; the first key after opening the file still 1.4-2 s).
 - The rows of the quick pick lists - the command palette's, Go to File's, Go to Symbol's - keep their buttons
   (Configure Keybinding, Open to the Side...) when they show another item with the same buttons: a toolbar was cleared
   and made again at every render of a row - each filtering, each scroll - an action item with its hover each time.
