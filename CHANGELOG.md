@@ -118,6 +118,10 @@ The first build.
   of a stretch up to 88 px above and 176 px below the screen are drawn now, the stretch moving 88 px at a time - most
   frames only move the rows. The Explorer through 300 files: median ~18 ms a frame instead of ~52, Keyboard
   Shortcuts ~17 instead of ~58 (the command palette's and the suggestions' lists, made again at every key, do not).
+- Search in Files shows its results a little sooner (300 files with a match each: the first ~150 at ~3.3-4.0 s instead
+  of ~3.6-4.3 on the iPad 2, interleaved): at every update of the results the view's tree refreshed each file's
+  matches through a cancelable promise and two async functions of its own; the files whose matches are at hand are
+  refreshed in one go now (the Explorer's folders too, when their files are known already).
 - An Explorer row coming onto the screen no longer has every file label of the workbench re-check its decorations:
   the Explorer gives a file's decorations asynchronously, none for nearly every file, and an answer of none to a
   question still open was told as a change - nothing had been shown for it - after which the folders' labels gathered

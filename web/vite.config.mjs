@@ -402,7 +402,34 @@ function quickerTrees() {
       ['            children: node.hasChildren ? Iterable.map(node.children, child => this.asTreeElement(child, viewStateContext)) : [],\n',
        '            children: node.hasChildren ? node.children.map(child => this.asTreeElement(child, viewStateContext)) : [],\n'],
       ['            children = Iterable.filter(children, e => {\n                const result = this.filter.filter(e, TreeVisibility.Visible);\n',
-       '            children = kdArray(children).filter(e => {\n                const result = this.filter.filter(e, TreeVisibility.Visible);\n']],
+       '            children = kdArray(children).filter(e => {\n                const result = this.filter.filter(e, TreeVisibility.Visible);\n'],
+      // (- and a node's children whose own children come at once - the Search view's results: each file's matches -
+      // are refreshed in one go, not each through its own cancelable promise, two async functions and their awaits: a
+      // search's results went through that ~300 times at every update, ES5's regenerator and the promise polyfill
+      // ~2 s on the iPad 2; a child whose children come later, or one being refreshed already, goes the usual way)
+      ['            await Promises.settled(\n                childrenToRefresh.map(child => this.doRefreshSubTree(child, recursive, viewStateContext))\n            );\n',
+       '            await Promises.settled(\n                this.kdRefreshNow(childrenToRefresh, recursive, viewStateContext).map(child => this.doRefreshSubTree(child, recursive, viewStateContext))\n            );\n'],
+      ['    async doRefreshNode(node, recursive, viewStateContext) {\n',
+       '    kdRefreshNow(nodes, recursive, viewStateContext) {\n' +
+       '        const later = [];\n' +
+       '        const stack = nodes.slice().reverse();\n' +
+       '        while (stack.length) {\n' +
+       '            const child = stack.pop();\n' +
+       '            if (child.refreshPromise || this.refreshPromises.get(child)) {\n                later.push(child);\n                continue;\n            }\n' +
+       '            child.hasChildren = !!this.dataSource.hasChildren(child.element);\n' +
+       '            let elements = [];\n' +
+       '            if (child.hasChildren) {\n' +
+       '                const got = this.doGetChildren(child);\n' +
+       '                if (!isIterable(got)) {\n                    later.push(child);\n                    continue;\n                }\n' +
+       '                elements = got;\n' +
+       '            }\n' +
+       '            const grandChildren = this.setChildren(child, elements, recursive, viewStateContext);\n' +
+       '            child.stale = false;\n' +
+       '            for (let i = grandChildren.length - 1; i >= 0; i--) {\n                stack.push(grandChildren[i]);\n            }\n' +
+       '        }\n' +
+       '        return later;\n' +
+       '    }\n' +
+       '    async doRefreshNode(node, recursive, viewStateContext) {\n']],
      kdArray],
     // (- and a compressed tree's - the Search view's results - compressed, decompressed, recompressed and spliced its
     // elements' children through generators at every update: ~3.7 ms an element on the iPad 2, a second for the first
