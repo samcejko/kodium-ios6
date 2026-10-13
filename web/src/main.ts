@@ -205,7 +205,11 @@ async function start() {
       // The Search view's results: a file with more than 10 matches comes collapsed, its matches made when it is opened
       // (VS Code's "auto"; a lone file is always open). Every match was a node of the results' tree at once - 420 for
       // "function" in 20 files, 1.7 s on the iPad 2 for the 21 rows on the screen.
-      'search.collapseResults': 'auto'
+      'search.collapseResults': 'auto',
+      // No sticky scroll in trees (the Explorer's folders, the search's files, the Outline's symbols kept at the top as
+      // their content scrolls under them): the rows held there changed as the content went by - the search's at
+      // nearly every frame of a finger's scroll, each a change of the page for the old WebKit's style and layout
+      'workbench.tree.enableStickyScroll': false
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },

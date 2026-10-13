@@ -118,6 +118,11 @@ The first build.
   of a stretch up to 88 px above and 176 px below the screen are drawn now, the stretch moving 88 px at a time - most
   frames only move the rows. The Explorer through 300 files: median ~18 ms a frame instead of ~52, Keyboard
   Shortcuts ~17 instead of ~58 (the command palette's and the suggestions' lists, made again at every key, do not).
+- No sticky scroll in trees by default (workbench.tree.enableStickyScroll off: the Explorer's folders, the search's
+  files and the Outline's symbols kept at the top while their content scrolls under them). The rows held there
+  changed as the content went by - the search's at nearly every frame of a finger's scroll, each a change of the page
+  for the old WebKit. Scrolling the Search view's results (300 files): median ~17 ms a frame instead of ~88, the
+  Outline of a long file ~17 instead of ~50 (iPad 2). It can be switched on again in the settings.
 - Search in Files shows its results a little sooner (300 files with a match each: the first ~150 at ~3.3-4.0 s instead
   of ~3.6-4.3 on the iPad 2, interleaved): at every update of the results the view's tree refreshed each file's
   matches through a cancelable promise and two async functions of its own; the files whose matches are at hand are
