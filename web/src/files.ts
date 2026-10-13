@@ -57,11 +57,13 @@ function callSync(root: Root, op: string, params: Record<string, string>, binary
 
 // A file read on its own (none in the last 0.3 s) and small (64 KB or less) is read synchronously: a stat and a read
 // of 5-8 ms each that the page waits for. Asynchronously they came back only once the WebThread had done everything
-// else the opening of a file had for it (the tab, the editor drawn empty...): 110-140 ms on the iPad 2. Many reads in a
-// row (a search) go the asynchronous way, as big files do, and the page goes on between them. (1 MB measured no
-// quicker for a file of 70 KB - its decoding, not its reading, is what takes the time.)
+// else the opening of a file had for it (the tab, the editor drawn empty...): 110-140 ms on the iPad 2. So is a second
+// one right after it - a diff's two files. Many reads in a row (a search) go the asynchronous way, as big files do,
+// and the page goes on between them. (1 MB measured no quicker for a file of 70 KB - its decoding, not its reading,
+// is what takes the time.)
 const SYNC_MAX = 64 * 1024
 const SYNC_GAP = 300
+const SYNC_BURST = 2
 
 function check(xhr: XMLHttpRequest, resource: URI): void {
   if (xhr.status === 200) return
@@ -89,9 +91,12 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   private readonly changes = new Emitter<readonly IFileChange[]>()
   readonly onDidChangeFile = this.changes.event
   readonly onDidChangeCapabilities = new Emitter<void>().event
-  // (when the last synchronous read and stat were; the stat last made, for the read or the stat that follows it)
+  // (when the last read and stat were, and how many of them in a row went synchronously; the stat last made, for the
+  // read or the stat that follows it)
   private lastSyncRead = 0
   private lastSyncStat = 0
+  private syncReads = 0
+  private syncStats = 0
   private lastStat: { path: string, stat: IStat, at: number } | null = null
 
   constructor(
@@ -116,8 +121,10 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
     if (last && last.path === path && now - last.at < 1000) return last.stat
     // (a stat on its own, as the opening of a file begins with, synchronously too: 5 ms instead of 22-33 - its answer
     // came back after the WebThread's other work; the read that follows takes it from lastStat)
-    if (now - this.lastSyncStat > SYNC_GAP) {
+    if (now - this.lastSyncStat > SYNC_GAP) this.syncStats = 0
+    if (this.syncStats < SYNC_BURST) {
       this.lastSyncStat = now
+      this.syncStats++
       let xhr: XMLHttpRequest | null = null
       try { xhr = callSync(this.root, 'stat', { path }) } catch { xhr = null }
       if (xhr) {
@@ -142,11 +149,13 @@ class AppFolderProvider implements IFileSystemProviderWithFileReadWriteCapabilit
   async readFile(resource: URI): Promise<Uint8Array> {
     const path = this.toPath(resource) ?? notHere(resource)
     const now = Date.now()
-    if (now - this.lastSyncRead > SYNC_GAP) {
-      this.lastSyncRead = now
+    if (now - this.lastSyncRead > SYNC_GAP) this.syncReads = 0
+    this.lastSyncRead = now
+    if (this.syncReads < SYNC_BURST) {
+      this.syncReads++
       const bytes = this.readSmall(path)
       if (bytes) return bytes
-    } else this.lastSyncRead = now
+    }
     const xhr = await call(this.root, 'read', { path }, undefined, true)
     check(xhr, resource)
     return new Uint8Array(xhr.response as ArrayBuffer)

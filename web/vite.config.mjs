@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { defineConfig } from 'vite'
+import { quickerDiffs } from './tools/quicker-diffs.mjs'
 
 function bundledLicenses() {
   return {
@@ -270,6 +271,31 @@ function plainStyles() {
   ])
 }
 
+// A list's, a tree's and a table's style (colours, focus outlines, indent guides) was a <style> in the widget's own DOM,
+// which VS Code takes out of the page with its view and puts back when the view comes again: the old WebKit parsed it
+// again and made the rule sets of the whole page anew at once, for each such style (the Explorer's five, the Problems'
+// two - the 150 ms of putting the Problems view back as the panel showed), and twice as a widget was made (the style
+// went in empty, then got its text). Now its rules go into one shared sheet in the head (vsc-prelude.js
+// __kd_sheetStyle), the rule sets are made once at the next frame, and they come out when the widget is disposed.
+function sharedListStyles() {
+  const prefix = 'const kdSheetStyle = (store) => typeof window !== "undefined" && window.__kd_sheetStyle ? window.__kd_sheetStyle(store) : null;\n'
+  return patchModules('kodium-shared-list-styles', [
+    ['/vs/base/browser/ui/list/listWidget.js', [
+      ['            const styleElement = createStyleSheet(this.view.domNode);\n',
+       '            const styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.view.domNode);\n']], prefix],
+    ['/vs/base/browser/ui/tree/abstractTree.js', [
+      ['        this.styleElement = createStyleSheet(this.view.getHTMLElement());\n',
+       '        this.styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.view.getHTMLElement());\n']], prefix],
+    ['/vs/base/browser/ui/table/tableWidget.js', [
+      ['        this.styleElement = createStyleSheet(this.domNode);\n',
+       '        this.styleElement = kdSheetStyle(this.disposables) || createStyleSheet(this.domNode);\n']], prefix],
+    // (the breadcrumbs' too: each new editor group made one, opening the Markdown preview to the side)
+    ['/vs/base/browser/ui/breadcrumbs/breadcrumbsWidget.js', [
+      ['        const styleElement = createStyleSheet(this._domNode);\n',
+       '        const styleElement = kdSheetStyle(this._disposables) || createStyleSheet(this._domNode);\n']], prefix]
+  ])
+}
+
 // A file's line starts - read when it opens, and of every piece of text an edit adds - were found by a charCodeAt loop
 // over all its characters (also asking each whether it is plain ASCII): 70,000 calls for a file of 70 KB, half of its
 // reading on the iPad 2 in the profiler. The line breaks are found with indexOf and the ASCII question with one
@@ -382,8 +408,49 @@ function quickerWorkers() {
      'this._idleCheckInterval = window.setInterval(() => this._checkIfIdle(), 15 * 1e3);']]]
   return patchModules('kodium-quicker-workers', [
     language('json'), language('css'), language('html'),
+    // (the editor's worker computes a diff, and a diff opened a minute after the last use waited for its start - its
+    // 425 KB loaded and run, 1.15 s on the iPad 2, of the first diff's 2-4 s. While the worker is not there, a diff of
+    // files up to 1,000 lines in all is computed in the page - the worker's own code (tools/quicker-diffs.mjs), a few
+    // ms; one that takes more than 300 ms goes to the worker after all -, and one of a few hundred lines always is (the
+    // way to the worker and back took 50-140 ms); the diff editor starts the worker as it begins, for bigger diffs and
+    // the links: kdLocalDiff, kdStart)
     ['/vs/editor/browser/services/editorWorkerService.js', [
-      ['const STOP_WORKER_DELTA_TIME_MS = 5 * 60 * 1000;', 'const STOP_WORKER_DELTA_TIME_MS = 60 * 1000;']]]
+      ['const STOP_WORKER_DELTA_TIME_MS = 5 * 60 * 1000;', 'const STOP_WORKER_DELTA_TIME_MS = 60 * 1000;'],
+      ['    canComputeUnicodeHighlights(uri) {\n',
+       '    kdStart() {\n        this._workerManager.withWorker().then(client => client._getProxy()).then(undefined, () => undefined);\n    }\n' +
+       '    kdLocalDiff(original, modified, options, algorithm) {\n' +
+       '        const a = this._modelService.getModel(original), b = this._modelService.getModel(modified);\n' +
+       '        if (!a || !b || (algorithm !== "advanced" && algorithm !== "legacy")) {\n            return null;\n        }\n' +
+       '        const lines = a.getLineCount() + b.getLineCount(), length = a.getValueLength() + b.getValueLength();\n' +
+       '        const client = this._workerManager._editorWorkerClient;\n' +
+       '        const ready = !!(client && client.kdReady);\n' +
+       '        if (!ready) {\n            this.kdStart();\n        }\n' +
+       // (files of a few hundred lines in the page even with the worker there: quicker than the way to it and back)
+       '        if (lines > 1000 || length > 60000 || ready && (lines > 600 || length > 30000)) {\n            return null;\n        }\n' +
+       '        try {\n' +
+       '            const computer = algorithm === "legacy" ? kdLinesDiffComputers.getLegacy() : kdLinesDiffComputers.getDefault();\n' +
+       '            const result = EditorWorker.computeDiff(a, b, { ...options, maxComputationTimeMs: Math.min(options.maxComputationTimeMs || 300, 300) }, computer);\n' +
+       '            return result.quitEarly ? null : result;\n' +
+       '        } catch (e) {\n            return null;\n        }\n' +
+       '    }\n' +
+       '    canComputeUnicodeHighlights(uri) {\n'],
+      ['        const worker = await this._workerWithResources([original, modified],  true);\n        const result = await worker.$computeDiff(( original.toString()), ( modified.toString()), options, algorithm);\n',
+       '        let result = this.kdLocalDiff(original, modified, options, algorithm);\n        if (!result) {\n' +
+       '            const worker = await this._workerWithResources([original, modified],  true);\n            result = await worker.$computeDiff(( original.toString()), ( modified.toString()), options, algorithm);\n        }\n'],
+      ['            await proxy.$ping();\n            return proxy;\n', '            await proxy.$ping();\n            this.kdReady = true;\n            return proxy;\n']],
+     'import { linesDiffComputers as kdLinesDiffComputers } from "../../common/diff/linesDiffComputers.js";\n'],
+    ['/vs/workbench/browser/parts/editor/textDiffEditor.js', [
+      ['    createEditorControl(parent, configuration) {\n',
+       '    createEditorControl(parent, configuration) {\n        kdStartEditorWorker(this.instantiationService);\n'],
+      ['        this.inputLifecycleStopWatch = undefined;\n        await super.setInput(input, options, context, token);\n',
+       '        this.inputLifecycleStopWatch = undefined;\n        kdStartEditorWorker(this.instantiationService);\n        await super.setInput(input, options, context, token);\n']],
+     'import { IEditorWorkerService as KdEditorWorkerService } from "../../../../editor/common/services/editorWorker.service.js";\n' +
+     'function kdStartEditorWorker(instantiationService) {\n' +
+     '    try {\n' +
+     '        const service = instantiationService.invokeFunction(accessor => accessor.get(KdEditorWorkerService));\n' +
+     '        if (service && service.kdStart) {\n            service.kdStart();\n        }\n' +
+     '    } catch (e) {}\n' +
+     '}\n']
   ])
 }
 
@@ -2084,6 +2151,27 @@ function fasterDomNode() {
   }
 }
 
+// An editor's overlay widgets, laid out at its first frame and after every change of its size (the panel or the side
+// bar shown or hidden, a diff opened: both its editors), measured the page twice in the middle of the frame's writes:
+// the editor's place on the page, which only a widget fixed outside the editor needs, and the height of iOS's keyboard
+// button (a textarea in each editor's corner, VS Code's iPadShowKeyboard: 36 px by its CSS) - each a layout of the
+// whole page then (20-30 ms on the iPad 2). The place is measured when such a widget needs it, the button's height once.
+function calmerOverlayWidgets() {
+  return patchModules('kodium-calmer-overlay-widgets', [
+    ['/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js', [
+      ['    prepareRender(ctx) {\n        this._viewDomNodeRect = getDomNodePagePosition(this._viewDomNode.domNode);\n    }',
+       '    prepareRender(ctx) {\n        this.kdRectStale = true;\n    }'],
+      ['                const editorBoundingBox = this._viewDomNodeRect;\n',
+       '                if (this.kdRectStale) {\n                    this._viewDomNodeRect = getDomNodePagePosition(this._viewDomNode.domNode);\n                    this.kdRectStale = false;\n                }\n' +
+       '                const editorBoundingBox = this._viewDomNodeRect;\n'],
+      ['                const widgetHeight = domNode.domNode.clientHeight;\n',
+       '                const kdKeyboard = widgetData.widget.getId() === "editor.contrib.ShowKeyboardWidget";\n' +
+       '                const widgetHeight = kdKeyboard && kdKeyboardHeight || domNode.domNode.clientHeight;\n' +
+       '                if (kdKeyboard && widgetHeight > 0) {\n                    kdKeyboardHeight = widgetHeight;\n                }\n']],
+     'let kdKeyboardHeight = 0;\n']
+  ])
+}
+
 // What the workbench lets go of when the iPad runs short of memory (web/src/memory.ts, asked by src/KDAppDelegate.m):
 // an editor group keeps the pane of every kind of editor it has shown (EditorPanes) - kdDropHiddenPanes(keep) disposes
 // those not on the screen whose id keep() does not want (kdPreparePane(typeId) makes one ahead, for the warm-up);
@@ -2157,6 +2245,33 @@ function openTimers() {
       ['            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n',
        '            ' + m('view state restored') + '            control.updateOptions(this.getReadonlyConfiguration(textFileModel.isReadonly()));\n            ' + m('readonly options')],
       ['        mark("code/didSetInputToTextFileEditor");\n', '        ' + m('setInput done') + '        mark("code/didSetInputToTextFileEditor");\n']]],
+    // (views made active or inactive by a change of context keys, and the title areas of composites updated)
+    ['/vs/workbench/services/views/common/viewContainerModel.js', [
+      ['        if (addedActiveItems.length || removedActiveItems.length) {\n            this._onDidChangeActiveViewDescriptors.fire(({\n',
+       '        if (addedActiveItems.length || removedActiveItems.length) {\n' +
+       '            self.__kdMark && self.__kdMark("views of " + this.viewContainer.id + ": +" + addedActiveItems.map(a => a.item.viewDescriptor.id).join(",") + " -" + removedActiveItems.map(r => r.viewDescriptor.id).join(","));\n' +
+       '            this._onDidChangeActiveViewDescriptors.fire(({\n']]],
+    ['/vs/workbench/browser/parts/compositePart.js', [
+      ['    onTitleAreaUpdate(compositeId) {\n        const composite = this.instantiatedCompositeItems.get(compositeId);\n',
+       '    onTitleAreaUpdate(compositeId) {\n        self.__kdMark && self.__kdMark("title area of " + compositeId + (this.activeComposite?.getId() === compositeId ? " (active)" : ""));\n' +
+       '        const composite = this.instantiatedCompositeItems.get(compositeId);\n']]],
+    // (a new editor group: its view made, put into the grid, announced)
+    ['/vs/workbench/browser/parts/editor/editorPart.js', [
+      ['            newGroupView = this.doCreateGroupView(groupToCopy);\n            this.gridWidget.addView(\n',
+       '            ' + m('addGroup') + '            newGroupView = this.doCreateGroupView(groupToCopy);\n            ' + m('group view made') + '            this.gridWidget.addView(\n'],
+      ['            this.updateContainer();\n            this._onDidAddGroup.fire(newGroupView);\n            this.notifyGroupIndexChange();\n',
+       '            ' + m('grid view added') + '            this.updateContainer();\n            this._onDidAddGroup.fire(newGroupView);\n            ' + m('onDidAddGroup fired') + '            this.notifyGroupIndexChange();\n            ' + m('group index notified')]]],
+    // (the diff editor's: its widget made, its input's models, the diff, the models set)
+    ['/vs/workbench/browser/parts/editor/textDiffEditor.js', [
+      ['        this.diffEditorControl = this._register(\n            this.instantiationService.createInstance(DiffEditorWidget, parent, configuration, {})\n        );\n',
+       '        ' + m('diff widget: will make') + '        this.diffEditorControl = this._register(\n            this.instantiationService.createInstance(DiffEditorWidget, parent, configuration, {})\n        );\n        ' + m('diff widget made')],
+      ['    async setInput(input, options, context, token) {\n        if (this._previousViewModel) {\n',
+       '    async setInput(input, options, context, token) {\n        ' + m('diff.setInput') + '        if (this._previousViewModel) {\n'],
+      ['        await super.setInput(input, options, context, token);\n        try {\n            const resolvedModel = await input.resolve();\n',
+       '        await super.setInput(input, options, context, token);\n        ' + m('diff super.setInput') + '        try {\n            const resolvedModel = await input.resolve();\n            ' + m('diff models resolved')],
+      ['            this._previousViewModel = vm;\n            await vm?.waitForDiff();\n            control.setModel(vm);\n',
+       '            this._previousViewModel = vm;\n            ' + m('diff view model made') + '            await vm?.waitForDiff();\n            ' + m('diff computed') + '            control.setModel(vm);\n            ' + m('diff setModel done')],
+      ['            control.handleInitialized();\n', '            ' + m('diff options set') + '            control.handleInitialized();\n            ' + m('diff initialized')]]],
     ['/vs/workbench/services/textfile/common/textFileEditorModel.js', [
       ['        mark("code/willResolveTextFileEditorModel");\n', '        mark("code/willResolveTextFileEditorModel");\n        ' + m('model.resolve')],
       ['            const resolvedFromBackup = await this.resolveFromBackup(options);\n', '            const resolvedFromBackup = await this.resolveFromBackup(options);\n            ' + m('backup looked for')],
@@ -2427,15 +2542,26 @@ function quickerTerminal() {
        '.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider:hover { background: ${e.scrollbarSliderHoverBackground.css}; }' +
        '.xterm .xterm-scrollable-element > .xterm-scrollbar > .xterm-slider.xterm-active { background: ${e.scrollbarSliderActiveBackground.css}; }`,' +
        'this._kdThemeText!==t&&(this._kdThemeText=t,this._themeStyleElement.textContent=self.__kd_xtermStyle?self.__kd_xtermStyle(t):t),' +
-       'this._themeStyleElement.parentNode||this._screenElement.appendChild(this._themeStyleElement)}'],
+       'this._themeStyleElement.parentNode||(this._document.head||this._screenElement).appendChild(this._themeStyleElement)}'],
       ['this._styleElement=s.mainDocument.createElement("style"),t.appendChild(this._styleElement),this._register(E(()=>this._styleElement.remove())),' +
        'this._register(j.runAndSubscribe(l.onChangeColors,()=>{this._styleElement.textContent=[',
        'this._register(j.runAndSubscribe(l.onChangeColors,()=>{void [']]],
     // (and the workbench's styles of the terminals' icons and colours, written again at every terminal made or
-    // closed - 4 writes as one opened, 65 ms each - mostly the same text: an icon's rule came once per terminal)
+    // closed - 4 writes as one opened, 65 ms each - mostly the same text: an icon's rule came once per terminal. The
+    // view's goes into the head with its first text - mostly never: the default icons need none - instead of into the
+    // view's DOM, which goes out of the page and back with the panel's views, and the empty <style> the view put
+    // there besides, used by nothing, is left out. xterm.js's goes into the head too instead of the terminal's DOM:
+    // the old WebKit parsed its 58 KB again whenever the terminal came back into the page, and made the page's rule
+    // sets anew at once - see sharedListStyles. Its ~770 rules put into the lists' shared sheet one by one instead
+    // made a new terminal no quicker.)
     ['/vs/workbench/contrib/terminal/browser/terminalView.js', [
+      ['        createStyleSheet(this._parentDomElement);\n', ''],
+      ['        this._styleElement = createStyleSheet(container);\n',
+       '        this._styleElement = document.createElement("style");\n'],
       ['        this._styleElement.textContent = css;\n    }\n};\nTerminalThemeIconStyle = ',
-       '        if (css !== (this.kdCss || "")) {\n            this.kdCss = css;\n            this._styleElement.textContent = css;\n        }\n    }\n};\nTerminalThemeIconStyle = ']]],
+       '        if (css !== (this.kdCss || "")) {\n            this.kdCss = css;\n            this._styleElement.textContent = css;\n' +
+       '            if (!this._styleElement.parentNode) {\n                document.head.appendChild(this._styleElement);\n            }\n' +
+       '        }\n    }\n};\nTerminalThemeIconStyle = ']]],
     ['/vs/workbench/contrib/terminal/browser/terminalService.js', [
       ['        let css = "";\n        const productIconTheme = this._themeService.getProductIconTheme();',
        '        let css = "", kdRule;\n        const productIconTheme = this._themeService.getProductIconTheme();'],
@@ -2729,8 +2855,19 @@ function leaveOut() {
 // The views' title bars (the Explorer's New File..., Open Editors', the Outline's, the Timeline's) made their toolbars
 // anew whenever a context key their menus look at changed - opening a file, switching tabs - though the actions came
 // out the same: a toolbar is made again when its actions (what they show and whether they are on) are others. The
-// actions of a view's title get the view's context at run time, not the editor's.
+// actions of a view's title get the view's context at run time, not the editor's. The same for the side bar's and the
+// panel's own title bars - the Terminal's (its profiles' dropdown, split, kill...) was made twice as a second editor
+// group opened (the Markdown preview to the side: ~130 ms) and at many a switch of editors.
 function quickerViews() {
+  const actionsKey = 'function kdActionsKey(actions) {\n' +
+    '    let key = "";\n' +
+    '    for (const a of actions) {\n' +
+    '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0001" +\n' +
+    '            (a.hideActions ? a.hideActions.isHidden : "") + "\\u0002";\n' +
+    '        if (a.actions && a.actions.length) {\n            key += "[" + kdActionsKey(a.actions) + "]";\n        }\n' +
+    '    }\n' +
+    '    return key;\n' +
+    '}\n'
   return patchModules('kodium-quicker-views', [
     ['/vs/workbench/browser/parts/views/viewPane.js', [
       ['            this.toolbar.setActions(\n                prepareActions(primaryActions),\n                prepareActions(this.menuActions.getSecondaryActions())\n            );\n            this.toolbar.context = this.getActionsContext();',
@@ -2741,15 +2878,17 @@ function quickerViews() {
        '                this.toolbar.setActions(kdPrimary, kdSecondary);\n' +
        '            }\n' +
        '            this.toolbar.context = this.getActionsContext();']],
-     'function kdActionsKey(actions) {\n' +
-     '    let key = "";\n' +
-     '    for (const a of actions) {\n' +
-     '        key += a.id + "\\u0001" + a.label + "\\u0001" + a.tooltip + "\\u0001" + a.class + "\\u0001" + a.enabled + "\\u0001" + a.checked + "\\u0001" +\n' +
-     '            (a.hideActions ? a.hideActions.isHidden : "") + "\\u0002";\n' +
-     '        if (a.actions && a.actions.length) {\n            key += "[" + kdActionsKey(a.actions) + "]";\n        }\n' +
-     '    }\n' +
-     '    return key;\n' +
-     '}\n'],
+     actionsKey],
+    ['/vs/workbench/browser/parts/compositePart.js', [
+      ['            this.toolBar?.setActions(prepareActions(primaryActions), prepareActions(secondaryActions), menuIds);\n',
+       '            const kdPrimary = prepareActions(primaryActions), kdSecondary = prepareActions(secondaryActions);\n' +
+       '            const kdKey = (composite ? composite.getId() : "") + "||" + kdActionsKey(kdPrimary) + "||" + kdActionsKey(kdSecondary) + "||" +\n' +
+       '                (menuIds ? menuIds.map(m => m.id).join(",") : "");\n' +
+       '            if (kdKey !== this.kdActionsKey) {\n' +
+       '                this.kdActionsKey = kdKey;\n' +
+       '                this.toolBar?.setActions(kdPrimary, kdSecondary, menuIds);\n' +
+       '            }\n']],
+     actionsKey],
     ['/vs/workbench/contrib/files/browser/views/openEditorsView.js', [
       ['        this._register(this.list.onDidChangeFocus(e => {\n            resourceContext.reset();\n' +
        '            groupFocusedContext.reset();\n            dirtyEditorFocusedContext.reset();\n            readonlyEditorFocusedContext.reset();\n' +
@@ -3590,7 +3729,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

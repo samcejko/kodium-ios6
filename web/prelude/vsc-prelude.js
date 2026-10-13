@@ -513,6 +513,119 @@
                 return 'rgba(' + parseInt(r, 16) + ',' + parseInt(g, 16) + ',' + parseInt(b, 16) + ',' + Math.round(parseInt(a, 16) / 0.255) / 1000 + ')';
             });
     };
+    // The styles of lists, trees and tables (their colours, focus outlines, indent guides): VS Code put a <style> into
+    // each widget's own DOM, and takes a view's DOM out of the page when another view is shown and puts it back when it
+    // comes again (the panel's, the side bar's). The old WebKit parsed such a style's text again as it came back and
+    // made the rule sets of the whole page anew at once - for each one (the Explorer's five, the Problems' two: 150 ms
+    // of the panel's showing). Here a widget's style is a stand-in whose text goes, rule by rule and natively, into one
+    // shared sheet in the head - which the engine works into its rule sets once, at the next frame - and comes out when
+    // the widget goes (the store it is given, or remove()). A text the engine cannot take as it is (not marked plain by
+    // __kd_plainStyle) gets a <style> of its own in the head. Null without the native insertRule (vite.config.mjs
+    // sharedListStyles: the widget makes its <style> as before).
+    var listSheet = { el: null, blocks: [], own: 0 };
+    var RULE_MARKS = /[{}"']/g;
+    var splitRules = function (text) {
+        text = text.replace(/\/\*[\s\S]*?\*\//g, '');
+        var out = [], depth = 0, from = 0, m;
+        RULE_MARKS.lastIndex = 0;
+        while ((m = RULE_MARKS.exec(text)) !== null) {
+            var c = m[0], i = m.index;
+            if (c === '"' || c === "'") {
+                var j = i;
+                do { j = text.indexOf(c, j + 1); } while (j > 0 && text.charAt(j - 1) === '\\');
+                RULE_MARKS.lastIndex = j < 0 ? text.length : j + 1;
+            } else if (c === '{') {
+                depth++;
+            } else if (--depth <= 0) {
+                var rule = cssTrim(text.slice(from, i + 1));
+                if (rule) out.push(rule);
+                from = i + 1;
+                depth = 0;
+            }
+        }
+        return out;
+    };
+    var putRules = function (sheet, block, start) {
+        var insert = G.__brNativeInsertRule, rules = splitRules(block.text.slice(6)), n = 0;
+        for (var r = 0; r < rules.length; r++) {
+            try { insert.call(sheet, rules[r], start + n); n++; } catch (e) {}   // (one the engine lacks: left out, as its parser does)
+        }
+        block.n = n;
+    };
+    var listSheetOf = function () {
+        if (listSheet.el && listSheet.el.parentNode && listSheet.el.sheet) return listSheet.el.sheet;
+        var el = document.createElement('style');
+        el.textContent = '/*br*/';
+        document.head.appendChild(el);
+        listSheet.el = el;
+        // (a new sheet - the old one went from the page: every widget's rules again)
+        for (var i = 0, at = 0; i < listSheet.blocks.length; i++) { putRules(el.sheet, listSheet.blocks[i], at); at += listSheet.blocks[i].n; }
+        return el.sheet;
+    };
+    var blockStart = function (block) {
+        for (var i = 0, s = 0; i < listSheet.blocks.length; i++) {
+            if (listSheet.blocks[i] === block) return s;
+            s += listSheet.blocks[i].n;
+        }
+        return -1;
+    };
+    var dropRules = function (block) {
+        var start = blockStart(block);
+        if (start < 0) return;
+        var sheet = listSheetOf();
+        for (var k = 0; k < block.n; k++) sheet.deleteRule(start);
+        block.n = 0;
+        for (var i = 0; i < listSheet.blocks.length; i++) if (listSheet.blocks[i] === block) { listSheet.blocks.splice(i, 1); break; }
+    };
+    var dropOwn = function (block) {
+        if (!block.el) return;
+        if (block.el.parentNode) block.el.parentNode.removeChild(block.el);
+        block.el = null;
+        listSheet.own--;
+    };
+    G.__kd_sheetStyle = function (store) {
+        if (nativeVars || typeof G.__brNativeInsertRule !== 'function' || !document.head) return null;
+        var block = { text: '', n: 0, el: null };
+        var handle = {
+            remove: function () { dropRules(block); dropOwn(block); block.text = ''; }
+        };
+        Object.defineProperty(handle, 'textContent', {
+            get: function () { return block.text; },
+            set: function (value) {
+                var text = value === null || value === undefined ? '' : String(value);
+                if (text === block.text) return;
+                block.text = text;
+                if (text.slice(0, 6) === '/*br*/') {
+                    dropOwn(block);
+                    var sheet = listSheetOf(), start = blockStart(block);
+                    if (start < 0) {
+                        start = 0;
+                        for (var i = 0; i < listSheet.blocks.length; i++) start += listSheet.blocks[i].n;
+                        listSheet.blocks.push(block);
+                    }
+                    for (var k = 0; k < block.n; k++) sheet.deleteRule(start);
+                    putRules(sheet, block, start);
+                    return;
+                }
+                dropRules(block);
+                if (!block.el) {
+                    block.el = document.createElement('style');
+                    block.el.textContent = text;   // (the text first: one rebuild as it goes in)
+                    document.head.appendChild(block.el);
+                    listSheet.own++;
+                } else {
+                    block.el.textContent = text;
+                }
+            }
+        });
+        if (store && typeof store.add === 'function') store.add({ dispose: function () { handle.remove(); } });
+        return handle;
+    };
+    G.__kd_sheetStyleState = function () {
+        var n = 0;
+        for (var i = 0; i < listSheet.blocks.length; i++) n += listSheet.blocks[i].n;
+        return { blocks: listSheet.blocks.length, rules: n, sheetRules: listSheet.el && listSheet.el.sheet ? listSheet.el.sheet.cssRules.length : -1, own: listSheet.own };
+    };
     // The theme VS Code applies: its <style class="contributedColorTheme"> with .monaco-workbench { --vscode-...: ...; }.
     // The engine rewrites that style as it goes in (custom properties out) and hands the values to its shims, where
     // __brManifestAdd below takes them; in a desktop browser (?novar) the text itself is read. A whole theme's worth of

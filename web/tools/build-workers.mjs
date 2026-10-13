@@ -11,6 +11,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
+import { quickerDiffs } from './quicker-diffs.mjs'
 
 const web = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tmp = path.join(web, 'dist', 'workers')
@@ -94,7 +95,7 @@ for (const name of NAMES) {
     configFile: false,
     root: web,
     logLevel: 'warn',
-    plugins: [leanerWorker, quickerWords],
+    plugins: [leanerWorker, quickerWords, quickerDiffs()],
     define: { 'process.env.NODE_ENV': JSON.stringify('production') },
     build: {
       target: 'es2022',

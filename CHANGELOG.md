@@ -64,6 +64,33 @@ The first build.
   the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
   editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
   go the asynchronous way.
+- Showing the panel, switching the views of the panel and the side bar, and showing the side bar take about half the
+  time (interleaved on the iPad 2, to the second frame): the panel 0.43-0.45 s instead of 0.68-0.70, the Problems,
+  Search and Explorer views 0.22-0.29 s instead of 0.49-0.73, the Explorer shown again 0.34-0.36 s instead of 0.86-0.97,
+  the side bar 0.63-0.65 s instead of 1.20-1.29; a new terminal ~1.0 s instead of ~1.2. Every list, tree and table kept
+  its colours, focus outlines and indent guides in a <style> of its own inside its DOM, and VS Code takes a view's DOM
+  out of the page when another view is shown and puts it back when it comes again: the old WebKit parsed each such
+  style again as it came back and made the rule sets of the whole page anew at once, for each of them (the Explorer has
+  five, the Problems view two). Their rules go into one shared sheet in the head now - the engine takes them in once,
+  at the next frame - and come out when their list does; the terminal's styles (its theme, 58 KB, and its icons') are
+  in the head too, and an empty <style> the terminal view made, used by nothing, is gone. The breadcrumbs of a new
+  editor group (the Markdown preview opened to the side) also put theirs into the shared sheet.
+- Diffs: two files of 800 lines took 10-12 s to compare on the iPad 2 and then showed as changed throughout; now 2.4-3.8 s,
+  every change in its place. The diff algorithm aligned their lines by dynamic programming in three plain arrays of
+  640,000 elements, which the old JavaScriptCore keeps as hash tables, and asked the clock at every element - and ran out
+  of the 5 s it is given. The tables are typed arrays now, the clock is asked every 256 elements, and lines are aligned
+  that way up to 700 lines in all (VS Code: 1,700), by Myers' algorithm above, as VS Code does above its limit. A diff of
+  small files is computed in the page instead of by the editor's worker: the way there and back took 50-140 ms, and a
+  minute after its last use the worker had to start again first - 1.15 s of a diff's 2.8-4.6 s (now ~2.8 s); the diff
+  editor starts the worker as it opens, for bigger files and the links. A small diff opened again takes ~1.3 s instead
+  of ~1.4: its second file is also read synchronously now, like a file read on its own (the asynchronous read waited
+  for the WebThread, ~120 ms).
+- The Markdown preview opens in ~0.92 s instead of ~1.03 (the first time ~1.15 s instead of ~1.45), interleaved on the
+  iPad 2: the title bars of the panel and the side bar are made again only when their actions change - opening a
+  second editor group made the Terminal's (its profiles' dropdown, split, kill...) twice though nothing in it changed,
+  ~130 ms. And an editor's first frame and its frames after a change of size no longer lay the page out twice in their
+  middle: its overlay widgets measured the editor's place on the page, which only a widget fixed outside the editor
+  needs, and the height of iOS's keyboard button in its corner, 36 px by its CSS (20-30 ms each, two editors in a diff).
 - Keyboard Shortcuts opened again keeps the order its ~2000 entries were sorted in (by their labels and commands:
   ~22,000 comparisons, a localeCompare or two each): the same entries are put in their places (~1.75 s instead of
   ~1.80 on the iPad 2, interleaved).
