@@ -66,7 +66,9 @@ The first build.
   go the asynchronous way.
 - The first key typed into a JavaScript file after the start no longer waits for JavaScript's snippets: the first
   suggestions read and parsed all 181 of them (VS Code's own, for for, if, log...) - the warm-up behind the splash
-  reads them now. Its longest frame ~0.4 s instead of ~0.7 (a small file, three interleaved rounds on the iPad 2).
+  reads them now. Its longest frame ~0.4 s instead of ~0.7 (a small file, three interleaved rounds on the iPad 2). The
+  warm-up also shows its own editor's suggestions once (the first list's code and the editor worker's first words):
+  the first key's long frames 0.8-0.9 s in all instead of 1.2 s.
 - Switching editors with the Outline view open in the Explorer: a file's lines show in ~0.5 s instead of ~1.1 (a small
   file) and ~0.9 s instead of ~1.9 (1,300 lines, 469 symbols), and the switch is done - the Outline too - in ~1.7 s
   instead of ~2.5 (interleaved on the iPad 2, which ran low on memory then: every time ~2x what it takes after a

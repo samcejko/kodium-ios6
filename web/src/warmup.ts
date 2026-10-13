@@ -155,8 +155,13 @@ export async function warmUp(): Promise<void> {
         const input = pane?.input
         if (pane && input) {
           try {
-            const control = pane.getControl() as { getDomNode?(): HTMLElement | null } | undefined
+            const control = pane.getControl() as { getDomNode?(): HTMLElement | null, trigger?(source: string, handlerId: string, payload: unknown): void } | undefined
             await until(() => !!control?.getDomNode?.()?.querySelector('.view-line'), 5000)
+            // (and its suggestions shown once and hidden: the first list of a start - its rows, icons, the details,
+            // the first words from the editor's worker - took ~0.25 s of the first key that brought it)
+            control?.trigger?.('kodium', 'editor.action.triggerSuggest', {})
+            await until(() => shown('.editor-instance .suggest-widget .monaco-list-row'), 3000)
+            control?.trigger?.('kodium', 'hideSuggestWidget', {})
           } finally {
             await input.revert(pane.group.id).catch(() => undefined)
             await pane.group.closeEditor(input, { preserveFocus: true }).catch(() => undefined)
