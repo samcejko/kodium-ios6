@@ -64,6 +64,9 @@ The first build.
   the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
   editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
   go the asynchronous way.
+- Keyboard Shortcuts opened again keeps the order its ~2000 entries were sorted in (by their labels and commands:
+  ~22,000 comparisons, a localeCompare or two each): the same entries are put in their places (~1.75 s instead of
+  ~1.80 on the iPad 2, interleaved).
 - The first key typed into a JavaScript file after the start no longer waits for JavaScript's snippets: the first
   suggestions read and parsed all 181 of them (VS Code's own, for for, if, log...) - the warm-up behind the splash
   reads them now. Its longest frame ~0.4 s instead of ~0.7 (a small file, three interleaved rounds on the iPad 2). The
