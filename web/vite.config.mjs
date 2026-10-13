@@ -329,9 +329,20 @@ function quickerTrees() {
       ['            this.sorter = {\n                compare(a, b) {\n                    return options.sorter.compare(a.element, b.element);\n                }\n            };\n',
        '            this.sorter = {\n                compare(a, b) {\n                    return options.sorter.compare(a.element, b.element);\n                },\n' +
        '                kdKeepsOrder() {\n                    return !!options.sorter.kdKeepsOrder && options.sorter.kdKeepsOrder();\n                }\n            };\n'],
+      // (- and a node's children already in order - the Outline's symbols by their places, a leaf's none - are not
+      // sorted again: a look along them, the engine's sort only when one is out of order; a stable sort leaves them so)
       ['    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return Iterable.map(elements, treeElement => {\n',
-       '    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter && !this.sorter.kdKeepsOrder()) {\n            elements = [...elements].sort(this.sorter.compare.bind(this.sorter));\n        }\n        return kdMapNow(elements, treeElement => {\n']],
-     mapNow],
+       '    preserveCollapseState(elements = Iterable.empty()) {\n        if (this.sorter && !this.sorter.kdKeepsOrder()) {\n            elements = kdSortedCopy(elements, this.sorter);\n        }\n        return kdMapNow(elements, treeElement => {\n']],
+     mapNow +
+     'function kdSortedCopy(elements, sorter) {\n' +
+     '    const items = Array.isArray(elements) ? elements : [...elements];\n' +
+     '    for (let i = 1; i < items.length; i++) {\n' +
+     '        if (sorter.compare(items[i - 1], items[i]) > 0) {\n' +
+     '            return (items === elements ? items.slice() : items).sort(sorter.compare.bind(sorter));\n' +
+     '        }\n' +
+     '    }\n' +
+     '    return items;\n' +
+     '}\n'],
     ['/vs/platform/quickinput/browser/quickInputList.js', [
       ['                sorter: {\n                    compare: (element, otherElement) => {\n                        if (!this.sortByLabel || !this._lastQueryString) {\n                            return 0;\n                        }\n',
        '                sorter: {\n                    kdKeepsOrder: () => !this.sortByLabel || !this._lastQueryString,\n                    compare: (element, otherElement) => {\n                        if (!this.sortByLabel || !this._lastQueryString) {\n                            return 0;\n                        }\n']]],
@@ -1026,6 +1037,203 @@ function quickerMenus() {
      '    return kept.items;\n' +
      '}\n']
   ])]
+}
+
+// The rows of the quick pick lists - the command palette's, Go to File's, Go to Symbol's - and Go to Symbol's opening
+// (469 symbols of a long file: 1.3 s on the iPad 2):
+// - a row's buttons (Configure Keybinding, Open to the Side...) were a toolbar cleared and made again at every render
+//   of the row - each filtering, each scroll, Go to Symbol's reveal of the symbol at the cursor right after its first
+//   rows: an action item, its hover and its classes, ~60 % of a row's render in the profiler. A row whose buttons look
+//   the same (icons, tooltips, labels) keeps them; they run the new item's handler.
+// - the symbols were sorted by their places three times - already in order, each sort ~4,000 comparisons through the
+//   engine's sort with a function per comparison: a look along them first, sorted only when out of order
+function quickerPicks() {
+  const sortedOnce = 'function kdSortedOnce(items, compare) {\n' +
+    '    for (let i = 1; i < items.length; i++) {\n' +
+    '        if (compare(items[i - 1], items[i]) > 0) {\n            return items.sort(compare);\n        }\n' +
+    '    }\n' +
+    '    return items;\n' +
+    '}\n'
+  return patchModules('kodium-quicker-picks', [
+    ['/vs/platform/quickinput/browser/quickInputList.js', [
+      ['        data.toDisposeElement.clear();\n        data.toolBar.setActions([]);\n    }\n',
+       '        data.toDisposeElement.clear();\n        if (!data.kdActions) {\n            data.toolBar.setActions([]);\n        }\n    }\n'],
+      ['            } = quickInputButtonsToActionArrays(buttons, "quick-input-item", button => element.fireButtonTriggered({\n                button,\n                item: element.item\n            }));\n' +
+       '            data.toolBar.setActions(primary, secondary);\n            data.entry.classList.add("has-actions");\n        } else {\n            data.toolBar.setActions([]);\n',
+       '            } = quickInputButtonsToActionArrays(buttons, "quick-input-item", button => element.fireButtonTriggered({\n                button,\n                item: element.item\n            }));\n' +
+       '            if (!kdKeepActions(data, primary, secondary)) {\n                data.toolBar.setActions(primary, secondary);\n            }\n' +
+       '            data.entry.classList.add("has-actions");\n        } else {\n            data.kdActions = undefined;\n            data.toolBar.setActions([]);\n']],
+     'function kdKeepActions(data, primary, secondary) {\n' +
+     '    let key = secondary.length ? null : "";\n' +
+     '    for (let i = 0; key !== null && i < primary.length; i++) {\n' +
+     '        const a = primary[i];\n' +
+     '        key = Object.getPrototypeOf(a) === Object.prototype\n' +
+     '            ? key + a.id + "\\u0001" + a.class + "\\u0001" + a.tooltip + "\\u0001" + a.label + "\\u0001" + a.enabled + "\\u0002" : null;\n' +
+     '    }\n' +
+     '    const kept = data.kdActions;\n' +
+     '    if (key !== null && kept && kept.key === key && kept.actions.length === primary.length) {\n' +
+     '        for (let i = 0; i < primary.length; i++) {\n            kept.actions[i].run = primary[i].run;\n        }\n' +
+     '        return true;\n' +
+     '    }\n' +
+     '    data.kdActions = key === null ? undefined : { key, actions: primary };\n' +
+     '    return false;\n' +
+     '}\n'],
+    ['/vs/editor/contrib/documentSymbols/browser/outlineModel.js', [
+      ['        return roots.sort((a, b) => Range.compareRangesUsingStarts(a.range, b.range));\n',
+       '        return kdSortedOnce(roots, (a, b) => Range.compareRangesUsingStarts(a.range, b.range));\n'],
+      ['        return bucket.sort(\n            (a, b) => Position.compare',
+       '        return kdSortedOnce(bucket,\n            (a, b) => Position.compare']],
+     sortedOnce],
+    ['/vs/editor/contrib/quickAccess/browser/gotoSymbolQuickAccess.js', [
+      ['        const sortedFilteredSymbolPicks = filteredSymbolPicks.sort(\n            (symbolA, symbolB) =>',
+       '        const sortedFilteredSymbolPicks = kdSortedOnce(filteredSymbolPicks,\n            (symbolA, symbolB) =>'],
+      // (- its picks, the symbol at the cursor made the active one and the end of "busy" were three updates of the
+      // pick, each laying the widget out to measure its list - after the rows the one before had drawn: one update)
+      ['                if (items.length > 0) {\n                    picker.items = items;\n',
+       '                if (items.length > 0 && typeof picker.kdBatch === "function") {\n' +
+       '                    picker.kdBatch(() => {\n' +
+       '                        picker.items = items;\n' +
+       '                        if (positionToEnclose && query.original.length === 0) {\n' +
+       '                            const candidate = findLast(items, item => Boolean(\n' +
+       '                                item.type !== "separator" && item.range && Range.containsPosition(item.range.decoration, positionToEnclose)\n' +
+       '                            ));\n' +
+       '                            if (candidate) {\n                                picker.activeItems = [candidate];\n                            }\n' +
+       '                        }\n' +
+       '                        if (!token.isCancellationRequested) {\n                            picker.busy = false;\n                        }\n' +
+       '                    });\n' +
+       '                } else if (items.length > 0) {\n                    picker.items = items;\n'],
+      ['            } finally {\n                if (!token.isCancellationRequested) {\n                    picker.busy = false;\n                }\n            }\n',
+       '            } finally {\n                if (!token.isCancellationRequested && picker.busy) {\n                    picker.busy = false;\n                }\n            }\n']],
+     sortedOnce],
+    ['/vs/platform/quickinput/browser/quickInput.js', [
+      ['    update() {\n        if (!this.visible) {\n            return;\n        }\n        const scrollTopBefore = this.keepScrollPosition ? this.scrollTop : 0;\n',
+       '    kdBatch(fn) {\n' +
+       '        this.kdHold = (this.kdHold || 0) + 1;\n' +
+       '        try {\n            fn();\n        } finally {\n            this.kdHold--;\n        }\n' +
+       '        if (!this.kdHold) {\n            this.update();\n        }\n' +
+       '    }\n' +
+       '    update() {\n        if (!this.visible || this.kdHold) {\n            return;\n        }\n        const scrollTopBefore = this.keepScrollPosition ? this.scrollTop : 0;\n']]]
+  ])
+}
+
+// The Outline view in the Explorer, with a long file (469 symbols): every move of the cursor made its whole tree again
+// half a second later - a frame of ~0.4 s on the iPad 2 after each arrow key or tap - though only which symbol is the
+// cursor's had changed (the outline says so: affectOnlyActiveElement), and that one is revealed by a listener of its
+// own. A change of the text still makes the tree again, cheaper:
+// - its filter asked the settings, through the resource's folder and language, whether each symbol's kind is shown
+//   (outline.showFunctions...): ~0.9 ms a symbol; the answers are kept for the task that asks them
+// - each symbol's children went from the outline's Map to the tree through the engine's iterators and a generator per
+//   symbol (ES5: a regenerator state machine): arrays now
+function quickerOutline() {
+  return patchModules('kodium-quicker-outline', [
+    // (- and a switch to another editor made the Outline's tree for it - the tree's widget and all its symbols - before
+    // the frame that shows the editor: after that frame now. The widget - its list, scroll bars, find, context keys,
+    // ~0.3 s on the iPad 2 - was made anew for every editor: the one before is kept and given the new outline's symbols
+    // when it shows the same kind of outline (its renderers, filter, sorter and identities hold nothing of a file), and
+    // when they are the symbols it shows - the same file, unchanged, the view shown again - they stay as they are)
+    ['/vs/workbench/contrib/outline/browser/outlinePane.js', [
+      ['        const didCapture = this._captureViewState();\n        this._editorControlDisposables.clear();\n',
+       '        const didCapture = this._captureViewState();\n        this.kdKeep = true;\n        try {\n            this._editorControlDisposables.clear();\n        } finally {\n            this.kdKeep = false;\n        }\n'],
+      // (and kept while the view is hidden - another view of the side bar shown, the side bar closed - for when it
+      // shows again; a kept tree is out of the page's layout until it is given its symbols, after the frame that
+      // shows the view: put back in that frame, its old rows cost 0.2 s before the view could show)
+      ['            if (!visible) {\n                this._editorListener.clear();\n                this._editorPaneDisposables.clear();\n                this._editorControlDisposables.clear();\n',
+       '            if (!visible) {\n                this._editorListener.clear();\n                this._editorPaneDisposables.clear();\n' +
+       '                this._captureViewState();\n' +
+       '                this.kdKeep = true;\n                try {\n                    this._editorControlDisposables.clear();\n                } finally {\n                    this.kdKeep = false;\n                }\n'],
+      ['        const sorter = ( new OutlineTreeSorter(newOutline.config.comparator, this._outlineViewState.sortBy));\n        const tree = this._instantiationService.createInstance(\n',
+       '        const kdKept = this.kdKeptTree;\n' +
+       '        this.kdKeptTree = undefined;\n' +
+       '        const kdReuse = !!kdKept && kdKept.kdKind === newOutline.outlineKind && kdKept.kdCollapse === !!newOutline.config.options.collapseByDefault &&\n' +
+       '            kdSameTypes(kdKept.kdRendererTypes, newOutline.config.renderers) && !!kdKept.kdSorter;\n' +
+       '        if (kdKept && !kdReuse) {\n            kdKept.dispose();\n        }\n' +
+       '        const sorter = kdReuse ? kdKept.kdSorter : ( new OutlineTreeSorter(newOutline.config.comparator, this._outlineViewState.sortBy));\n' +
+       '        let kdFresh = kdReuse, kdSame = false;\n' +
+       '        if (kdReuse) {\n            sorter.order = this._outlineViewState.sortBy;\n            kdKept.dataSource = newOutline.config.treeDataSource;\n            kdKept.getHTMLElement().style.display = "";\n' +
+       '            const kdOld = kdKept.getInput();\n' +
+       '            if (kdOld && kdOld._outlineModel && newOutline._outlineModel && kdOld._outlineModel.children === newOutline._outlineModel.children) {\n' +
+       '                kdKept.input = newOutline;\n                kdFresh = false;\n                kdSame = true;\n' +
+       '            }\n' +
+       '        }\n' +
+       '        const tree = kdReuse ? kdKept : this._instantiationService.createInstance(\n'],
+      ['            } else if (!tree.getInput()) {\n                this._domNode.classList.remove("message");\n',
+       '            } else if (kdSame) {\n                kdSame = false;\n                this._domNode.classList.remove("message");\n' +
+       '            } else if (!tree.getInput() || kdFresh) {\n                kdFresh = false;\n                this._domNode.classList.remove("message");\n'],
+      ['        this._tree = tree;\n        this._editorControlDisposables.add(toDisposable(() => {\n            tree.dispose();\n            this._tree = undefined;\n        }));\n',
+       '        this._tree = tree;\n' +
+       '        tree.kdKind = newOutline.outlineKind;\n' +
+       '        tree.kdCollapse = !!newOutline.config.options.collapseByDefault;\n' +
+       '        tree.kdRendererTypes = newOutline.config.renderers.map(r => r.constructor);\n' +
+       '        tree.kdSorter = sorter;\n' +
+       '        this._editorControlDisposables.add(toDisposable(() => {\n' +
+       '            if (this.kdKeep && !this.kdKeptTree) {\n                this.kdKeptTree = tree;\n                tree.getHTMLElement().style.display = "none";\n            } else {\n                tree.dispose();\n            }\n' +
+       '            this._tree = undefined;\n' +
+       '        }));\n'],
+      ['    dispose() {\n        this._disposables.dispose();\n',
+       '    dispose() {\n        this.kdKeptTree?.dispose();\n        this.kdKeptTree = undefined;\n        this._disposables.dispose();\n'],
+      ['        if (cts.token.isCancellationRequested) {\n            newOutline?.dispose();\n            return;\n        }\n        this._editorControlDisposables.add(newOutline);\n',
+       '        if (cts.token.isCancellationRequested) {\n            newOutline?.dispose();\n            return;\n        }\n' +
+       '        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));\n' +
+       '        if (cts.token.isCancellationRequested) {\n            newOutline?.dispose();\n            return;\n        }\n' +
+       '        this._editorControlDisposables.add(newOutline);\n'],
+      ['        this._editorControlDisposables.add(newOutline.onDidChange(updateTree));\n',
+       '        this._editorControlDisposables.add(newOutline.onDidChange(e => {\n' +
+       '            if (e && e.affectOnlyActiveElement && tree.getInput()) {\n                return;\n            }\n' +
+       '            updateTree();\n' +
+       '        }));\n']],
+     'function kdSameTypes(types, renderers) {\n' +
+     '    if (!types || types.length !== renderers.length) {\n        return false;\n    }\n' +
+     '    for (let i = 0; i < types.length; i++) {\n        if (!renderers[i] || renderers[i].constructor !== types[i]) {\n            return false;\n        }\n    }\n' +
+     '    return true;\n' +
+     '}\n'],
+    ['/vs/workbench/contrib/codeEditor/browser/outline/documentSymbolsTree.js', [
+      ['        const configKey = `${this._prefix}.${configName}`;\n        return this._textResourceConfigService.getValue(outline?.uri, configKey);\n',
+       '        const configKey = `${this._prefix}.${configName}`;\n' +
+       '        if (!kdFilterListens) {\n' +
+       '            kdFilterListens = true;\n' +
+       '            this._textResourceConfigService.onDidChangeConfiguration(() => {\n                kdFilterValues = undefined;\n            });\n' +
+       '        }\n' +
+       '        let kdValues = kdFilterValues;\n' +
+       '        if (!kdValues) {\n' +
+       '            kdValues = kdFilterValues = Object.create(null);\n' +
+       '            setTimeout(() => {\n                kdFilterValues = undefined;\n            }, 0);\n' +
+       '        }\n' +
+       '        const kdKey = String(outline?.uri) + "\\u0001" + configKey;\n' +
+       '        let kdValue = kdValues[kdKey];\n' +
+       '        if (kdValue === undefined) {\n            kdValue = kdValues[kdKey] = this._textResourceConfigService.getValue(outline?.uri, configKey);\n        }\n' +
+       '        return kdValue;\n']],
+     'let kdFilterValues, kdFilterListens = false;\n'],
+    // (- a change of the file's problems made the tree again too - after each pause of typing that changed a message -
+    // though the symbols show only how many errors and warnings each has and the worst: only when that changed now)
+    ['/vs/workbench/contrib/codeEditor/browser/outline/documentSymbolsOutline.js', [
+      ['                    return ( parent.children.values());\n', '                    return kdValues(parent.children);\n'],
+      ['                    return ( this._outlineModel.children.values());\n', '                    return kdValues(this._outlineModel.children);\n'],
+      ['                if (isEqual(model.uri, textModel.uri)) {\n                    this._applyMarkersToOutline(model);\n                    this._onDidChange.fire({});\n                }\n',
+       '                if (isEqual(model.uri, textModel.uri)) {\n' +
+       '                    const kdBefore = kdMarkerState(model);\n' +
+       '                    this._applyMarkersToOutline(model);\n' +
+       '                    if (kdMarkerState(model) !== kdBefore) {\n                        this._onDidChange.fire({});\n                    }\n' +
+       '                }\n']],
+     'function kdValues(map) {\n' +
+     '    const out = [];\n' +
+     '    if (map.size) {\n        map.forEach(value => out.push(value));\n    }\n' +
+     '    return out;\n' +
+     '}\n' +
+     'function kdMarkerState(model) {\n' +
+     '    let state = "";\n' +
+     '    const visit = element => {\n' +
+     '        if (element.marker) {\n            state += element.id + "\\u0001" + element.marker.count + "\\u0001" + element.marker.topSev + "\\u0002";\n        }\n' +
+     '        if (element.children && element.children.size) {\n            element.children.forEach(visit);\n        }\n' +
+     '    };\n' +
+     '    model.children.forEach(visit);\n' +
+     '    return state;\n' +
+     '}\n'],
+    ['/vs/base/browser/ui/tree/dataTree.js', [
+      ['        const children = [...this.dataSource.getChildren(element)];\n        const elements = Iterable.map(children, element => {\n',
+       '        const kdSource = this.dataSource.getChildren(element);\n' +
+       '        const children = Array.isArray(kdSource) ? kdSource.slice() : [...kdSource];\n' +
+       '        const elements = children.map(element => {\n']]]
+  ])
 }
 
 // The command palette at every opening (the profiler, after the menus' kept items above): each of the ~1000 commands
@@ -3310,7 +3518,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

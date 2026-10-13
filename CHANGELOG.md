@@ -64,6 +64,34 @@ The first build.
   the opening had for the WebThread (110-140 ms) - and the editor's toolbar and the status bar's entries for the
   editor come after the next frame instead of before it (75 and 50 ms). Many reads in a row (a search) and big files
   go the asynchronous way.
+- Switching editors with the Outline view open in the Explorer: a file's lines show in ~0.5 s instead of ~1.1 (a small
+  file) and ~0.9 s instead of ~1.9 (1,300 lines, 469 symbols), and the switch is done - the Outline too - in ~1.7 s
+  instead of ~2.5 (interleaved on the iPad 2, which ran low on memory then: every time ~2x what it takes after a
+  restart). The Outline threw its tree away at every switch and made a new one - the widget with its list, scroll bars,
+  find and context keys, and all the symbols - before the frame that shows the editor. Its tree is kept and given the
+  new file's symbols when the outline is of the same kind (its renderers, filter, sorter and identities hold nothing of
+  a file), and that comes after the editor's frame. The tree is kept while the view is hidden too (another view of
+  the side bar, the side bar closed), out of the page's layout, and shown again with the same file unchanged it keeps
+  its symbols, its scroll and what was expanded: the side bar opened with that long file is done in ~1.3 s instead of
+  ~1.9 (its folders show 0.15 s later, the Outline no longer made anew after them).
+- Moving the cursor in a long file no longer stalls: the Outline view in the Explorer made its whole tree again half a
+  second after every move - each arrow key, each tap into the text - though only which symbol is the cursor's had
+  changed, and that one has a listener of its own (a file of 1,300 lines and 469 symbols: the longest frame after a move
+  ~375 ms on the iPad 2, now ~76 ms, interleaved). After a pause in typing the tree is still made again, cheaper: its
+  filter asked the settings, through the file's folder and language, whether each symbol's kind is shown (~0.9 ms a
+  symbol - the answers are kept for the task now), the symbols went from the outline's Maps to the tree through the
+  engine's iterators and a generator per symbol (arrays now), each symbol's children were sorted though in order (a
+  look along them first), and a change of the file's problems made the tree again even when the counts of errors and
+  warnings the symbols show stayed the same (only when they change now). The stalls after a pause in that file: 0.6-0.9
+  s of frames over 50 ms in the 2.5 s after a key instead of 1.4-1.6 s (interleaved; the first key after opening the
+  file still ~2 s).
+- The rows of the quick pick lists - the command palette's, Go to File's, Go to Symbol's - keep their buttons
+  (Configure Keybinding, Open to the Side...) when they show another item with the same buttons: a toolbar was cleared
+  and made again at every render of a row - each filtering, each scroll - an action item with its hover each time.
+  Go to Symbol's symbols are no longer sorted three times though in order, and its picks, the symbol at the cursor
+  made the active one and the end of "busy" are one update of the list instead of three, each of which laid the
+  widget out to measure it (a file of 469 symbols, interleaved on the iPad 2: the rows and the sorts ~70 ms, the one
+  update ~100 ms more - ~0.9 s instead of ~1.0; the palette and its filtering ~20-30 ms sooner).
 - A finger's scroll no longer stops half way. A touch goes on to the element it began on, and the scroll under the
   finger recycles that element - a line of the editor, a row of a list - or draws it anew; from then on its moves
   reached no listener of the document, so the scroll stopped (measured with touches made on a line: 36 lines into a
