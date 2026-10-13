@@ -31,6 +31,7 @@ import { ViewContainerLocation } from '@codingame/monaco-vscode-api/vscode/vs/wo
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
 import { IEditorGroupsService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorGroupsService.service'
 import { URI } from '@codingame/monaco-vscode-api/vscode/vs/base/common/uri'
+import { ISnippetsService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/contrib/snippets/browser/snippets.service'
 
 // (while it runs: files from other apps wait - share.ts - and the splash says how far it is)
 export let warming = false
@@ -163,6 +164,9 @@ export async function warmUp(): Promise<void> {
         }
         const group = groups.activeGroup as unknown as { editorPane?: { kdPreparePane?(typeId: string): boolean } }
         try { group.editorPane?.kdPreparePane?.('workbench.editors.files.textFileEditor') } catch { /* made at the first file then */ }
+        // (and JavaScript's snippets read and parsed - 181 of them, kept for the session: it was the first suggestions'
+        // in a JavaScript file, ~0.15 s of the first key typed into it on the iPad 2)
+        try { await (await getService(ISnippetsService)).getSnippets('javascript') } catch { /* read at the first suggestions then */ }
       },
       // the Settings editor, its tree built (unless one is open already - restored): opened again, it shows that tree
       async () => {
