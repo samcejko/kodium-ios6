@@ -361,6 +361,13 @@ function quickerTrees() {
     '    for (const item of items) {\n        out[i] = fn(item, i);\n        i++;\n    }\n' +
     '    return out;\n' +
     '}\n'
+  const kdArray = 'function kdArray(items) {\n' +
+    '    if (!items) {\n        return [];\n    }\n' +
+    '    if (Array.isArray(items)) {\n        return items;\n    }\n' +
+    '    const out = [];\n' +
+    '    for (const item of items) {\n        out.push(item);\n    }\n' +
+    '    return out;\n' +
+    '}\n'
   return patchModules('kodium-quicker-trees', [
     // (and the elements not sorted while their sorter says it keeps them as they are: the command palette's and Go to
     // Symbol's lists without a filter - ~4,000 comparisons of 500 picks that all answered 0)
@@ -393,7 +400,29 @@ function quickerTrees() {
     // which its model reads to the end anyway: an array now)
     ['/vs/base/browser/ui/tree/asyncDataTree.js', [
       ['            children: node.hasChildren ? Iterable.map(node.children, child => this.asTreeElement(child, viewStateContext)) : [],\n',
-       '            children: node.hasChildren ? node.children.map(child => this.asTreeElement(child, viewStateContext)) : [],\n']]],
+       '            children: node.hasChildren ? node.children.map(child => this.asTreeElement(child, viewStateContext)) : [],\n'],
+      ['            children = Iterable.filter(children, e => {\n                const result = this.filter.filter(e, TreeVisibility.Visible);\n',
+       '            children = kdArray(children).filter(e => {\n                const result = this.filter.filter(e, TreeVisibility.Visible);\n']],
+     kdArray],
+    // (- and a compressed tree's - the Search view's results - compressed, decompressed, recompressed and spliced its
+    // elements' children through generators at every update: ~3.7 ms an element on the iPad 2, a second for the first
+    // 150 files of a search; arrays now)
+    ['/vs/base/browser/ui/tree/compressedObjectTreeModel.js', [
+      ['        children: Iterable.map(Iterable.from(element.children), noCompress),\n',
+       '        children: kdArray(element.children).map(noCompress),\n'],
+      ['        [children, childrenIterator] = Iterable.consume(Iterable.from(element.children), 2);\n',
+       '        children = kdArray(element.children);\n        childrenIterator = undefined;\n'],
+      ['        children: Iterable.map(Iterable.concat(children, childrenIterator), compress),\n',
+       '        children: children.map(compress),\n'],
+      ['        children = Iterable.map(Iterable.from(element.children), el => _decompress(el, 0));\n',
+       '        children = kdArray(element.children).map(el => _decompress(el, 0));\n'],
+      ['        children: Iterable.map(Iterable.from(treeElement.children), e => splice(e, element, children))\n',
+       '        children: kdArray(treeElement.children).map(e => splice(e, element, children))\n'],
+      ['            const compressedChildren = Iterable.map(children, this.enabled ? compress : noCompress);\n',
+       '            const compressedChildren = kdArray(children).map(this.enabled ? compress : noCompress);\n'],
+      ['        const decompressedRootChildren = Iterable.map(rootChildren, decompress);\n        const recompressedRootChildren = Iterable.map(decompressedRootChildren, enabled ? compress : noCompress);\n',
+       '        const decompressedRootChildren = kdArray(rootChildren).map(decompress);\n        const recompressedRootChildren = decompressedRootChildren.map(enabled ? compress : noCompress);\n']],
+     kdArray],
     ['/vs/base/browser/ui/tree/abstractTree.js', [
       ['    has(node) {\n        return ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n',
        '    has(node) {\n        return this.nodes.length > 0 && ( this.nodeSet.has(node));\n    }\n    onDidModelSplice(\n        {\n            insertedNodes,\n            deletedNodes\n        }\n    ) {\n' +
@@ -2368,14 +2397,50 @@ function memoryRelief() {
 // "when" editor put its suggestions out of place, in Chromium - and the rows' top laid the page out at every frame of
 // a finger's scroll: ~110-130 ms a frame on the iPad 2. (The "when" editor's suggestions go into a container of their
 // own beside the table, not into its rows.)
+//
+// And the big scrolling lists - the Explorer, the Search view's results, the Problems, the Outline, the Timeline,
+// Keyboard Shortcuts - draw rows ahead, as the editor draws lines ahead (smootherScroll): a frame of a finger's scroll
+// cost ~15 ms when it only moved the rows and ~50 ms when a row came onto the screen (the Explorer on the iPad 2: the
+// old WebKit's style, layout, layers and the ResizeObserver polyfill's measuring for any change of the rows, the row
+// itself ~2-5 ms), which at a finger's pace was nearly every frame. The rows drawn are those of a stretch up to 88 px
+// longer above and 176 px below the screen that moves by 88 px at a time, so rows change every few frames, four at a
+// time. (Not the lists made again at every key - the command palette's, the suggestions' - nor those whose rows have
+// heights of their own to measure.)
+const KD_OVERSCAN_USERS = ['FileExplorer', 'SearchView', 'MarkersView', 'OutlinePane', 'TimelinePane', 'KeybindingsEditor']
 function smootherLists() {
   return patchModules('kodium-smoother-lists', [
+    ['/vs/base/browser/ui/list/listWidget.js', [
+      ['        const viewOptions = {\n            ..._options,\n            dnd: _options.dnd && ( new ListViewDragAndDrop(this, _options.dnd))\n        };\n',
+       '        const viewOptions = {\n            ..._options,\n            dnd: _options.dnd && ( new ListViewDragAndDrop(this, _options.dnd)),\n            kdUser: user\n        };\n']]],
+    ['/vs/base/browser/ui/list/listView.js', [
+      ['        this.supportDynamicHeights = options.supportDynamicHeights ?? DefaultOptions.supportDynamicHeights;\n',
+       '        this.supportDynamicHeights = options.supportDynamicHeights ?? DefaultOptions.supportDynamicHeights;\n' +
+       '        this.kdOverscan = !this.supportDynamicHeights && ' + JSON.stringify(KD_OVERSCAN_USERS) + '.indexOf(options.kdUser) !== -1 ? 88 : 0;\n'],
+      ['    get lastVisibleIndex() {\n        const range = this.getRenderRange(this.lastRenderTop, this.lastRenderHeight);\n',
+       '    get lastVisibleIndex() {\n        const range = this.kdOverscan ? this.getVisibleRange(this.lastRenderTop, this.lastRenderHeight) : this.getRenderRange(this.lastRenderTop, this.lastRenderHeight);\n'],
+      ['    getRenderRange(renderTop, renderHeight) {\n        const range = this.getVisibleRange(renderTop, renderHeight);\n',
+       '    kdOverscanRange(renderTop, renderHeight) {\n' +
+       '        const step = this.kdOverscan;\n' +
+       '        const base = Math.floor(Math.max(0, renderTop) / step) * step;\n' +
+       '        const top = Math.max(0, base - step);\n' +
+       '        return this.getVisibleRange(top, base + renderHeight + 2 * step - top);\n' +
+       '    }\n' +
+       '    getRenderRange(renderTop, renderHeight) {\n' +
+       '        const range = this.kdOverscan && renderHeight > 0 ? this.kdOverscanRange(renderTop, renderHeight) : this.getVisibleRange(renderTop, renderHeight);\n']]],
     ['/vs/workbench/contrib/preferences/browser/keybindingsEditor.js', [
       ['                openOnSingleClick: false,\n                transformOptimization: false\n',
        '                openOnSingleClick: false,\n                transformOptimization: true\n']]],
     ['/vs/workbench/contrib/preferences/browser/settingsTree.js', [
       ['            renderIndentGuides: RenderIndentGuides.None,\n            transformOptimization: false\n',
-       '            renderIndentGuides: RenderIndentGuides.None,\n            transformOptimization: true\n']]]
+       '            renderIndentGuides: RenderIndentGuides.None,\n            transformOptimization: true\n']]],
+    // (- and a file's decorations - the Explorer's, asked for each row drawn, given asynchronously and none for almost
+    // every file - told no change when an answer of none came for a question still open: nothing had been shown for it.
+    // Each such answer had every file label in the workbench ask whether it was affected, and the folders' labels
+    // gather their children's decorations again - every file below them - through generators: ~25 ms each, at almost
+    // every frame of a scroll through the Explorer)
+    ['/vs/workbench/services/decorations/browser/decorationsService.js', [
+      ['        const old = map.get(provider);\n        map.set(provider, deco);\n        if (deco || old) {\n',
+       '        const old = map.get(provider);\n        map.set(provider, deco);\n        if (deco || (old && !(old instanceof DecorationDataRequest))) {\n']]]
   ])
 }
 
@@ -2390,7 +2455,7 @@ function listenerTimers() {
        '            const kdFn = callback;\n            if (thisArgs) {\n                callback = callback.bind(thisArgs);\n            }\n            const contained = ( new UniqueContainer(callback));\n            contained.kdFn = kdFn;\n'],
       ['        try {\n            listener.value(value);\n        } catch (e) {\n            errorHandler(e);\n        }\n',
        '        const kdT = self.__kdTask ? Date.now() : 0;\n        try {\n            listener.value(value);\n        } catch (e) {\n            errorHandler(e);\n        }\n' +
-       '        if (kdT) {\n            const kdMs = Date.now() - kdT;\n            if (kdMs >= 3 && self.__kdTask) {\n                self.__kdTask("listener", listener.kdFn || listener.value, kdMs);\n            }\n        }\n']]]
+       '        if (kdT) {\n            const kdMs = Date.now() - kdT;\n            if (kdMs >= 3 && self.__kdTask) {\n                self.__kdTask("listener", listener.kdFn || listener.value, kdMs);\n            }\n        }\n']]],
   ])
 }
 

@@ -111,6 +111,19 @@ The first build.
   (~170 ms on the iPad 2). (A shell opened ahead for the next terminal gained at most 60 ms - the terminal's view and
   xterm.js keep the page busy until its prompt is drawn -, and xterm.js's module run in the warm-up ~70 ms of the
   first terminal for 0.1-0.3 s more of the start: neither is kept.)
+- Scrolling the big lists with a finger - the Explorer, the Search view's results, the Problems, the Outline, the
+  Timeline, Keyboard Shortcuts - is smoother: they draw rows ahead, as the editor draws lines ahead. A frame of the
+  scroll cost ~15 ms on the iPad 2 when it only moved the rows and ~50 ms when a row came onto the screen, which at a
+  finger's pace was nearly every frame (the old WebKit's style, layout and layers for any change of the rows); the rows
+  of a stretch up to 88 px above and 176 px below the screen are drawn now, the stretch moving 88 px at a time - most
+  frames only move the rows. The Explorer through 300 files: median ~18 ms a frame instead of ~52, Keyboard
+  Shortcuts ~17 instead of ~58 (the command palette's and the suggestions' lists, made again at every key, do not).
+- An Explorer row coming onto the screen no longer has every file label of the workbench re-check its decorations:
+  the Explorer gives a file's decorations asynchronously, none for nearly every file, and an answer of none to a
+  question still open was told as a change - nothing had been shown for it - after which the folders' labels gathered
+  the decorations of every file below them again. The heaviest frames of a scroll through the Explorer: ~89 ms
+  instead of ~131 (the slowest tenth). And a compressed tree's elements (the Search view's results) go through arrays
+  instead of generators when the tree is updated.
 - Scrolling the Settings editor and Keyboard Shortcuts with a finger: ~17 ms a frame instead of ~108 in the Settings
   editor, ~58 instead of ~130 in Keyboard Shortcuts (median of 120 frames on the iPad 2). VS Code moves their rows by
   their top instead of the transform the other lists use (its "transform optimization", off for these two - a row's
