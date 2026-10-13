@@ -111,6 +111,11 @@ The first build.
   (~170 ms on the iPad 2). (A shell opened ahead for the next terminal gained at most 60 ms - the terminal's view and
   xterm.js keep the page busy until its prompt is drawn -, and xterm.js's module run in the warm-up ~70 ms of the
   first terminal for 0.1-0.3 s more of the start: neither is kept.)
+- The first terminal of a start shows its prompt ~0.35 s sooner (~1.75 s instead of ~2.1 on the iPad 2, interleaved):
+  the warm-up behind the splash makes the panel's Terminal view - its tabs, their list, its title bar's actions -
+  without a terminal (0.5-0.7 s more of the start). And the warm-up no longer starts a shell: showing the panel opens
+  its last view with the focus, and the Terminal view made a terminal when it got the focus empty - whenever the
+  Terminal had been the panel's last view, a shell ran unseen from the start on.
 - A file opened as a preview (a single tap in the Explorer: its tab's name in italics) is still open after a restart.
   The warm-up behind the splash opened its own untitled editor as a preview too, which takes the place of the group's
   preview - the one the start had just restored - and closed it with itself; it opens as a tab of its own now.

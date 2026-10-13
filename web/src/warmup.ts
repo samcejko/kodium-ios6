@@ -122,19 +122,32 @@ export async function warmUp(): Promise<void> {
       async () => { await pick('>'); await pick('>vie') },
       // Go to File
       async () => { await pick(''); await pick('hel') },
-      // the panel, its Problems view, as it was
+      // the panel, its Problems view and its Terminal view, as it was
       async () => {
-        if (!panel) { layout.setPartHidden(false, Parts.PANEL_PART); await until(() => shown('.part.panel'), 5000) }
-        // (opened, not toggled: workbench.actions.view.problems hides the panel when the Problems view has the focus -
-        // which showing the panel gave it, when it was the last one)
-        await panes.openPaneComposite('workbench.panel.markers', ViewContainerLocation.Panel, false)
-        await until(() => shown('.part.panel .composite[id="workbench.panel.markers"]'), 3000)
-        if (panelView) await panes.openPaneComposite(panelView, ViewContainerLocation.Panel, false)
-        layout.setPartHidden(true, Parts.PANEL_PART)
-        await until(() => !shown('.part.panel'), 3000)
-        layout.setPartHidden(false, Parts.PANEL_PART)
-        await until(() => shown('.part.panel'), 3000)
-        if (!panel) { layout.setPartHidden(true, Parts.PANEL_PART); await until(() => !shown('.part.panel'), 3000) }
+        // (no terminal made meanwhile: the Terminal view makes one as it shows or gets the focus empty - the panel
+        // shown opens its last view with the focus: when that was the Terminal, a shell was started by the warm-up and
+        // left there)
+        const global = window as { __kd_viewOnly?: boolean }
+        global.__kd_viewOnly = true
+        try {
+          if (!panel) { layout.setPartHidden(false, Parts.PANEL_PART); await until(() => shown('.part.panel'), 5000) }
+          // (opened, not toggled: workbench.actions.view.problems hides the panel when the Problems view has the
+          // focus - which showing the panel gave it, when it was the last one)
+          await panes.openPaneComposite('workbench.panel.markers', ViewContainerLocation.Panel, false)
+          await until(() => shown('.part.panel .composite[id="workbench.panel.markers"]'), 3000)
+          // (the Terminal view made, without a terminal: its tabs, their list, its title bar's actions - made by the
+          // first terminal of a start otherwise)
+          await panes.openPaneComposite('terminal', ViewContainerLocation.Panel, false)
+          await until(() => shown('.part.panel .composite[id="terminal"]'), 3000)
+          if (panelView) await panes.openPaneComposite(panelView, ViewContainerLocation.Panel, false)
+          layout.setPartHidden(true, Parts.PANEL_PART)
+          await until(() => !shown('.part.panel'), 3000)
+          layout.setPartHidden(false, Parts.PANEL_PART)
+          await until(() => shown('.part.panel'), 3000)
+          if (!panel) { layout.setPartHidden(true, Parts.PANEL_PART); await until(() => !shown('.part.panel'), 3000) }
+        } finally {
+          global.__kd_viewOnly = false
+        }
       },
       // the side bar, the Search view, the Explorer
       async () => {

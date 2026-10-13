@@ -2363,6 +2363,21 @@ function memoryRelief() {
   ])
 }
 
+// A build for measuring which listeners of VS Code's events take the time (KODIUM_LISTENER_TIMERS=1 .\web\build.ps1):
+// every listener's call of 3 ms or more reported to self.__kdTask("listener", the listener, ms), when a measuring script
+// has set it - nested ones too, and a listener given with its `this` as itself (not as the bound function)
+function listenerTimers() {
+  if (!process.env.KODIUM_LISTENER_TIMERS) return null
+  return patchModules('kodium-listener-timers', [
+    ['/vs/base/common/event.js', [
+      ['            if (thisArgs) {\n                callback = callback.bind(thisArgs);\n            }\n            const contained = ( new UniqueContainer(callback));\n',
+       '            const kdFn = callback;\n            if (thisArgs) {\n                callback = callback.bind(thisArgs);\n            }\n            const contained = ( new UniqueContainer(callback));\n            contained.kdFn = kdFn;\n'],
+      ['        try {\n            listener.value(value);\n        } catch (e) {\n            errorHandler(e);\n        }\n',
+       '        const kdT = self.__kdTask ? Date.now() : 0;\n        try {\n            listener.value(value);\n        } catch (e) {\n            errorHandler(e);\n        }\n' +
+       '        if (kdT) {\n            const kdMs = Date.now() - kdT;\n            if (kdMs >= 3 && self.__kdTask) {\n                self.__kdTask("listener", listener.kdFn || listener.value, kdMs);\n            }\n        }\n']]]
+  ])
+}
+
 // A build for measuring the opening of a file (KODIUM_OPEN_TIMERS=1 .\web\build.ps1): self.__kdMark(name) along the
 // way from the editor service to the editor's model and view, when a measuring script has set it.
 function openTimers() {
@@ -2762,7 +2777,16 @@ function quickerTerminal() {
     // the old WebKit parsed its 58 KB again whenever the terminal came back into the page, and made the page's rule
     // sets anew at once - see sharedListStyles. Its ~770 rules put into the lists' shared sheet one by one instead
     // made a new terminal no quicker.)
+    // (- and the view makes no terminal when it shows or gets the focus while the warm-up has it shown,
+    // self.__kd_viewOnly: the warm-up makes the view - its tabs, their list, its title bar's actions - without a shell,
+    // and a terminal shows in it as it would: the view makes one as it shows empty, the first time since the start, or
+    // gets the focus empty. The panel shown again opens its last view with the focus: the warm-up started a shell
+    // whenever that was the Terminal)
     ['/vs/workbench/contrib/terminal/browser/terminalView.js', [
+      ['    _initializeTerminal(checkRestoredTerminals) {\n        if (this.isBodyVisible() &&',
+       '    _initializeTerminal(checkRestoredTerminals) {\n        if (typeof self !== "undefined" && self.__kd_viewOnly) {\n            return;\n        }\n        if (this.isBodyVisible() &&'],
+      ['            if (this._terminalGroupService.instances.length === 0 && !this._isTerminalBeingCreated) {\n',
+       '            if (this._terminalGroupService.instances.length === 0 && !this._isTerminalBeingCreated && !(typeof self !== "undefined" && self.__kd_viewOnly)) {\n'],
       ['        createStyleSheet(this._parentDomElement);\n', ''],
       ['        this._styleElement = createStyleSheet(container);\n',
        '        this._styleElement = document.createElement("style");\n'],
@@ -3937,7 +3961,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)
