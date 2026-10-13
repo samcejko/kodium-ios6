@@ -151,7 +151,8 @@ export async function warmUp(): Promise<void> {
       // editor which untitled documents are shown in, made now; and the one for files (the text file editor, its own
       // kind), made without a file: the first file opened has it there
       async () => {
-        const pane = await editors.openEditor({ resource: URI.from({ scheme: 'untitled', path: 'kodium-warm-up.js' }), languageId: 'javascript', options: { pinned: false } })
+        // (pinned: as a preview it would take the place of a preview the start restored - and close it)
+        const pane = await editors.openEditor({ resource: URI.from({ scheme: 'untitled', path: 'kodium-warm-up.js' }), languageId: 'javascript', options: { pinned: true } })
         const input = pane?.input
         if (pane && input) {
           try {
@@ -169,6 +170,8 @@ export async function warmUp(): Promise<void> {
         }
         const group = groups.activeGroup as unknown as { editorPane?: { kdPreparePane?(typeId: string): boolean } }
         try { group.editorPane?.kdPreparePane?.('workbench.editors.files.textFileEditor') } catch { /* made at the first file then */ }
+        // (not a file opened and closed instead - one of a file system of its own, in memory, its suggestions shown in
+        // the files' editor: the start 4-5 s longer, the first file and the first suggestions not measurably quicker)
         // (not the diff editor's pane: the first diff of a start 0.3 s sooner, for 1.2 s more of the start and 15 MB
         // more at its peak)
         // (and JavaScript's snippets read and parsed - 181 of them, kept for the session: it was the first suggestions'

@@ -111,6 +111,9 @@ The first build.
   (~170 ms on the iPad 2). (A shell opened ahead for the next terminal gained at most 60 ms - the terminal's view and
   xterm.js keep the page busy until its prompt is drawn -, and xterm.js's module run in the warm-up ~70 ms of the
   first terminal for 0.1-0.3 s more of the start: neither is kept.)
+- A file opened as a preview (a single tap in the Explorer: its tab's name in italics) is still open after a restart.
+  The warm-up behind the splash opened its own untitled editor as a preview too, which takes the place of the group's
+  preview - the one the start had just restored - and closed it with itself; it opens as a tab of its own now.
 - Keyboard Shortcuts opened again shows in ~0.83 s instead of ~1.33 (the first time ~2.2 s instead of ~2.4; measured
   by its own marks on the iPad 2): its ~1,600 entries - each command looked up in the menus, its labels put together
   in the display language - were made anew at every opening (~360 ms); they are taken again while the keybindings,
