@@ -111,6 +111,11 @@ The first build.
   (~170 ms on the iPad 2). (A shell opened ahead for the next terminal gained at most 60 ms - the terminal's view and
   xterm.js keep the page busy until its prompt is drawn -, and xterm.js's module run in the warm-up ~70 ms of the
   first terminal for 0.1-0.3 s more of the start: neither is kept.)
+- Scrolling the Settings editor and Keyboard Shortcuts with a finger: ~17 ms a frame instead of ~108 in the Settings
+  editor, ~58 instead of ~130 in Keyboard Shortcuts (median of 120 frames on the iPad 2). VS Code moves their rows by
+  their top instead of the transform the other lists use (its "transform optimization", off for these two - a row's
+  "when" editor put its suggestions out of place in Chromium), and the old WebKit laid the page out at every frame of
+  the scroll. They are moved by the transform now, as the Explorer's rows are.
 - The first terminal of a start shows its prompt ~0.35 s sooner (~1.75 s instead of ~2.1 on the iPad 2, interleaved):
   the warm-up behind the splash makes the panel's Terminal view - its tabs, their list, its title bar's actions -
   without a terminal (0.5-0.7 s more of the start). And the warm-up no longer starts a shell: showing the panel opens

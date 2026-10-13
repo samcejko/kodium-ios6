@@ -2363,6 +2363,22 @@ function memoryRelief() {
   ])
 }
 
+// Keyboard Shortcuts' table and the Settings editor's tree are scrolled by their rows' transform as the other lists are
+// (listView.js kdMoveRows, smootherScroll): VS Code leaves both without the lists' transform optimization - a row's
+// "when" editor put its suggestions out of place, in Chromium - and the rows' top laid the page out at every frame of
+// a finger's scroll: ~110-130 ms a frame on the iPad 2. (The "when" editor's suggestions go into a container of their
+// own beside the table, not into its rows.)
+function smootherLists() {
+  return patchModules('kodium-smoother-lists', [
+    ['/vs/workbench/contrib/preferences/browser/keybindingsEditor.js', [
+      ['                openOnSingleClick: false,\n                transformOptimization: false\n',
+       '                openOnSingleClick: false,\n                transformOptimization: true\n']]],
+    ['/vs/workbench/contrib/preferences/browser/settingsTree.js', [
+      ['            renderIndentGuides: RenderIndentGuides.None,\n            transformOptimization: false\n',
+       '            renderIndentGuides: RenderIndentGuides.None,\n            transformOptimization: true\n']]]
+  ])
+}
+
 // A build for measuring which listeners of VS Code's events take the time (KODIUM_LISTENER_TIMERS=1 .\web\build.ps1):
 // every listener's call of 3 ms or more reported to self.__kdTask("listener", the listener, ms), when a measuring script
 // has set it - nested ones too, and a listener given with its `this` as itself (not as the bound function)
@@ -3961,7 +3977,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), smootherLists(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)
