@@ -918,6 +918,20 @@ const AFTER_FRAME =
 //   language by its name is worked out once, not 7-9 times (tab icon, breadcrumbs, model, its listeners...)
 function quickerSwitch() {
   return patchModules('kodium-quicker-switch', [
+    // (a switch to a file whose text is there already - another tab - no longer empties the text file editor first:
+    // its editor took the old file's view down, told every listener of the editor that it had no model, and then made
+    // the new file's view, which its setInput would have done in one step - ~20 ms of a switch on the iPad 2. The view
+    // state of the file left - its cursor, its scroll - is kept as the clearing kept it; a file still being read is
+    // shown only once it is, as before)
+    ['/vs/workbench/browser/parts/editor/editorPanes.js', [
+      ['            editorPane.clearInput();\n            const pendingSetInput = editorPane.setInput(editor, options, context, operation.token);\n',
+       '            if (kdKeepsInput(editorPane, editor)) {\n                editorPane.saveCurrentEditorViewState();\n            } else {\n                editorPane.clearInput();\n            }\n            const pendingSetInput = editorPane.setInput(editor, options, context, operation.token);\n']],
+     'function kdKeepsInput(pane, editor) {\n' +
+     '    if (!pane.input || pane.getId() !== "workbench.editors.files.textFileEditor" || editor.typeId !== "workbench.editors.files.fileEditorInput" ||\n' +
+     '        typeof pane.saveCurrentEditorViewState !== "function") {\n        return false;\n    }\n' +
+     '    const model = editor.model;\n' +
+     '    return editor.forceOpenAs !== 2 && !!model && typeof model.isResolved === "function" && model.isResolved() && !!model.textEditorModel;\n' +
+     '}\n'],
     ['/vs/workbench/browser/parts/titlebar/menubarControl.js', [
       ['        };\n        for (const title of ( Object.keys(this.topLevelTitles))) {\n            const menu = this.menus[title];',
        '        };\n        this.kdUpdateActions = updateActions;\n        const kdLazy = this.currentCompactMenuMode !== undefined;\n' +
