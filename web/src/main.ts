@@ -5,6 +5,9 @@
 // 512 MB): Git, accounts and secret storage; and AI/chat, notebooks, debugging, testing, walkthroughs, telemetry, sync.
 import { initialize, getService, LogLevel } from '@codingame/monaco-vscode-api'
 import { ICommandService } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands.service'
+import { CommandsRegistry } from '@codingame/monaco-vscode-api/vscode/vs/platform/commands/common/commands'
+import { IOpenerService } from '@codingame/monaco-vscode-api/vscode/vs/platform/opener/common/opener.service'
+import { StandaloneServices } from '@codingame/monaco-vscode-api/vscode/vs/editor/standalone/browser/standaloneServices'
 import { IEditorService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/editor/common/editorService.service'
 import { IHistoryService } from '@codingame/monaco-vscode-api/vscode/vs/workbench/services/history/common/history.service'
 import { ICodeEditorService } from '@codingame/monaco-vscode-api/vscode/vs/editor/browser/services/codeEditorService.service'
@@ -216,7 +219,8 @@ async function start() {
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },
-    windowIndicator: { label: 'iOS 6', tooltip: 'Kodium on iOS 6', command: '' },
+    // (the status bar's left item: a tap opens the author's Ko-fi page - Kodium is free, the coffee keeps it going)
+    windowIndicator: { label: 'Kodium ♥', tooltip: 'Support the development · Podpořit vývoj: ko-fi.com/samcejko', command: 'kodium.support' },
     productConfiguration: {
       nameShort: 'Kodium',
       nameLong: 'Kodium',
@@ -297,6 +301,11 @@ async function start() {
   registerPython()
   registerEmmet()
   void followTheme()
+  // The status bar's "Kodium ♥" item (windowIndicator above): the author's Ko-fi page, opened the way the workbench
+  // opens any outside link (the app hands it to Surfari or Safari)
+  CommandsRegistry.registerCommand('kodium.support', () => {
+    void StandaloneServices.get(IOpenerService).open('https://ko-fi.com/samcejko')
+  })
   // (VS Code's commands for the app's developer commands over SSH: eval can install an extension, choose a theme...)
   const commands = await getService(ICommandService)
   ;(window as { __kd_commands?: unknown }).__kd_commands = (id: string, ...args: unknown[]) => commands.executeCommand(id, ...args)

@@ -58,6 +58,12 @@ On Windows (no git needed):
 `web\build.ps1` uses `.tools\node\node.exe` (a portable Node.js, not in the repository) or `node` on the PATH; run
 `npm ci` in `web` first.
 
+## Support
+
+Kodium is free. If it is useful to you, you can support the development at [ko-fi.com/samcejko](https://ko-fi.com/samcejko);
+the status bar's "Kodium ♥" item opens the same page. Kodium is also in the repository `http://repo.samcejko.eu/`
+(Cydia, Sileo, Zebra, Installer) together with the author's other iOS 6 apps.
+
 ## Licence
 
 MIT (see [LICENSE](LICENSE)). The third-party components and their licences are listed in

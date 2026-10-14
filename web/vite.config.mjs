@@ -2499,6 +2499,45 @@ function quickerRows() {
   ])
 }
 
+// A build for measuring the editor's renders (KODIUM_RENDER_TIMERS=1 .\web\build.ps1): each render's phases, and each
+// view part's prepareRender and render by its element's class, in ms - an entry a render pushed to self.__kdRenderLog
+// when a measuring script has set it to an array.
+function renderTimers() {
+  if (!process.env.KODIUM_RENDER_TIMERS) return null
+  return patchModules('kodium-render-timers', [
+    ['/vs/editor/browser/view.js', [
+      ['    _createCoordinatedRendering() {\n        return {\n',
+       '    _createCoordinatedRendering() {\n        return kdTimeRendering({\n'],
+      ['                for (const viewPart of viewPartsToRender) {\n                    viewPart.prepareRender(ctx);\n                }\n',
+       '                for (const viewPart of viewPartsToRender) {\n                    const kdT = Date.now();\n                    viewPart.prepareRender(ctx);\n                    kdPartTime("p:", viewPart, Date.now() - kdT);\n                }\n'],
+      ['                for (const viewPart of viewPartsToRender) {\n                    viewPart.render(ctx);\n                    viewPart.onDidRender();\n                }\n            }\n        };\n    }\n',
+       '                for (const viewPart of viewPartsToRender) {\n                    const kdT = Date.now();\n                    viewPart.render(ctx);\n                    viewPart.onDidRender();\n                    kdPartTime("r:", viewPart, Date.now() - kdT);\n                }\n            }\n        });\n    }\n']],
+     'function kdTimeRendering(r) {\n' +
+     '    const wrap = (name, fn) => function () {\n' +
+     '        const log = self.__kdRenderLog;\n' +
+     '        if (!Array.isArray(log)) {\n            return fn.apply(this, arguments);\n        }\n' +
+     '        const t = Date.now();\n' +
+     '        const result = fn.apply(this, arguments);\n' +
+     '        if (name === "prepareRenderText" || !log.kdCurrent) {\n            log.kdCurrent = { at: t };\n            log.push(log.kdCurrent);\n        }\n' +
+     '        log.kdCurrent[name] = (log.kdCurrent[name] || 0) + Date.now() - t;\n' +
+     '        return result;\n' +
+     '    };\n' +
+     '    return { prepareRenderText: wrap("prepareRenderText", r.prepareRenderText), renderText: wrap("renderText", r.renderText), prepareRender: wrap("prepareRender", r.prepareRender), render: wrap("render", r.render) };\n' +
+     '}\n' +
+     'function kdPartTime(kind, part, ms) {\n' +
+     '    const log = self.__kdRenderLog;\n' +
+     '    if (!Array.isArray(log) || !log.kdCurrent) {\n        return;\n    }\n' +
+     '    if (!part.kdLabel) {\n' +
+     '        const node = (part.domNode && part.domNode.domNode) || (part._domNode && part._domNode.domNode) || part._domNode || part.domNode;\n' +
+     '        const cls = node && typeof node.className === "string" ? node.className.split(" ")[0] : "";\n' +
+     '        part.kdLabel = cls || "part";\n' +
+     '    }\n' +
+     '    const key = kind + part.kdLabel;\n' +
+     '    log.kdCurrent[key] = (log.kdCurrent[key] || 0) + ms;\n' +
+     '}\n']
+  ])
+}
+
 // A build for measuring which listeners of VS Code's events take the time (KODIUM_LISTENER_TIMERS=1 .\web\build.ps1):
 // every listener's call of 3 ms or more reported to self.__kdTask("listener", the listener, ms), when a measuring script
 // has set it - nested ones too, and a listener given with its `this` as itself (not as the bound function)
@@ -4097,7 +4136,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), smootherLists(), quickerRows(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), smootherLists(), quickerRows(), renderTimers(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)
