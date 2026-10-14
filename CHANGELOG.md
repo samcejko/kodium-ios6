@@ -136,6 +136,18 @@ The first build.
   the decorations of every file below them again. The heaviest frames of a scroll through the Explorer: ~89 ms
   instead of ~131 (the slowest tenth). And a compressed tree's elements (the Search view's results) go through arrays
   instead of generators when the tree is updated.
+- A tree's rows coming onto the screen are drawn quicker (the Explorer's, four at a time every few frames of a
+  finger's scroll): no indent guides by default (workbench.tree.renderIndentGuides "none" - VS Code's "onHover" shows
+  them only under a mouse, and made their elements for every row drawn, one per level of its folders), and a row's
+  label given another file keeps its hover with the new tooltip instead of a new one (five listeners and their
+  disposables each time). The heaviest frames of a scroll through the Explorer's 300 files: ~82 ms instead of ~98
+  going down, ~66 instead of ~82 going back (the slowest tenth, iPad 2, interleaved).
+- An element put at the end of the page (a measuring element, the selection's loupe the first time) or in front of the
+  workbench no longer has the style of the whole page worked out again (~32 ms on the iPad 2). A few rules - the gaps
+  of flex boxes as the CSS rewriter writes them ("> * + *"), the spacing of a setting's Markdown (*:not(:last-child)),
+  the first element of Kodium's Markdown pages - were checked by the old WebKit on every element of the page, and the
+  check marked every element's parent for good; they are written for the elements they are meant for now, and the
+  build warns when another such rule comes in.
 - Scrolling the Settings editor and Keyboard Shortcuts with a finger: ~17 ms a frame instead of ~108 in the Settings
   editor, ~58 instead of ~130 in Keyboard Shortcuts (median of 120 frames on the iPad 2). VS Code moves their rows by
   their top instead of the transform the other lists use (its "transform optimization", off for these two - a row's

@@ -209,7 +209,10 @@ async function start() {
       // No sticky scroll in trees (the Explorer's folders, the search's files, the Outline's symbols kept at the top as
       // their content scrolls under them): the rows held there changed as the content went by - the search's at
       // nearly every frame of a finger's scroll, each a change of the page for the old WebKit's style and layout
-      'workbench.tree.enableStickyScroll': false
+      'workbench.tree.enableStickyScroll': false,
+      // No indent guides in trees: VS Code's "onHover" shows them only under a mouse, and made them anyway - elements of
+      // every row drawn, one per level of its folders
+      'workbench.tree.renderIndentGuides': 'none'
     },
     enableWorkspaceTrust: false,
     developmentOptions: { logLevel: LogLevel.Info },

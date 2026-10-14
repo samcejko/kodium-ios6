@@ -9,7 +9,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 26px 40px;
+  padding: 16px 26px 40px;
   font-size: 14px;
   line-height: 22px;
   color: var(--vscode-editor-foreground);
@@ -18,7 +18,11 @@
   user-select: text;
   outline: none;
 }
-.kodium-markdown > :first-child { margin-top: 16px; }
+/* (16 px above the first element - not by "> :first-child": a rule that the old WebKit checks on every element of the
+   page, see tools/assemble-site.mjs) */
+.kodium-markdown > h1:first-child, .kodium-markdown > h2:first-child, .kodium-markdown > h3:first-child,
+.kodium-markdown > h4:first-child, .kodium-markdown > h5:first-child, .kodium-markdown > h6:first-child,
+.kodium-markdown > hr:first-child { margin-top: 0; }
 .kodium-markdown img { max-width: 100%; }
 .kodium-markdown a { color: var(--vscode-textLink-foreground); text-decoration: none; }
 .kodium-markdown a:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }

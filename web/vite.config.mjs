@@ -2485,6 +2485,20 @@ function smootherLists() {
   ])
 }
 
+// A row of a tree drawn for another file (the Explorer's as a finger scrolls, four rows every few frames): its label's
+// hover - five listeners and their disposables - is given the new file's tooltip, not made again.
+function quickerRows() {
+  return patchModules('kodium-quicker-rows', [
+    ['/vs/base/browser/ui/iconLabel/iconLabel.js', [
+      ['    setupHover(htmlElement, tooltip) {\n        const previousCustomHover = this.customHovers.get(htmlElement);\n',
+       '    setupHover(htmlElement, tooltip) {\n        const previousCustomHover = this.customHovers.get(htmlElement);\n' +
+       '        if (previousCustomHover && tooltip && typeof previousCustomHover.update === "function") {\n' +
+       '            void previousCustomHover.update(tooltip);\n' +
+       '            return;\n' +
+       '        }\n']]]
+  ])
+}
+
 // A build for measuring which listeners of VS Code's events take the time (KODIUM_LISTENER_TIMERS=1 .\web\build.ps1):
 // every listener's call of 3 ms or more reported to self.__kdTask("listener", the listener, ms), when a measuring script
 // has set it - nested ones too, and a listener given with its `this` as itself (not as the bound function)
@@ -4083,7 +4097,7 @@ function leanerBundle() {
 
 export default defineConfig({
   base: './',
-  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), smootherLists(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
+  plugins: [eagerServices(), lazyExtensionHost(), inlineMarkdown(), quickerWorkers(), plainRules(), plainStyles(), sharedListStyles(), plainFigures(), smootherEditor(), quickerLineStarts(), quickerTrees(), quickerSwitch(), quickerMenus(), quickerPalette(), quickerPicks(), quickerOutline(), quickerSettings(), smootherLists(), quickerRows(), settingsTimers(), quickerTerminal(), terminalTimers(), quickerColumns(), singleFormatters(), iosClipboard(), ownSearch(), searchTimers(), openTimers(), listenerTimers(), memoryRelief(), lighterTyping(), fasterDomNode(), calmerOverlayWidgets(), quickerDiffs(), soonerFirstLines(), smootherScroll(), noGrammars(), emmetInCzech(), leaveOut(), leanerBundle(), quickerStart(), quickerViews(), nativeSelects(), oldTokenLists(), fewerRowWrites(), suggestPause(), suggestTimers(), plainTypedArrays(), moduleTimes(), bundledLicenses(), bundleReport()],
   // (jschardet, LGPL, guesses file encodings only when the user turns that on: a stub that never guesses)
   resolve: { alias: [{ find: /^jschardet(\/.*)?$/, replacement: path.resolve(import.meta.dirname, 'src/stubs/jschardet.js') },
     // (the terminal's WebGL, image and ligature addons, which iOS 6 cannot use: src/stubs/xterm-addon.js)

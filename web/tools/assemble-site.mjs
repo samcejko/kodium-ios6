@@ -191,6 +191,71 @@ result.out = result.out.replace(/\/\*br-manifest:([\s\S]*?)\*\/(\s*)$/, (all, js
   if (Array.isArray(m.gd)) m.gd = m.gd.filter((e) => !(Array.isArray(e.s) && e.s.length && e.s.every((s) => s.indexOf('.monaco-modal-editor-block') >= 0)))
   return '/*br-manifest:' + JSON.stringify(m) + '*/' + tail
 })
+// No rule whose last part checks a place among siblings or a sibling - :first-child, :last-child, :nth-child(), + or ~ -
+// with no class, id or attribute of its own: the old WebKit checks such a rule on every element of the page, and the
+// check marks the element's parent for good. A marked element's children share no styles (each is matched against all
+// the rules again), and an element put in before or after one of them has that one's whole subtree styled again: one
+// after the workbench at the end of body (a measuring element, the selection's loupe) or before the workbench's grid
+// restyled the whole page, ~32 ms on the iPad 2 - none now. Kodium's own (kodium.css) are written without; the
+// rewriter's and VS Code's are rewritten here.
+//
+// The rewriter's float layout for the extension page's "More Info" grid (a name and a value an entry) took the right
+// margin off every second child with *:nth-child(2n). The same layout without it: the margin on the name only.
+{
+  const entry = '.extension-editor>.body>.content>.details>.additional-details-container .more-info-container>.more-info>.more-info-entry:not(.br-grid)'
+  const nth = entry + ' > *:nth-child(2n){margin-right:0}'
+  const all = entry + ' > *{'
+  const at = result.out.indexOf(all), end = at < 0 ? -1 : result.out.indexOf('}', at)
+  if (result.out.indexOf(nth) >= 0 && end > 0 && result.out.slice(at, end).indexOf('margin-right:6px') >= 0) {
+    const rule = result.out.slice(at, end + 1)
+    result.out = result.out.replace(nth, '').replace(rule, rule.replace('margin-right:6px', 'margin-right:0') + '\n' + entry + ' > .more-info-entry-name{margin-right:6px}')
+  } else {
+    console.warn('assemble-site: the "More Info" grid\'s float rules were not where they were - left as the rewriter made them')
+  }
+}
+// The rewriter's gap of a flex box: "box > * + *" with the margin. The margin goes on every child, and a first box of
+// the container's own (::before, empty) takes it back - a row's to the right, a column's below.
+{
+  let gaps = 0
+  result.out = result.out.replace(/(^|[{}\n])([^{}@]+?)\{(margin-left|margin-top):([^;{}]+)\}/g, (all, before, sels, prop, value) => {
+    const list = sels.split(',').map((s) => s.trim())
+    if (!list.length || !list.every((s) => / > \* \+ \*$/.test(s))) return all
+    const boxes = list.map((s) => s.replace(/ > \* \+ \*$/, ''))
+    gaps++
+    const back = prop === 'margin-left' ? 'margin-right' : 'margin-bottom'
+    return before + boxes.map((b) => b + ' > *').join(',') + '{' + prop + ':' + value + '}\n' +
+      boxes.map((b) => b + '::before').join(',') + '{content:"";display:block;' + back + ':-' + value.trim() + '}'
+  })
+  if (!gaps) console.warn('assemble-site: no gap rules of the rewriter ("> * + *") found')
+}
+// VS Code's Markdown of a setting's description: a bottom margin on all but the last of its elements (*:not(:last-child)).
+// The block elements Markdown makes, named (a list's items are left as they are).
+{
+  const md = '.settings-editor>.settings-body .settings-tree-container .setting-item-contents .setting-item-markdown'
+  const rule = md + ' *:not(:last-child){margin-bottom:8px}'
+  if (result.out.indexOf(rule) >= 0) {
+    const blocks = ['p', 'ul', 'ol', 'pre', 'blockquote', 'table', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+    result.out = result.out.replace(rule, blocks.map((t) => md + ' ' + t + ':not(:last-child)').join(',') + '{margin-bottom:8px}')
+  } else {
+    console.warn('assemble-site: the settings\' Markdown rule was not where it was - left as VS Code wrote it')
+  }
+}
+// (and a look that none is left - a new VS Code version could bring one: told, not changed)
+{
+  const universal = []
+  for (const m of result.out.matchAll(/(?:^|[{}\n])([^{}@]+?)\{/g)) {
+    for (const sel of m[1].split(',')) {
+      // (the selector's last part - its pseudo-classes' arguments in it - and the combinator before it)
+      const s = sel.trim()
+      const part = /(?:^|\s*([>+~ ])\s*)((?:[^\s>+~(]|\([^)]*\))+)$/.exec(s)
+      if (!part) continue
+      const bare = part[2].replace(/::?[\w-]+(\([^)]*\))?/g, '')
+      if (bare !== '' && bare !== '*') continue
+      if (/:(first-child|last-child|only-child|nth-|first-of-type|last-of-type|only-of-type)/.test(part[2]) || part[1] === '+' || part[1] === '~') universal.push(s)
+    }
+  }
+  if (universal.length) console.warn('assemble-site: universal sibling or place rules left: ' + universal.slice(0, 5).join(' | '))
+}
 // The rewriter writes flex-direction: *-reverse as -webkit-box-direction: reverse too, which the iOS 6 engine inherits
 // (flex-direction is not inherited): .monaco-workbench.mac .part.titlebar{flex-direction:row-reverse}, for the one
 // child of the title bar, turned the whole title bar around. Every element gets the initial value as its own; the
