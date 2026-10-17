@@ -6,6 +6,8 @@ The changes of each Kodium version; the newest is at the top.
 
 The first build.
 
+- Run Python in Terminal (the play button above a Python file, F5, Ctrl+Alt+N): opens the integrated terminal and runs
+  the file with python3 (e.g. using Python 3 for iOS 6 from cpython-ios6-armv7); changed files are saved first.
 - Snippets and full language configurations from VS Code's built-in language extensions: JavaScript, TypeScript,
   Markdown, HTML, CSS, JSON, Python, Java, PHP, Swift and shell scripts (for, foreach, log...; a JSDoc comment closes
   itself and goes on with " * " on Enter). Their TextMate grammars are left out of the app (Monarch colours the code).

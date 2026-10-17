@@ -16,18 +16,24 @@ import { KeybindingWeight } from '@codingame/monaco-vscode-api/vscode/vs/platfor
 import { INotificationService } from '@codingame/monaco-vscode-api/vscode/vs/platform/notification/common/notification.service'
 import type { ServicesAccessor } from '@codingame/monaco-vscode-api/vscode/vs/platform/instantiation/common/instantiation'
 import type { IContextKey } from '@codingame/monaco-vscode-api/vscode/vs/platform/contextkey/common/contextkey'
+import { ITerminalService } from '@codingame/monaco-vscode-terminal-service-override'
+import { DOCUMENTS } from './files'
 
 const cs = /^cs/i.test((window as { __kd_lang?: string }).__kd_lang || '')
 const T = cs
   ? {
       run: 'Spustit JavaScript', stop: 'Zastavit', channel: 'Kodium: Spustit', running: 'Spouštím {0}…',
       finished: 'Hotovo za {0} ms (časovače programu běží dál, dokud ho nezastavíte nebo nespustíte znovu)',
-      stopped: 'Zastaveno.', error: 'Chyba: {0}', notJs: 'Spustit lze jen soubor JavaScriptu.'
+      stopped: 'Zastaveno.', error: 'Chyba: {0}', notJs: 'Spustit lze jen soubor JavaScriptu.',
+      runPython: 'Spustit Python v terminálu', notPython: 'Spustit lze jen soubor Pythonu.',
+      saveToDocuments: 'Před spuštěním soubor uložte do složky Documents.'
     }
   : {
       run: 'Run JavaScript', stop: 'Stop', channel: 'Kodium: Run', running: 'Running {0}…',
       finished: 'Done in {0} ms (the program\'s timers go on until you stop it or run it again)',
-      stopped: 'Stopped.', error: 'Error: {0}', notJs: 'Only a JavaScript file can be run.'
+      stopped: 'Stopped.', error: 'Error: {0}', notJs: 'Only a JavaScript file can be run.',
+      runPython: 'Run Python in Terminal', notPython: 'Only a Python file can be run.',
+      saveToDocuments: 'Save the file to Documents before running.'
     }
 const fill = (s: string, v: string | number) => s.replace('{0}', String(v))
 
@@ -159,5 +165,51 @@ registerAction2(class StopAction extends Action2 {
     const channel = accessor.get(IOutputService).getChannel(CHANNEL)
     if (worker) channel?.append(T.stopped + '\n')
     end()
+  }
+})
+
+const isPython = ContextKeyExpr.equals('resourceLangId', 'python')
+
+registerAction2(class RunPythonAction extends Action2 {
+  constructor() {
+    super({
+      id: 'kodium.runPython',
+      title: { value: T.runPython, original: 'Run Python in Terminal' },
+      category: { value: 'Kodium', original: 'Kodium' },
+      icon: Codicon.play,
+      f1: true,
+      menu: [{ id: MenuId.EditorTitle, group: 'navigation', when: isPython }],
+      keybinding: [
+        { primary: KeyCode.F5, when: ContextKeyExpr.equals('editorLangId', 'python'), weight: KeybindingWeight.WorkbenchContrib },
+        { primary: KeyMod.WinCtrl | KeyMod.Alt | KeyCode.KeyN, when: ContextKeyExpr.equals('editorLangId', 'python'), weight: KeybindingWeight.WorkbenchContrib }
+      ]
+    })
+  }
+
+  async run(accessor: ServicesAccessor): Promise<void> {
+    const editorService = accessor.get(IEditorService)
+    const control = editorService.activeTextEditorControl as { getModel?: () => unknown } | undefined
+    const model = control?.getModel?.() as { getLanguageId?: () => string, uri: { scheme: string, path: string } } | null | undefined
+    const notifications = accessor.get(INotificationService)
+    if (!model || typeof model.getLanguageId !== 'function' || model.getLanguageId() !== 'python') {
+      notifications.info(T.notPython)
+      return
+    }
+    const path = model.uri.path
+    if (model.uri.scheme !== 'file' || !path.startsWith(DOCUMENTS + '/')) {
+      notifications.info(T.saveToDocuments)
+      return
+    }
+    const activeEditor = editorService.activeEditor
+    if (activeEditor?.isDirty()) {
+      await editorService.saveAll({ includeUntitled: false })
+    }
+    const rel = path.slice(DOCUMENTS.length + 1)
+    const escaped = rel.replace(/(["\\$`])/g, '\\$1')
+    const terminalService = accessor.get(ITerminalService)
+    const instance = terminalService.activeInstance ?? await terminalService.createTerminal()
+    await terminalService.showPanel(true)
+    instance.focus()
+    await instance.sendText(`python3 "${escaped}"`, true)
   }
 })
