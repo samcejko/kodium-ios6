@@ -27,7 +27,7 @@ extensions are the next big step (see the plan below).
   mobile. It answers only Kodium - a connection has to name the token Kodium writes into its container at every start
   (`src/KDTerminal.m`, `web/src/terminal.ts`). Install it once, as root: `dpkg -i Kodium-shell-<version>.deb`.
   Python files can be run directly from the editor (the play button above a Python file, F5, Ctrl+Alt+N) into this
-  terminal using Python 3 for iOS 6 (`python3.deb` from `Alex-FSRG/cpython-ios6-armv7`).
+  terminal using Python 3 for iOS 6 (from Alex FSRG's Cydia repository: https://alex-fsrg.github.io/repo).
 - **Touch**: text is selected as on iOS (`web/src/selection.ts`) - a long press shows the loupe and puts the caret
   under the finger, a double tap selects a word, a selection has iOS's handles and the callout of its edits (Cut, Copy,
   Paste, Select, Select All, and More... for the editor's menu) -, and the clipboard is the system's pasteboard, both
