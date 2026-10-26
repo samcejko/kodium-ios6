@@ -1,6 +1,6 @@
 Package: com.samcejko.kodium
 Name: Kodium
-Version: 0.1.0
+Version: 0.1.0-1
 Architecture: iphoneos-arm
 Description: A code editor for jailbroken iOS 6: the VS Code workbench
  Kodium puts the workbench of the open-source VS Code, assembled through
@@ -13,5 +13,5 @@ Maintainer: samcejko
 Author: samcejko
 Homepage: https://github.com/samcejko/kodium-ios6
 Section: Productivity
-Depends: firmware (>= 6.0)
+Depends: firmware (>= 6.0), com.samcejko.kodium-shell
 Icon: file:///Applications/Kodium.app/Icon.png
